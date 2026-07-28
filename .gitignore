@@ -3,8 +3,10 @@
 *.tar.gz
 *.iso
 
-# Vendor & dependencies
-/vendor/
+# Raw extracted theme source
+/reader-bootstrap-main/
+
+# Vendor & uploaded attachments
 /uploads/attachments/*
 !/uploads/attachments/.gitkeep
 
