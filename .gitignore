@@ -1,0 +1,15 @@
+# Ignore zip and archive files
+*.zip
+*.tar.gz
+*.iso
+
+# Vendor & dependencies
+/vendor/
+/uploads/attachments/*
+!/uploads/attachments/.gitkeep
+
+# System & IDE files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
