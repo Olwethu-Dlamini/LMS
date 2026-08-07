@@ -12,6 +12,7 @@ $userId = $_SESSION['user_id'];
 $startDate = $_GET['start_date'] ?? '';
 $endDate = $_GET['end_date'] ?? '';
 $leaveTypeId = (int)($_GET['leave_type_id'] ?? 0);
+$dayType = $_GET['day_type'] ?? 'full';
 
 if (empty($startDate) || empty($endDate) || $leaveTypeId <= 0) {
     echo json_encode(['success' => false, 'error' => 'Missing parameters']);
@@ -19,7 +20,7 @@ if (empty($startDate) || empty($endDate) || $leaveTypeId <= 0) {
 }
 
 $calculator = new LeaveCalculator();
-$validation = $calculator->validateEligibility($userId, $leaveTypeId, $startDate, $endDate);
+$validation = $calculator->validateEligibility($userId, $leaveTypeId, $startDate, $endDate, null, $dayType);
 
 $holidays = $calculator->getHolidaysArray($startDate, $endDate);
 

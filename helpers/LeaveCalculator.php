@@ -23,8 +23,9 @@ class LeaveCalculator {
     /**
      * Calculate net working days between start and end date (inclusive)
      * Excludes Saturdays (6), Sundays (7), and Public Holidays
+     * Supports half-day calculation ('full', 'half_morning', 'half_afternoon', 'half')
      */
-    public function calculateWorkingDays(string $startDate, string $endDate): int {
+    public function calculateWorkingDays(string $startDate, string $endDate, string $dayType = 'full'): float {
         $start = new DateTime($startDate);
         $end = new DateTime($endDate);
         $end->modify('+1 day'); // Inclusive end
@@ -33,7 +34,7 @@ class LeaveCalculator {
         $interval = new DateInterval('P1D');
         $period = new DatePeriod($start, $interval, $end);
 
-        $workingDays = 0;
+        $workingDays = 0.0;
         foreach ($period as $date) {
             $formatted = $date->format('Y-m-d');
             $dayOfWeek = (int)$date->format('N'); // 1 = Mon, 7 = Sun
@@ -48,7 +49,14 @@ class LeaveCalculator {
                 continue;
             }
 
-            $workingDays++;
+            $workingDays += 1.0;
+        }
+
+        if ($workingDays > 0 && in_array($dayType, ['half_morning', 'half_afternoon', 'half'])) {
+            $workingDays -= 0.5;
+            if ($workingDays <= 0) {
+                $workingDays = 0.5;
+            }
         }
 
         return $workingDays;
@@ -57,7 +65,7 @@ class LeaveCalculator {
     /**
      * Validate leave eligibility before application submission
      */
-    public function validateEligibility(int $userId, int $leaveTypeId, string $startDate, string $endDate, ?array $file = null): array {
+    public function validateEligibility(int $userId, int $leaveTypeId, string $startDate, string $endDate, ?array $file = null, string $dayType = 'full'): array {
         $errors = [];
 
         // 1. Date logic check
@@ -67,7 +75,7 @@ class LeaveCalculator {
         }
 
         // 2. Compute working days
-        $workingDays = $this->calculateWorkingDays($startDate, $endDate);
+        $workingDays = $this->calculateWorkingDays($startDate, $endDate, $dayType);
         if ($workingDays <= 0) {
             $errors[] = "Selected date range contains no working days (weekends or public holidays).";
             return ['valid' => false, 'days' => 0, 'errors' => $errors];

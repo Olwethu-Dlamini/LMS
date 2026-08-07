@@ -19,6 +19,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $leaveTypeId = (int)($_POST['leave_type_id'] ?? 0);
     $startDate = sanitize($_POST['start_date'] ?? '');
     $endDate = sanitize($_POST['end_date'] ?? '');
+    $dayType = sanitize($_POST['day_type'] ?? 'full');
     $reason = sanitize($_POST['reason'] ?? '');
     $file = $_FILES['attachment'] ?? null;
 
@@ -26,7 +27,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $error = 'Invalid security token. Please try again.';
     } else {
         // Run Business Rules Validation Engine
-        $validation = $calculator->validateEligibility($userId, $leaveTypeId, $startDate, $endDate, $file);
+        $validation = $calculator->validateEligibility($userId, $leaveTypeId, $startDate, $endDate, $file, $dayType);
 
         if (!$validation['valid']) {
             $error = implode('<br>', $validation['errors']);
@@ -95,13 +96,21 @@ ob_start();
                     </div>
 
                     <div class="row">
-                        <div class="col-md-6 form-group mb-4">
+                        <div class="col-md-4 form-group mb-4">
                             <label class="font-weight-bold text-dark">Start Date <span class="text-danger">*</span></label>
                             <input type="date" name="start_date" id="start_date" class="form-control form-control-lg" min="<?php echo date('Y-m-d'); ?>" required value="<?php echo htmlspecialchars($_POST['start_date'] ?? ''); ?>">
                         </div>
-                        <div class="col-md-6 form-group mb-4">
+                        <div class="col-md-4 form-group mb-4">
                             <label class="font-weight-bold text-dark">End Date <span class="text-danger">*</span></label>
                             <input type="date" name="end_date" id="end_date" class="form-control form-control-lg" min="<?php echo date('Y-m-d'); ?>" required value="<?php echo htmlspecialchars($_POST['end_date'] ?? ''); ?>">
+                        </div>
+                        <div class="col-md-4 form-group mb-4">
+                            <label class="font-weight-bold text-dark">Duration Type <span class="text-danger">*</span></label>
+                            <select name="day_type" id="day_type" class="form-control form-control-lg" required>
+                                <option value="full" <?php echo (($_POST['day_type'] ?? '') === 'full') ? 'selected' : ''; ?>>Full Day(s)</option>
+                                <option value="half_morning" <?php echo (($_POST['day_type'] ?? '') === 'half_morning') ? 'selected' : ''; ?>>Half Day (Morning Session)</option>
+                                <option value="half_afternoon" <?php echo (($_POST['day_type'] ?? '') === 'half_afternoon') ? 'selected' : ''; ?>>Half Day (Afternoon Session)</option>
+                            </select>
                         </div>
                     </div>
 
@@ -149,6 +158,7 @@ ob_start();
 document.addEventListener("DOMContentLoaded", function () {
     const startDateInput = document.getElementById("start_date");
     const endDateInput = document.getElementById("end_date");
+    const dayTypeSelect = document.getElementById("day_type");
     const leaveTypeSelect = document.getElementById("leave_type_id");
     const previewCard = document.getElementById("calcPreviewCard");
     const previewText = document.getElementById("calcPreviewText");
@@ -159,13 +169,14 @@ document.addEventListener("DOMContentLoaded", function () {
         const start = startDateInput.value;
         const end = endDateInput.value;
         const typeId = leaveTypeSelect.value;
+        const dayType = dayTypeSelect ? dayTypeSelect.value : "full";
 
         if (start && end && typeId) {
             previewCard.style.display = "block";
             previewText.innerHTML = "<i class='ti-reload spin'></i> Calculating working days and verifying balance...";
             errorBox.style.display = "none";
 
-            fetch("<?php echo APP_URL; ?>/api/calculate_days.php?start_date=" + start + "&end_date=" + end + "&leave_type_id=" + typeId)
+            fetch("<?php echo APP_URL; ?>/api/calculate_days.php?start_date=" + start + "&end_date=" + end + "&leave_type_id=" + typeId + "&day_type=" + dayType)
                 .then(res => res.json())
                 .then(data => {
                     if (data.success) {
@@ -195,6 +206,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
     startDateInput.addEventListener("change", checkDays);
     endDateInput.addEventListener("change", checkDays);
+    if (dayTypeSelect) dayTypeSelect.addEventListener("change", checkDays);
     leaveTypeSelect.addEventListener("change", checkDays);
 });
 </script>
