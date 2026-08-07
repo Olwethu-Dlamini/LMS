@@ -191,4 +191,95 @@ class ApprovalWorkflow {
             return ['success' => false, 'error' => $e->getMessage()];
         }
     }
+
+    /**
+     * Cancel a leave application and release/restore leave balance
+     */
+    public function cancelApplication(int $applicationId, int $userId, string $userRole, ?string $reason = null): array {
+        try {
+            $this->db->beginTransaction();
+
+            $stmt = $this->db->prepare("SELECT * FROM leave_applications WHERE id = :id FOR UPDATE");
+            $stmt->execute(['id' => $applicationId]);
+            $app = $stmt->fetch();
+
+            if (!$app) {
+                throw new Exception("Leave application not found.");
+            }
+
+            // Authorization check: Applicant, HR, or Admin
+            $isOwner = ((int)$app['user_id'] === $userId);
+            $isAuthorizedRole = in_array($userRole, [ROLE_HR, ROLE_ADMIN]);
+            if (!$isOwner && !$isAuthorizedRole) {
+                throw new Exception("Unauthorized: You do not have permission to cancel this application.");
+            }
+
+            $currentStatus = $app['status'];
+            if (in_array($currentStatus, [STATUS_CANCELLED, STATUS_REJECTED])) {
+                throw new Exception("Application is already " . $currentStatus . ".");
+            }
+
+            $totalDays = (float)$app['total_days'];
+            $appUserId = (int)$app['user_id'];
+            $leaveTypeId = (int)$app['leave_type_id'];
+            $year = (int)date('Y', strtotime($app['start_date']));
+
+            if (in_array($currentStatus, [STATUS_PENDING_MANAGER, STATUS_PENDING_HR, STATUS_PENDING_EXECUTIVE])) {
+                // Pending application: release reserved pending_days
+                $stmtRelease = $this->db->prepare("
+                    UPDATE leave_entitlements 
+                    SET pending_days = GREATEST(0, pending_days - :days) 
+                    WHERE user_id = :user_id AND leave_type_id = :type_id AND year = :year
+                ");
+                $stmtRelease->execute([
+                    'days' => $totalDays,
+                    'user_id' => $appUserId,
+                    'type_id' => $leaveTypeId,
+                    'year' => $year
+                ]);
+            } elseif ($currentStatus === STATUS_APPROVED) {
+                // Approved application: restore used_days
+                $stmtRestore = $this->db->prepare("
+                    UPDATE leave_entitlements 
+                    SET used_days = GREATEST(0, used_days - :days) 
+                    WHERE user_id = :user_id AND leave_type_id = :type_id AND year = :year
+                ");
+                $stmtRestore->execute([
+                    'days' => $totalDays,
+                    'user_id' => $appUserId,
+                    'type_id' => $leaveTypeId,
+                    'year' => $year
+                ]);
+            }
+
+            // Update Status
+            $stmtUpdate = $this->db->prepare("
+                UPDATE leave_applications 
+                SET status = 'cancelled', current_approver_role = 'none' 
+                WHERE id = :id
+            ");
+            $stmtUpdate->execute(['id' => $applicationId]);
+
+            // Audit log
+            $stmtLog = $this->db->prepare("
+                INSERT INTO leave_approval_logs 
+                (leave_application_id, approver_id, approver_role, stage, action, comments)
+                VALUES (:app_id, :approver_id, :role, :stage, 'rejected', :comments)
+            ");
+            $cancelComment = "Cancelled by " . ($isOwner ? "Applicant" : strtoupper($userRole)) . ($reason ? ": " . $reason : "");
+            $stmtLog->execute([
+                'app_id' => $applicationId,
+                'approver_id' => $userId,
+                'role' => $userRole,
+                'stage' => $currentStatus,
+                'comments' => $cancelComment
+            ]);
+
+            $this->db->commit();
+            return ['success' => true];
+        } catch (Exception $e) {
+            $this->db->rollBack();
+            return ['success' => false, 'error' => $e->getMessage()];
+        }
+    }
 }

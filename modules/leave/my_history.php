@@ -1,9 +1,34 @@
 <?php
 require_once __DIR__ . '/../../includes/functions.php';
+require_once __DIR__ . '/../../helpers/ApprovalWorkflow.php';
 check_auth();
 
 $userId = $_SESSION['user_id'];
+$userRole = $_SESSION['user_role'];
 $db = getDBConnection();
+$workflow = new ApprovalWorkflow($db);
+
+// Handle POST Cancellation Request
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'cancel') {
+    $csrfToken = $_POST['csrf_token'] ?? '';
+    $appId = (int)($_POST['application_id'] ?? 0);
+    $cancelReason = sanitize($_POST['cancel_reason'] ?? '');
+
+    if (!verify_csrf_token($csrfToken)) {
+        set_flash('danger', 'Invalid security token.');
+    } elseif ($appId <= 0) {
+        set_flash('danger', 'Invalid application selection.');
+    } else {
+        $res = $workflow->cancelApplication($appId, $userId, $userRole, $cancelReason);
+        if ($res['success']) {
+            set_flash('success', 'Leave application cancelled successfully. Entitlement balance has been restored.');
+            header('Location: ' . APP_URL . '/modules/leave/my_history.php');
+            exit;
+        } else {
+            set_flash('danger', 'Failed to cancel application: ' . $res['error']);
+        }
+    }
+}
 
 // Fetch History
 $stmt = $db->prepare("
@@ -83,9 +108,43 @@ ob_start();
                             <td><?php echo get_status_badge($app['status']); ?></td>
                             <td><?php echo date('M d, Y H:i', strtotime($app['created_at'])); ?></td>
                             <td>
-                                <a href="?view=<?php echo $app['id']; ?>" class="btn btn-sm btn-outline-info font-weight-bold">
+                                <a href="?view=<?php echo $app['id']; ?>" class="btn btn-sm btn-outline-info font-weight-bold mr-1">
                                     <i class="ti-eye"></i> View Details
                                 </a>
+                                <?php if (!in_array($app['status'], ['cancelled', 'rejected'])): ?>
+                                    <button type="button" class="btn btn-sm btn-outline-danger font-weight-bold" data-toggle="modal" data-target="#cancelModal<?php echo $app['id']; ?>">
+                                        <i class="ti-close"></i> Cancel
+                                    </button>
+
+                                    <!-- Cancel Modal -->
+                                    <div class="modal fade" id="cancelModal<?php echo $app['id']; ?>" tabindex="-1" role="dialog">
+                                        <div class="modal-dialog" role="document">
+                                            <div class="modal-content">
+                                                <form method="POST" action="">
+                                                    <input type="hidden" name="csrf_token" value="<?php echo generate_csrf_token(); ?>">
+                                                    <input type="hidden" name="application_id" value="<?php echo $app['id']; ?>">
+                                                    <input type="hidden" name="action" value="cancel">
+                                                    
+                                                    <div class="modal-header bg-danger text-white">
+                                                        <h5 class="modal-title font-weight-bold">Cancel Application: <?php echo htmlspecialchars($app['application_no']); ?></h5>
+                                                        <button type="button" class="close text-white" data-dismiss="modal">&times;</button>
+                                                    </div>
+                                                    <div class="modal-body">
+                                                        <p class="text-dark">Are you sure you want to cancel this leave application? Any reserved or deducted leave days will be released back to your balance.</p>
+                                                        <div class="form-group">
+                                                            <label class="font-weight-bold text-dark">Reason for Cancellation (Optional)</label>
+                                                            <textarea name="cancel_reason" class="form-control" rows="2" placeholder="State reason for cancelling..."></textarea>
+                                                        </div>
+                                                    </div>
+                                                    <div class="modal-footer">
+                                                        <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+                                                        <button type="submit" class="btn btn-danger font-weight-bold">Confirm Cancellation</button>
+                                                    </div>
+                                                </form>
+                                            </div>
+                                        </div>
+                                    </div>
+                                <?php endif; ?>
                             </td>
                         </tr>
                         <?php endforeach; ?>
