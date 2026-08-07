@@ -34,16 +34,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-// Fetch Stage 1 Pending Applications
-$stmt = $db->query("
+// Fetch Stage 1 Pending Applications (Scoped to manager's team for non-admins)
+$whereClause = "WHERE a.status = 'pending_manager'";
+$params = [];
+if ($approverRole !== ROLE_ADMIN) {
+    $whereClause .= " AND (u.manager_id = :mgr_id OR d.line_manager_id = :mgr_id)";
+    $params['mgr_id'] = $approverId;
+}
+
+$stmt = $db->prepare("
     SELECT a.*, t.name as leave_name, u.first_name, u.last_name, u.emp_id, d.name as dept_name
     FROM leave_applications a
     JOIN leave_types t ON a.leave_type_id = t.id
     JOIN users u ON a.user_id = u.id
     LEFT JOIN departments d ON u.department_id = d.id
-    WHERE a.status = 'pending_manager'
+    $whereClause
     ORDER BY a.created_at ASC
 ");
+$stmt->execute($params);
 $pendingApps = $stmt->fetchAll();
 
 ob_start();

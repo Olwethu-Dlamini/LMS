@@ -81,9 +81,31 @@ class ApprovalWorkflow {
             $leaveTypeId = (int)$app['leave_type_id'];
             $year = (int)date('Y', strtotime($app['start_date']));
 
+            // Self-approval restriction
+            if ($userId === $approverId && $action === 'approve') {
+                throw new Exception("Self-approval is prohibited: You cannot approve your own leave application.");
+            }
+
             // Validate stage authorization
-            if ($currentStatus === STATUS_PENDING_MANAGER && !in_array($approverRole, [ROLE_MANAGER, ROLE_ADMIN])) {
-                throw new Exception("Unauthorized: Stage 1 approval requires Line Manager or Admin role.");
+            if ($currentStatus === STATUS_PENDING_MANAGER) {
+                if (!in_array($approverRole, [ROLE_MANAGER, ROLE_ADMIN])) {
+                    throw new Exception("Unauthorized: Stage 1 approval requires Line Manager or Admin role.");
+                }
+                if ($approverRole === ROLE_MANAGER) {
+                    $stmtUser = $this->db->prepare("
+                        SELECT u.manager_id, d.line_manager_id 
+                        FROM users u 
+                        LEFT JOIN departments d ON u.department_id = d.id 
+                        WHERE u.id = :id
+                    ");
+                    $stmtUser->execute(['id' => $userId]);
+                    $applicantInfo = $stmtUser->fetch();
+                    $isDirectMgr = $applicantInfo && ((int)($applicantInfo['manager_id'] ?? 0) === $approverId);
+                    $isDeptMgr = $applicantInfo && ((int)($applicantInfo['line_manager_id'] ?? 0) === $approverId);
+                    if (!$isDirectMgr && !$isDeptMgr) {
+                        throw new Exception("Unauthorized: You are not designated as the line manager for this applicant.");
+                    }
+                }
             }
             if ($currentStatus === STATUS_PENDING_HR && !in_array($approverRole, [ROLE_HR, ROLE_ADMIN])) {
                 throw new Exception("Unauthorized: Stage 2 approval requires HR Manager or Admin role.");

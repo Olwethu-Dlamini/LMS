@@ -22,7 +22,18 @@ $pendingStage2Count = 0;
 $pendingStage3Count = 0;
 
 if (has_role([ROLE_MANAGER, ROLE_ADMIN])) {
-    $stmtCount = $db->query("SELECT COUNT(*) FROM leave_applications WHERE status = 'pending_manager'");
+    if ($userRole === ROLE_ADMIN) {
+        $stmtCount = $db->query("SELECT COUNT(*) FROM leave_applications WHERE status = 'pending_manager'");
+    } else {
+        $stmtCount = $db->prepare("
+            SELECT COUNT(*) 
+            FROM leave_applications a 
+            JOIN users u ON a.user_id = u.id 
+            LEFT JOIN departments d ON u.department_id = d.id 
+            WHERE a.status = 'pending_manager' AND (u.manager_id = :mgr_id OR d.line_manager_id = :mgr_id)
+        ");
+        $stmtCount->execute(['mgr_id' => $userId]);
+    }
     $pendingStage1Count = (int)$stmtCount->fetchColumn();
 }
 
