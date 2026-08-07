@@ -7,25 +7,63 @@ $error = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $csrfToken = $_POST['csrf_token'] ?? '';
-    $userId = (int)($_POST['user_id'] ?? 0);
-    $leaveTypeId = (int)($_POST['leave_type_id'] ?? 0);
-    $year = (int)($_POST['year'] ?? date('Y'));
-    $totalDays = (float)($_POST['total_days'] ?? 0);
+    $action = $_POST['action'] ?? 'single';
 
     if (!verify_csrf_token($csrfToken)) {
         $error = 'Invalid security token.';
-    } elseif ($userId <= 0 || $leaveTypeId <= 0 || $totalDays < 0) {
-        $error = 'Please provide valid user, leave type, and day allocation.';
+    } elseif ($action === 'bulk_init') {
+        $targetYear = (int)($_POST['target_year'] ?? date('Y'));
+        if ($targetYear < 2000 || $targetYear > 2100) {
+            $error = 'Please enter a valid target year.';
+        } else {
+            try {
+                $users = $db->query("SELECT id FROM users WHERE status = 'active'")->fetchAll(PDO::FETCH_COLUMN);
+                $types = $db->query("SELECT id, max_days_per_year FROM leave_types")->fetchAll();
+                
+                $stmtBulk = $db->prepare("
+                    INSERT INTO leave_entitlements (user_id, leave_type_id, year, total_days, used_days, pending_days)
+                    VALUES (:user_id, :type_id, :year, :total_days, 0, 0)
+                    ON DUPLICATE KEY UPDATE total_days = VALUES(total_days)
+                ");
+                
+                $count = 0;
+                foreach ($users as $uid) {
+                    foreach ($types as $lt) {
+                        $stmtBulk->execute([
+                            'user_id' => $uid,
+                            'type_id' => $lt['id'],
+                            'year' => $targetYear,
+                            'total_days' => $lt['max_days_per_year']
+                        ]);
+                        $count++;
+                    }
+                }
+                set_flash('success', "Bulk initialization complete for year {$targetYear}! Allocated {$count} entitlement records across all active employees.");
+                header('Location: ' . APP_URL . '/modules/hr/allocations.php');
+                exit;
+            } catch (PDOException $e) {
+                $error = 'Error performing bulk initialization: ' . $e->getMessage();
+            }
+        }
     } else {
-        $stmt = $db->prepare("
-            INSERT INTO leave_entitlements (user_id, leave_type_id, year, total_days)
-            VALUES (:user_id, :type_id, :year, :total_days)
-            ON DUPLICATE KEY UPDATE total_days = :total_days
-        ");
-        $stmt->execute(['user_id' => $userId, 'type_id' => $leaveTypeId, 'year' => $year, 'total_days' => $totalDays]);
-        set_flash('success', 'Leave allocation updated successfully!');
-        header('Location: ' . APP_URL . '/modules/hr/allocations.php');
-        exit;
+        $userId = (int)($_POST['user_id'] ?? 0);
+        $leaveTypeId = (int)($_POST['leave_type_id'] ?? 0);
+        $year = (int)($_POST['year'] ?? date('Y'));
+        $totalDays = (float)($_POST['total_days'] ?? 0);
+
+        if ($userId <= 0 || $leaveTypeId <= 0 || $totalDays < 0) {
+            $error = 'Please provide valid user, leave type, and day allocation.';
+        } else {
+            $stmt = $db->prepare("
+                INSERT INTO leave_entitlements (user_id, leave_type_id, year, total_days)
+                VALUES (:user_id, :type_id, :year, :total_days)
+                ON DUPLICATE KEY UPDATE total_days = :total_days
+            ");
+            $stmt->execute(['user_id' => $userId, 'type_id' => $leaveTypeId, 'year' => $year, 'total_days' => $totalDays]);
+            set_flash('success', 'Leave allocation updated successfully!');
+            header('Location: ' . APP_URL . '/modules/hr/allocations.php');
+            exit;
+        }
     }
 }
 
@@ -51,14 +89,46 @@ ob_start();
         <h3 class="font-weight-bold text-dark mb-1"><i class="ti-pie-chart text-primary"></i> Leave Entitlements Allocation</h3>
         <p class="text-muted mb-0">Manage annual leave balances for all employees.</p>
     </div>
-    <button type="button" class="btn btn-primary font-weight-bold" data-toggle="modal" data-target="#allocationModal">
-        <i class="ti-plus"></i> Allocate / Update Entitlement
-    </button>
+    <div>
+        <button type="button" class="btn btn-outline-info font-weight-bold mr-2" data-toggle="modal" data-target="#bulkInitModal">
+            <i class="ti-bolt"></i> Bulk Initialize Year
+        </button>
+        <button type="button" class="btn btn-primary font-weight-bold" data-toggle="modal" data-target="#allocationModal">
+            <i class="ti-plus"></i> Allocate / Update Entitlement
+        </button>
+    </div>
 </div>
 
 <?php if (!empty($error)): ?>
     <div class="alert alert-danger mb-4"><?php echo $error; ?></div>
 <?php endif; ?>
+
+<!-- Bulk Init Modal -->
+<div class="modal fade" id="bulkInitModal" tabindex="-1" role="dialog">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content">
+            <form method="POST" action="">
+                <input type="hidden" name="csrf_token" value="<?php echo generate_csrf_token(); ?>">
+                <input type="hidden" name="action" value="bulk_init">
+                <div class="modal-header bg-info text-white">
+                    <h5 class="modal-title font-weight-bold">Bulk Initialize Annual Allocations</h5>
+                    <button type="button" class="close text-white" data-dismiss="modal">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <p class="text-dark">This will automatically assign standard default leave category allowances (`max_days_per_year`) to all active employees for the selected year.</p>
+                    <div class="form-group mb-3">
+                        <label class="font-weight-bold text-dark">Target Year *</label>
+                        <input type="number" name="target_year" class="form-control form-control-lg" value="<?php echo date('Y'); ?>" required>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-info font-weight-bold">Run Bulk Allocation</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
 
 <!-- Allocation Modal -->
 <div class="modal fade" id="allocationModal" tabindex="-1" role="dialog">
