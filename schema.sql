@@ -45,6 +45,8 @@ CREATE TABLE IF NOT EXISTS `users` (
     `department_id` INT NULL,
     `manager_id` INT NULL,
     `status` ENUM('active', 'inactive') DEFAULT 'active',
+    `must_change_password` TINYINT(1) NOT NULL DEFAULT 0,
+    `password_changed_at` DATETIME NULL,
     `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT `fk_users_role` FOREIGN KEY (`role_id`) REFERENCES `roles`(`id`),
     CONSTRAINT `fk_users_department` FOREIGN KEY (`department_id`) REFERENCES `departments`(`id`) ON DELETE SET NULL,
@@ -56,13 +58,13 @@ ADD CONSTRAINT `fk_departments_manager` FOREIGN KEY (`line_manager_id`) REFERENC
 
 -- Seed Default Accounts (Default password for all seed users: "password123")
 -- Hash generated via password_hash('password123', PASSWORD_BCRYPT)
--- $2y$10$e0MYzXyjpJS7Pd0RVvHwHe1Vl8m9T.z1L6TjF56H/E6.6N1F2P77K
+-- $2y$10$DpUB8FTRFAemkrgK47LZ8.g2WD1.AZxo3kIaZot8Zb7x/lfJLo4/K
 INSERT INTO `users` (`id`, `emp_id`, `first_name`, `last_name`, `email`, `password_hash`, `role_id`, `department_id`, `manager_id`, `status`) VALUES
-(1, 'EMP-1001', 'Admin', 'User', 'admin@lms.com', '$2y$10$e0MYzXyjpJS7Pd0RVvHwHe1Vl8m9T.z1L6TjF56H/E6.6N1F2P77K', 5, 1, NULL, 'active'),
-(2, 'EMP-1002', 'Boss', 'Executive', 'boss@lms.com', '$2y$10$e0MYzXyjpJS7Pd0RVvHwHe1Vl8m9T.z1L6TjF56H/E6.6N1F2P77K', 4, 4, NULL, 'active'),
-(3, 'EMP-1003', 'Sarah', 'HR Manager', 'hr@lms.com', '$2y$10$e0MYzXyjpJS7Pd0RVvHwHe1Vl8m9T.z1L6TjF56H/E6.6N1F2P77K', 3, 2, 2, 'active'),
-(4, 'EMP-1004', 'David', 'Line Manager', 'manager@lms.com', '$2y$10$e0MYzXyjpJS7Pd0RVvHwHe1Vl8m9T.z1L6TjF56H/E6.6N1F2P77K', 2, 1, 3, 'active'),
-(5, 'EMP-1005', 'John', 'Employee', 'employee@lms.com', '$2y$10$e0MYzXyjpJS7Pd0RVvHwHe1Vl8m9T.z1L6TjF56H/E6.6N1F2P77K', 1, 1, 4, 'active')
+(1, 'EMP-1001', 'Admin', 'User', 'admin@lms.com', '$2y$10$DpUB8FTRFAemkrgK47LZ8.g2WD1.AZxo3kIaZot8Zb7x/lfJLo4/K', 5, 1, NULL, 'active'),
+(2, 'EMP-1002', 'Boss', 'Executive', 'boss@lms.com', '$2y$10$DpUB8FTRFAemkrgK47LZ8.g2WD1.AZxo3kIaZot8Zb7x/lfJLo4/K', 4, 4, NULL, 'active'),
+(3, 'EMP-1003', 'Sarah', 'HR Manager', 'hr@lms.com', '$2y$10$DpUB8FTRFAemkrgK47LZ8.g2WD1.AZxo3kIaZot8Zb7x/lfJLo4/K', 3, 2, 2, 'active'),
+(4, 'EMP-1004', 'David', 'Line Manager', 'manager@lms.com', '$2y$10$DpUB8FTRFAemkrgK47LZ8.g2WD1.AZxo3kIaZot8Zb7x/lfJLo4/K', 2, 1, 3, 'active'),
+(5, 'EMP-1005', 'John', 'Employee', 'employee@lms.com', '$2y$10$DpUB8FTRFAemkrgK47LZ8.g2WD1.AZxo3kIaZot8Zb7x/lfJLo4/K', 1, 1, 4, 'active')
 ON DUPLICATE KEY UPDATE `email`=`email`;
 
 UPDATE `departments` SET `line_manager_id` = 4 WHERE `id` = 1;
@@ -75,15 +77,30 @@ CREATE TABLE IF NOT EXISTS `leave_types` (
     `code` VARCHAR(10) NOT NULL UNIQUE,
     `max_days_per_year` INT NOT NULL DEFAULT 0,
     `requires_attachment` TINYINT(1) NOT NULL DEFAULT 0,
-    `is_paid` TINYINT(1) NOT NULL DEFAULT 1
+    `is_paid` TINYINT(1) NOT NULL DEFAULT 1,
+    -- Duration rules applied to a single request (a request is one contiguous
+    -- date range, so max_days_per_request also caps consecutive days per request)
+    `min_days_per_request` DECIMAL(4,1) NOT NULL DEFAULT 0.5,
+    `max_days_per_request` DECIMAL(5,1) NULL DEFAULT NULL,
+    `allow_half_day` TINYINT(1) NOT NULL DEFAULT 1,
+    -- Whole days of notice required between today and the start date
+    `min_notice_days` INT NOT NULL DEFAULT 0,
+    -- When requires_attachment = 1, a document is only demanded once the
+    -- request exceeds this many working days
+    `attachment_threshold_days` DECIMAL(4,1) NOT NULL DEFAULT 0.0,
+    -- Retired types stay for historical reporting but disappear from the form
+    `is_active` TINYINT(1) NOT NULL DEFAULT 1
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
-INSERT INTO `leave_types` (`id`, `name`, `code`, `max_days_per_year`, `requires_attachment`, `is_paid`) VALUES
-(1, 'Annual Leave', 'ANN', 20, 0, 1),
-(2, 'Sick Leave', 'SCK', 10, 1, 1),
-(3, 'Casual Leave', 'CSL', 5, 0, 1),
-(4, 'Maternity / Paternity', 'MAT', 90, 1, 1),
-(5, 'Unpaid Leave', 'UNP', 30, 0, 0)
+INSERT INTO `leave_types`
+    (`id`, `name`, `code`, `max_days_per_year`, `requires_attachment`, `is_paid`,
+     `min_days_per_request`, `max_days_per_request`, `allow_half_day`,
+     `min_notice_days`, `attachment_threshold_days`, `is_active`) VALUES
+(1, 'Annual Leave',          'ANN', 20, 0, 1, 0.5, NULL, 1, 7, 0.0, 1),
+(2, 'Sick Leave',            'SCK', 10, 1, 1, 0.5, NULL, 1, 0, 2.0, 1),
+(3, 'Casual Leave',          'CSL',  5, 0, 1, 0.5,  3.0, 1, 1, 0.0, 1),
+(4, 'Maternity / Paternity', 'MAT', 90, 1, 1, 1.0, NULL, 0, 0, 0.0, 1),
+(5, 'Unpaid Leave',          'UNP', 30, 0, 0, 1.0, NULL, 0, 14, 0.0, 1)
 ON DUPLICATE KEY UPDATE `code`=`code`;
 
 -- 5. Leave Entitlements Table (Year 2026 allocations)

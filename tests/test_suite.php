@@ -151,7 +151,22 @@ class ArrayMockPDO extends PDO {
                     return $this->pdo->entitlements[$key] ?? false;
                 }
                 if (stripos($this->query, 'FROM leave_types') !== false) {
-                    return ['code' => 'ANN', 'requires_attachment' => 0];
+                    // Mirrors the configurable rule columns on leave_types so the
+                    // calculator exercises the same code path as production.
+                    return [
+                        'id'                        => 1,
+                        'name'                      => 'Annual Leave',
+                        'code'                      => 'ANN',
+                        'max_days_per_year'         => 20,
+                        'requires_attachment'       => 0,
+                        'is_paid'                   => 1,
+                        'min_days_per_request'      => 0.5,
+                        'max_days_per_request'      => null,
+                        'allow_half_day'            => 1,
+                        'min_notice_days'           => 7,
+                        'attachment_threshold_days' => 0.0,
+                        'is_active'                 => 1,
+                    ];
                 }
                 if (stripos($this->query, 'FROM users') !== false) {
                     return ['manager_id' => 4, 'line_manager_id' => 4];
@@ -182,6 +197,21 @@ $tester->assert(sanitize("<script>alert('xss');</script>") === "&lt;script&gt;al
 echo "\n--- 2. Testing LeaveCalculator Engine ---\n";
 $calc = new LeaveCalculator($mockDb);
 
+// Notice periods are validated against today, so eligibility and submission
+// tests use future Mon-Fri ranges instead of fixed calendar dates. The pure
+// working-day arithmetic below keeps its fixed dates on purpose.
+$futStart  = date('Y-m-d', strtotime('monday +3 weeks'));
+$futEnd    = date('Y-m-d', strtotime($futStart . ' +4 days'));   // Mon-Fri = 5 days
+$futStart2 = date('Y-m-d', strtotime('monday +6 weeks'));
+$futEnd2   = date('Y-m-d', strtotime($futStart2 . ' +1 day'));   // Mon-Tue = 2 days
+
+$entKey  = '5_1_' . date('Y', strtotime($futStart));
+$entKey2 = '5_1_' . date('Y', strtotime($futStart2));
+$mockDb->entitlements = [
+    $entKey  => ['total_days' => 20.0, 'used_days' => 0.0, 'pending_days' => 0.0],
+    $entKey2 => ['total_days' => 20.0, 'used_days' => 0.0, 'pending_days' => 0.0],
+];
+
 // Monday to Friday (5 days)
 $days1 = $calc->calculateWorkingDays("2026-05-04", "2026-05-08");
 $tester->assert($days1 === 5.0, "Standard 5 Weekday Working Days", "Got {$days1}");
@@ -199,7 +229,7 @@ $daysHalf = $calc->calculateWorkingDays("2026-05-04", "2026-05-04", "half_mornin
 $tester->assert($daysHalf === 0.5, "Half Day Duration Calculation", "Got {$daysHalf}");
 
 // Validation eligibility check
-$valValid = $calc->validateEligibility(5, 1, "2026-05-04", "2026-05-08");
+$valValid = $calc->validateEligibility(5, 1, $futStart, $futEnd);
 $tester->assert($valValid['valid'] === true, "Leave Balance Eligibility Check - Valid");
 
 $valOver = $calc->validateEligibility(5, 1, "2026-05-01", "2026-06-30"); // > 20 days
@@ -209,12 +239,12 @@ echo "\n--- 3. Testing 3-Tier Approval Workflow Engine ---\n";
 $workflow = new ApprovalWorkflow($mockDb);
 
 // A. Submit Application
-$submitRes = $workflow->submitApplication(5, 1, "2026-05-04", "2026-05-08", 5.0, "Vacation request", null);
+$submitRes = $workflow->submitApplication(5, 1, $futStart, $futEnd, 5.0, "Vacation request", null);
 $tester->assert($submitRes['success'] === true, "Submit Application Initializer");
 $appId = (int)$submitRes['id'];
 
 // Check pending_days updated to 5.0
-$ent1 = $mockDb->entitlements['5_1_2026']['pending_days'];
+$ent1 = $mockDb->entitlements[$entKey]['pending_days'];
 $tester->assert((float)$ent1 === 5.0, "Pending Days Reserved in Entitlements", "Got {$ent1}");
 
 // B. Self-Approval Block
@@ -234,26 +264,26 @@ $stage3 = $workflow->processAction($appId, 2, 'executive', 'approve', 'Final bos
 $tester->assert($stage3['success'] === true && $stage3['new_status'] === STATUS_APPROVED, "Stage 3 Executive Approval -> Status APPROVED");
 
 // Check finalized entitlement balance (pending_days = 0, used_days = 5)
-$entFinal = $mockDb->entitlements['5_1_2026'];
+$entFinal = $mockDb->entitlements[$entKey];
 $tester->assert((float)$entFinal['pending_days'] === 0.0 && (float)$entFinal['used_days'] === 5.0, "Final Entitlement Deduction (pending: 0, used: 5)", "Pending: {$entFinal['pending_days']}, Used: {$entFinal['used_days']}");
 
 echo "\n--- 4. Testing Application Cancellation & Balance Restoration ---\n";
 // Reset entitlement balance for test
-$mockDb->entitlements['5_1_2026'] = ['total_days' => 20.0, 'used_days' => 0.0, 'pending_days' => 0.0];
+$mockDb->entitlements[$entKey2] = ['total_days' => 20.0, 'used_days' => 0.0, 'pending_days' => 0.0];
 
 // Submit another request and cancel it
-$sub2 = $workflow->submitApplication(5, 1, "2026-06-01", "2026-06-02", 2.0, "To be cancelled", null);
+$sub2 = $workflow->submitApplication(5, 1, $futStart2, $futEnd2, 2.0, "To be cancelled", null);
 $appId2 = (int)$sub2['id'];
 
 // Check pending_days updated to 2.0
-$entPendingBefore = $mockDb->entitlements['5_1_2026']['pending_days'];
+$entPendingBefore = $mockDb->entitlements[$entKey2]['pending_days'];
 $tester->assert((float)$entPendingBefore === 2.0, "Pending Days Reserved for Second Request");
 
 // Cancel request by employee
 $cancelRes = $workflow->cancelApplication($appId2, 5, 'employee', 'Changed mind');
 $tester->assert($cancelRes['success'] === true, "Cancel Pending Leave Application");
 
-$entPendingAfter = $mockDb->entitlements['5_1_2026']['pending_days'];
+$entPendingAfter = $mockDb->entitlements[$entKey2]['pending_days'];
 $tester->assert((float)$entPendingAfter === 0.0, "Pending Days Released Back to Entitlements upon Cancellation", "Got {$entPendingAfter}");
 
 exit($tester->summary());

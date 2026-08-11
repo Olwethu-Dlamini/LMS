@@ -82,7 +82,7 @@ class ApprovalWorkflow {
             $year = (int)date('Y', strtotime($app['start_date']));
 
             // Self-approval restriction
-            if ($userId === $approverId && $action === 'approve') {
+            if ((int)$userId === (int)$approverId && $action === 'approve') {
                 throw new Exception("Self-approval is prohibited: You cannot approve your own leave application.");
             }
 
@@ -146,12 +146,13 @@ class ApprovalWorkflow {
                     // Deduct from pending_days and add to used_days
                     $stmtDeduct = $this->db->prepare("
                         UPDATE leave_entitlements 
-                        SET pending_days = GREATEST(0, pending_days - :days), 
-                            used_days = used_days + :days 
+                        SET pending_days = GREATEST(0, pending_days - :days),
+                            used_days = used_days + :used_days
                         WHERE user_id = :user_id AND leave_type_id = :type_id AND year = :year
                     ");
                     $stmtDeduct->execute([
                         'days' => $totalDays,
+                        'used_days' => $totalDays,
                         'user_id' => $userId,
                         'type_id' => $leaveTypeId,
                         'year' => $year
@@ -180,7 +181,8 @@ class ApprovalWorkflow {
                 'approver_id' => $approverId,
                 'role' => $approverRole,
                 'stage' => $currentStatus,
-                'action' => $action,
+                // Forms post 'approve'/'reject'; the log column is ENUM('approved','rejected')
+                'action' => $action === 'approve' ? 'approved' : 'rejected',
                 'comments' => $comments
             ]);
 

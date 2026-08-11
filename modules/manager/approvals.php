@@ -38,8 +38,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 $whereClause = "WHERE a.status = 'pending_manager'";
 $params = [];
 if ($approverRole !== ROLE_ADMIN) {
-    $whereClause .= " AND (u.manager_id = :mgr_id OR d.line_manager_id = :mgr_id)";
+    $whereClause .= " AND (u.manager_id = :mgr_id OR d.line_manager_id = :dept_mgr_id)";
     $params['mgr_id'] = $approverId;
+    $params['dept_mgr_id'] = $approverId;
 }
 
 $stmt = $db->prepare("
@@ -56,13 +57,6 @@ $pendingApps = $stmt->fetchAll();
 
 ob_start();
 ?>
-
-<div class="d-flex justify-content-between align-items-center mb-4">
-    <div>
-        <h3 class="font-weight-bold text-dark mb-1"><i class="ti-check-box text-warning"></i> Stage 1: Line Manager Approvals</h3>
-        <p class="text-muted mb-0">Review pending leave applications from team members before escalating to HR.</p>
-    </div>
-</div>
 
 <?php if (!empty($error)): ?>
     <div class="alert alert-danger mb-4"><?php echo $error; ?></div>
@@ -165,5 +159,8 @@ ob_start();
 <?php
 $pageContent = ob_get_clean();
 $pageTitle = 'Stage 1 Approvals | ' . APP_NAME;
+$pageHeading = 'Stage 1: Line Manager Approvals';
+$pageSubtitle = 'Review pending leave applications from team members before escalating to HR.';
+$pageIcon = 'ti-check-box';
 require_once __DIR__ . '/../../includes/layout.php';
 ?>

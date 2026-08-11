@@ -31,7 +31,8 @@ function verify_csrf_token(?string $token): bool {
 }
 
 /**
- * Check if user is logged in
+ * Check if user is logged in. Also holds users with a pending forced password
+ * change on the change-password screen until they set a new one.
  */
 function check_auth(): void {
     if (!isset($_SESSION['user_id'])) {
@@ -39,6 +40,44 @@ function check_auth(): void {
         header('Location: ' . APP_URL . '/modules/auth/login.php');
         exit;
     }
+    enforce_password_change();
+}
+
+/**
+ * Redirect users flagged must_change_password to the change-password screen.
+ * Skipped on the change-password and logout pages so there is no redirect loop.
+ */
+function enforce_password_change(): void {
+    if (empty($_SESSION['must_change_password'])) {
+        return;
+    }
+    $script = basename($_SERVER['SCRIPT_NAME'] ?? '');
+    if (in_array($script, ['change_password.php', 'logout.php'], true)) {
+        return;
+    }
+    header('Location: ' . APP_URL . '/modules/auth/change_password.php');
+    exit;
+}
+
+/**
+ * Validate a new password against the minimum policy.
+ * Returns a list of failures; empty means the password is acceptable.
+ */
+function password_policy_errors(string $password): array {
+    $errors = [];
+    if (strlen($password) < 10) {
+        $errors[] = 'Password must be at least 10 characters long.';
+    }
+    if (!preg_match('/[A-Z]/', $password)) {
+        $errors[] = 'Password must include at least one uppercase letter.';
+    }
+    if (!preg_match('/[a-z]/', $password)) {
+        $errors[] = 'Password must include at least one lowercase letter.';
+    }
+    if (!preg_match('/[0-9]/', $password)) {
+        $errors[] = 'Password must include at least one number.';
+    }
+    return $errors;
 }
 
 /**
