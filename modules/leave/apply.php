@@ -10,7 +10,9 @@ $db = getDBConnection();
 $calculator = new LeaveCalculator($db);
 $workflow = new ApprovalWorkflow($db);
 
-$stmtTypes = $db->query("SELECT * FROM leave_types ORDER BY name ASC");
+// Retired types stay in the database for historical reporting but must not be
+// offered on the form.
+$stmtTypes = $db->query("SELECT * FROM leave_types WHERE is_active = 1 ORDER BY name ASC");
 $leaveTypes = $stmtTypes->fetchAll();
 
 $error = '';
@@ -71,9 +73,9 @@ ob_start();
 <div class="row justify-content-center">
     <div class="col-md-9">
         <div class="card shadow-sm border-0">
-            <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center py-3">
-                <h5 class="mb-0 font-weight-bold"><i class="ti-pencil-alt"></i> Apply for Leave</h5>
-                <span class="badge badge-light text-primary font-weight-bold">Year <?php echo date('Y'); ?></span>
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span class="font-weight-bold text-dark"><i class="ti-pencil-alt"></i> Leave Request Details</span>
+                <span class="badge badge-secondary">Leave Year <?php echo date('Y'); ?></span>
             </div>
             <div class="card-body p-4">
                 <?php if (!empty($error)): ?>
@@ -88,11 +90,19 @@ ob_start();
                         <select name="leave_type_id" id="leave_type_id" class="form-control form-control-lg" required>
                             <option value="">-- Select Leave Category --</option>
                             <?php foreach ($leaveTypes as $type): ?>
-                                <option value="<?php echo $type['id']; ?>" data-attachment="<?php echo $type['requires_attachment']; ?>" <?php echo (isset($_POST['leave_type_id']) && $_POST['leave_type_id'] == $type['id']) ? 'selected' : ''; ?>>
+                                <option value="<?php echo $type['id']; ?>"
+                                        data-attachment="<?php echo (int)$type['requires_attachment']; ?>"
+                                        data-attachment-over="<?php echo (float)$type['attachment_threshold_days']; ?>"
+                                        data-half="<?php echo (int)$type['allow_half_day']; ?>"
+                                        data-notice="<?php echo (int)$type['min_notice_days']; ?>"
+                                        data-min="<?php echo (float)$type['min_days_per_request']; ?>"
+                                        data-max="<?php echo $type['max_days_per_request'] !== null ? (float)$type['max_days_per_request'] : ''; ?>"
+                                        <?php echo (isset($_POST['leave_type_id']) && $_POST['leave_type_id'] == $type['id']) ? 'selected' : ''; ?>>
                                     <?php echo htmlspecialchars($type['name']); ?> (Max: <?php echo $type['max_days_per_year']; ?> Days/Year)
                                 </option>
                             <?php endforeach; ?>
                         </select>
+                        <small class="form-text text-muted" id="typeRules" style="display:none;"></small>
                     </div>
 
                     <div class="row">
@@ -139,7 +149,7 @@ ob_start();
                     <div class="form-group mb-4">
                         <label class="font-weight-bold text-dark">Supporting File Attachment (Medical Note / Document)</label>
                         <input type="file" name="attachment" id="attachment" class="form-control-file">
-                        <small class="form-text text-muted">Mandatory for Sick Leave requests exceeding 2 working days (PDF, JPG, PNG max 5MB).</small>
+                        <small class="form-text text-muted" id="attachHint">Attach a supporting document if the selected leave category requires one (PDF, JPG, PNG).</small>
                     </div>
 
                     <div class="d-flex justify-content-between align-items-center pt-3 border-top">
@@ -208,11 +218,68 @@ document.addEventListener("DOMContentLoaded", function () {
     endDateInput.addEventListener("change", checkDays);
     if (dayTypeSelect) dayTypeSelect.addEventListener("change", checkDays);
     leaveTypeSelect.addEventListener("change", checkDays);
+
+    // Surface the rules configured against the chosen leave type, and stop the
+    // form offering options that type does not permit. The server re-validates
+    // all of this in LeaveCalculator::validateEligibility.
+    const typeRules = document.getElementById("typeRules");
+    const attachHint = document.getElementById("attachHint");
+
+    function describeType() {
+        const opt = leaveTypeSelect.options[leaveTypeSelect.selectedIndex];
+        if (!opt || !opt.value) {
+            typeRules.style.display = "none";
+            return;
+        }
+        const notice = parseInt(opt.dataset.notice || "0", 10);
+        const min = parseFloat(opt.dataset.min || "0");
+        const max = opt.dataset.max ? parseFloat(opt.dataset.max) : null;
+        const half = opt.dataset.half === "1";
+        const needsAtt = opt.dataset.attachment === "1";
+        const over = parseFloat(opt.dataset.attachmentOver || "0");
+
+        const bits = [];
+        if (notice > 0) bits.push(notice + " day(s) advance notice");
+        if (min > 0) bits.push("min " + min + " day(s) per request");
+        if (max) bits.push("max " + max + " day(s) per request");
+        bits.push(half ? "half-days allowed" : "whole days only");
+        typeRules.innerHTML = "<i class='ti-info-alt'></i> " + bits.join(" &middot; ");
+        typeRules.style.display = "block";
+
+        Array.from(dayTypeSelect.options).forEach(function (o) {
+            if (o.value.indexOf("half") === 0) o.disabled = !half;
+        });
+        if (!half && dayTypeSelect.value.indexOf("half") === 0) {
+            dayTypeSelect.value = "full";
+        }
+
+        if (notice > 0) {
+            const d = new Date();
+            d.setDate(d.getDate() + notice);
+            const earliest = d.toISOString().slice(0, 10);
+            startDateInput.min = earliest;
+            endDateInput.min = earliest;
+            if (startDateInput.value && startDateInput.value < earliest) startDateInput.value = "";
+            if (endDateInput.value && endDateInput.value < earliest) endDateInput.value = "";
+        }
+
+        attachHint.textContent = needsAtt
+            ? (over > 0
+                ? "A supporting document is required once this request exceeds " + over + " working day(s). PDF, JPG or PNG."
+                : "A supporting document is required for this leave category. PDF, JPG or PNG.")
+            : "Optional for this leave category. PDF, JPG or PNG.";
+    }
+
+    leaveTypeSelect.addEventListener("change", describeType);
+    describeType();
 });
 </script>
 
 <?php
 $pageContent = ob_get_clean();
 $pageTitle = 'Apply for Leave | ' . APP_NAME;
+$pageHeading = 'Apply for Leave';
+$pageSubtitle = 'Working days are calculated automatically, excluding weekends and public holidays.';
+$pageIcon = 'ti-pencil-alt';
 require_once __DIR__ . '/../../includes/layout.php';
 ?>

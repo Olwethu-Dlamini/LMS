@@ -18,6 +18,28 @@ Before any code implementation begins, full architecture and system design bluep
 
 ---
 
+## 📘 User Manual
+
+End-user documentation covering all five roles, the leave rules, the holiday
+calendar and troubleshooting. Same content in three formats — edit the Markdown,
+then regenerate the other two:
+
+| Format | File | Use it for |
+|---|---|---|
+| **Markdown** | [`docs/08_USER_MANUAL.md`](./docs/08_USER_MANUAL.md) | The source of truth. Renders on GitHub, diffs cleanly in review. |
+| **Web page** | [`docs/user-manual.html`](./docs/user-manual.html) | Self-contained — fonts and styles are inlined, so it works offline from a share drive and prints to a clean 15-page A4 document. |
+| **Word** | [`docs/08_USER_MANUAL.docx`](./docs/08_USER_MANUAL.docx) | Handing to HR for distribution or intranet upload. Real Word heading styles, so Word's navigation pane and table of contents work. |
+
+Regenerating the Word version after editing the Markdown:
+
+```bash
+python3 tools/md_to_word_html.py docs/08_USER_MANUAL.md /tmp/manual.html
+soffice --headless --convert-to "docx:MS Word 2007 XML" --outdir docs /tmp/manual.html
+mv docs/manual.docx docs/08_USER_MANUAL.docx
+```
+
+---
+
 ## 👥 Supported Roles & Approval Pipeline
 
 ```
@@ -57,12 +79,178 @@ Before any code implementation begins, full architecture and system design bluep
 
 ## 🚀 Setup & Database Installation
 
-1. Import `docs/03_DATABASE_DESIGN_AND_ERD.md` SQL schema into MySQL server:
+### Standard install
+
+1. Import the schema (`schema.sql` is the executable one — `docs/03_…md` is
+   documentation, not a loadable file):
    ```bash
-   mysql -u root -p < docs/03_DATABASE_DESIGN_AND_ERD.md
+   mysql -u root -p < schema.sql
    ```
-2. Configure DB connection credentials in `config/database.php`.
-3. Launch development server:
+2. Configure the DB connection. `config/database.php` reads these environment
+   variables and falls back to the defaults shown:
+
+   | Variable  | Default     |
+   |-----------|-------------|
+   | `DB_HOST` | `127.0.0.1` |
+   | `DB_PORT` | `3306`      |
+   | `DB_NAME` | `lms_db`    |
+   | `DB_USER` | `root`      |
+   | `DB_PASS` | *(empty)*   |
+
+3. Launch the development server from the project root:
    ```bash
    php -S localhost:8000
    ```
+
+`APP_URL` in `config/constants.php` is `http://localhost:8000`; change it if you
+serve the app from a different host or port.
+
+### Local UAT environment
+
+`./uat.sh` runs the app against its own private MariaDB instance on port **3307**,
+so it never touches a system MySQL already using 3306:
+
+```bash
+./uat.sh start       # start database + web server
+./uat.sh status      # what is running, plus application counts
+./uat.sh reset       # clear applications/logs/balances, keep user accounts
+./uat.sh reinstall   # drop and re-import schema.sql from scratch
+./uat.sh logs        # tail PHP and MariaDB error logs
+./uat.sh stop
+```
+
+Then open <http://localhost:8000>. The demo accounts in `schema.sql` all use the
+password `password123` — **these are for testing only and must be removed before
+go-live** (see the checklist below):
+
+| Email | Role |
+|---|---|
+| `employee@lms.com` | Employee |
+| `manager@lms.com` | Line Manager |
+| `hr@lms.com` | HR Manager |
+| `boss@lms.com` | Executive / Boss |
+| `admin@lms.com` | System Admin |
+
+---
+
+## 👤 Staff Accounts & Passwords
+
+### Loading the staff roster
+
+`tools/seed_employees.php` loads the Real Image roster. It is idempotent — it
+skips anyone whose email already exists, so it is safe to re-run as the roster
+grows.
+
+```bash
+php tools/seed_employees.php                      # dry run: shows what it would create
+php tools/seed_employees.php --commit             # write the accounts
+php tools/seed_employees.php --commit --reissue   # fresh temp password for everyone
+                                                  # still awaiting a first sign-in
+```
+
+Use `--reissue` if the credential list is lost — stored passwords are bcrypt
+hashes and cannot be recovered, only replaced. The CSV is **appended**, never
+overwritten, so previously issued passwords are never destroyed; where an email
+appears more than once, the newest row wins.
+
+Each new account gets **its own random temporary password** and is flagged
+`must_change_password`. The temporary passwords are written to
+`$HOME/.ri-leave-uat/initial-passwords.csv` (mode `0600`, deliberately **outside
+the repository** so they can never be committed). Distribute them securely,
+then delete the file.
+
+New starters are created as plain `employee` with no department and no reporting
+manager. Assign those in **Administration → User Management** — until a user has
+a manager, only an admin can clear Stage 1 for them.
+
+### Password rules
+
+- Minimum 10 characters, with at least one uppercase, one lowercase and one number.
+- Users change their own password via **Change Password** in the top utility strip.
+- Anyone flagged `must_change_password` is held on the change-password screen and
+  cannot reach the rest of the app until they set their own password.
+- An admin password reset (**User Management → Password**) is always treated as
+  temporary and re-raises that flag.
+
+---
+
+## ⚙️ Admin Console
+
+Administrators get a separate console at `/modules/admin/index.php`, reachable
+from the **Admin Console** link in the staff nav. It carries its own dark
+navigation containing system administration only — no Apply, My Leave or
+Approvals — with a **Staff Portal** switcher back, so an admin can still book
+their own leave. Every `/modules/admin/*` route is gated by
+`require_role(ROLE_ADMIN)`.
+
+| Section | What it does |
+|---|---|
+| **Overview** | Counts plus a *Setup Attention* panel flagging users with no manager or department, accounts still on a temporary password, and a missing holiday calendar. |
+| **Users** | Create, edit, reset password, archive/restore, delete. |
+| **Departments** | Create, rename, reassign head, delete (blocked while members remain). |
+| **Leave Types** | Full rule configuration — see below. |
+| **Holidays** | Add, edit, delete. Changes affect future calculations only. |
+| **Audit Log** | Every approval and rejection, filterable by action, role and date. |
+
+### Deleting is deliberately guarded
+
+`leave_applications` and `leave_approval_logs` are wired `ON DELETE CASCADE`, so
+a naive user delete would erase that person's leave history and the audit trail
+with them. Instead:
+
+- **Users** — Delete permanently removes the account *only* when it has zero
+  applications and zero approval log entries. Anything with history is
+  **archived** instead, and you are told why. You cannot remove your own account
+  or the last active administrator.
+- **Leave types** — a category referenced by any application is **retired**
+  rather than deleted: history and reports stay intact and it disappears from
+  the apply form.
+- **Departments** — cannot be deleted while they still have members.
+
+### Configurable leave rules
+
+Each leave type carries its own policy, enforced server-side in
+`LeaveCalculator::validateEligibility()` and mirrored as hints on the apply form:
+
+| Setting | Meaning |
+|---|---|
+| `max_days_per_year` | Annual allocation used when seeding entitlements |
+| `min_days_per_request` | Smallest bookable request |
+| `max_days_per_request` | Largest single request; blank means no cap. A request is one contiguous range, so this also caps consecutive days within it |
+| `allow_half_day` | Whether half-day options are offered at all |
+| `min_notice_days` | Days of advance notice required. **0 also permits backdating**, which is what lets sick leave be recorded after the fact |
+| `requires_attachment` + `attachment_threshold_days` | Demand a document only once a request exceeds N working days. This replaces what was a hardcoded "sick leave over 2 days" rule |
+| `is_paid` | Paid or unpaid |
+| `is_active` | Retired types vanish from the apply form but stay in reports |
+
+Shipped defaults: Annual 7 days notice; Casual max 3 days per request with
+1 day notice; Sick no notice with a document over 2 days; Maternity and Unpaid
+whole days only, Unpaid needing 14 days notice.
+
+---
+
+## ✅ Before go-live
+
+- [ ] Delete the five `@lms.com` demo accounts and remove them from `schema.sql`.
+- [ ] Change `APP_URL` in `config/constants.php` to the production hostname.
+- [ ] Move the DB credentials to real environment variables (never commit them).
+- [ ] Serve over HTTPS and set `session.cookie_secure=1`, `session.cookie_httponly=1`.
+- [ ] Turn `display_errors` **off** in production PHP config.
+- [ ] Assign every user a department, role and reporting manager.
+- [ ] Load the real public holiday calendar for the leave year.
+- [ ] Delete `$HOME/.ri-leave-uat/initial-passwords.csv` once passwords are handed out.
+
+### Docker
+
+`docker-compose.yml` + `Dockerfile` bring up PHP 8.2 (Apache) and MySQL 8.0 with
+the schema auto-imported:
+
+```bash
+docker compose up -d --build
+```
+
+### Tests
+
+```bash
+php tests/test_suite.php     # honours the DB_* environment variables above
+```

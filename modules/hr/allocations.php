@@ -57,7 +57,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $stmt = $db->prepare("
                 INSERT INTO leave_entitlements (user_id, leave_type_id, year, total_days)
                 VALUES (:user_id, :type_id, :year, :total_days)
-                ON DUPLICATE KEY UPDATE total_days = :total_days
+                ON DUPLICATE KEY UPDATE total_days = VALUES(total_days)
             ");
             $stmt->execute(['user_id' => $userId, 'type_id' => $leaveTypeId, 'year' => $year, 'total_days' => $totalDays]);
             set_flash('success', 'Leave allocation updated successfully!');
@@ -83,21 +83,6 @@ $leaveTypes = $db->query("SELECT id, name FROM leave_types ORDER BY name ASC")->
 
 ob_start();
 ?>
-
-<div class="d-flex justify-content-between align-items-center mb-4">
-    <div>
-        <h3 class="font-weight-bold text-dark mb-1"><i class="ti-pie-chart text-primary"></i> Leave Entitlements Allocation</h3>
-        <p class="text-muted mb-0">Manage annual leave balances for all employees.</p>
-    </div>
-    <div>
-        <button type="button" class="btn btn-outline-info font-weight-bold mr-2" data-toggle="modal" data-target="#bulkInitModal">
-            <i class="ti-bolt"></i> Bulk Initialize Year
-        </button>
-        <button type="button" class="btn btn-primary font-weight-bold" data-toggle="modal" data-target="#allocationModal">
-            <i class="ti-plus"></i> Allocate / Update Entitlement
-        </button>
-    </div>
-</div>
 
 <?php if (!empty($error)): ?>
     <div class="alert alert-danger mb-4"><?php echo $error; ?></div>
@@ -223,5 +208,12 @@ ob_start();
 <?php
 $pageContent = ob_get_clean();
 $pageTitle = 'Leave Allocations | ' . APP_NAME;
+$pageHeading = 'Leave Entitlements Allocation';
+$pageSubtitle = 'Manage annual leave balances for all employees.';
+$pageIcon = 'ti-pie-chart';
+$pageActions = '<button type="button" class="btn btn-outline-light font-weight-bold mr-2" data-toggle="modal" data-target="#bulkInitModal">'
+             . '<i class="ti-bolt"></i> Bulk Initialize Year</button>'
+             . '<button type="button" class="btn btn-light font-weight-bold" data-toggle="modal" data-target="#allocationModal">'
+             . '<i class="ti-plus"></i> Allocate / Update</button>';
 require_once __DIR__ . '/../../includes/layout.php';
 ?>

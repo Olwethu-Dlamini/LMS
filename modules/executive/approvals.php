@@ -49,13 +49,6 @@ $pendingApps = $stmt->fetchAll();
 ob_start();
 ?>
 
-<div class="d-flex justify-content-between align-items-center mb-4">
-    <div>
-        <h3 class="font-weight-bold text-dark mb-1"><i class="ti-crown text-primary"></i> Stage 3: Executive Boss Approvals</h3>
-        <p class="text-muted mb-0">Final sign-off portal for leave requests cleared by Line Manager and HR.</p>
-    </div>
-</div>
-
 <?php if (!empty($error)): ?>
     <div class="alert alert-danger mb-4"><?php echo $error; ?></div>
 <?php endif; ?>
@@ -157,5 +150,8 @@ ob_start();
 <?php
 $pageContent = ob_get_clean();
 $pageTitle = 'Stage 3 Executive Approvals | ' . APP_NAME;
+$pageHeading = 'Stage 3: Executive Sign-Off';
+$pageSubtitle = 'Final authority for leave requests cleared by Line Manager and HR.';
+$pageIcon = 'ti-crown';
 require_once __DIR__ . '/../../includes/layout.php';
 ?>
