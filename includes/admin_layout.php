@@ -1,19 +1,17 @@
 <?php
 /**
- * Page shell. Pages set $pageContent (buffered markup) plus, optionally:
- *   $pageHeading   heading shown in the gradient page-head band
- *   $pageSubtitle  supporting line under the heading
- *   $pageIcon      themify icon class for the heading, e.g. 'ti-pie-chart'
- *   $pageActions   raw markup for buttons rendered on the right of the band
- * When $pageHeading is unset the band is skipped and the page keeps whatever
- * heading it renders inside $pageContent.
+ * Admin console shell. Same brand header as the staff portal so the identity is
+ * consistent, but with the admin-only navigation in place of the staff nav.
+ *
+ * Pages set $pageContent plus, optionally, $pageHeading / $pageSubtitle /
+ * $pageIcon / $pageActions, exactly as with includes/layout.php.
  */
 require_once __DIR__ . '/header.php';
-require_once __DIR__ . '/navbar.php';
+require_once __DIR__ . '/admin_navbar.php';
 ?>
 <div class="ri-content">
     <?php if (!empty($pageHeading)): ?>
-        <div class="ri-pagehead">
+        <div class="ri-pagehead ri-pagehead-admin">
             <div class="container">
                 <div class="ri-pagehead-inner">
                     <div>

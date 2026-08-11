@@ -73,8 +73,8 @@ ob_start();
 ?>
 
 <div class="card mb-4">
-    <div class="card-header bg-white d-flex justify-content-between align-items-center">
-        <h5 class="mb-0 font-weight-bold text-dark"><i class="ti-time"></i> My Leave Application History</h5>
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <span class="font-weight-bold text-dark"><i class="ti-time"></i> All Applications</span>
         <a href="<?php echo APP_URL; ?>/modules/leave/apply.php" class="btn btn-primary btn-sm font-weight-bold">
             <i class="ti-plus"></i> New Application
         </a>
@@ -270,5 +270,8 @@ ob_start();
 <?php
 $pageContent = ob_get_clean();
 $pageTitle = 'My Leave History | ' . APP_NAME;
+$pageHeading = 'My Leave History';
+$pageSubtitle = 'Track the live approval progress of every application you have submitted.';
+$pageIcon = 'ti-time';
 require_once __DIR__ . '/../../includes/layout.php';
 ?>

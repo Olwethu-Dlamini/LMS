@@ -78,16 +78,6 @@ $exportQuery = http_build_query(array_merge($_GET, ['export' => 'csv']));
 ob_start();
 ?>
 
-<div class="d-flex justify-content-between align-items-center mb-4">
-    <div>
-        <h3 class="font-weight-bold text-dark mb-1"><i class="ti-files text-success"></i> Leave Reports & Analytics</h3>
-        <p class="text-muted mb-0">Company-wide audit reporting and filtered payroll CSV export.</p>
-    </div>
-    <a href="?<?php echo $exportQuery; ?>" class="btn btn-success font-weight-bold">
-        <i class="ti-download"></i> Export Filtered CSV Report
-    </a>
-</div>
-
 <!-- Filter Control Panel -->
 <div class="card mb-4">
     <div class="card-header bg-light">
@@ -177,5 +167,10 @@ ob_start();
 <?php
 $pageContent = ob_get_clean();
 $pageTitle = 'Leave Reports | ' . APP_NAME;
+$pageHeading = 'Leave Reports & Analytics';
+$pageSubtitle = 'Company-wide audit reporting and filtered payroll CSV export.';
+$pageIcon = 'ti-files';
+$pageActions = '<a href="?' . htmlspecialchars($exportQuery, ENT_QUOTES) . '" class="btn btn-light font-weight-bold">'
+             . '<i class="ti-download"></i> Export Filtered CSV</a>';
 require_once __DIR__ . '/../../includes/layout.php';
 ?>

@@ -49,13 +49,6 @@ $pendingApps = $stmt->fetchAll();
 ob_start();
 ?>
 
-<div class="d-flex justify-content-between align-items-center mb-4">
-    <div>
-        <h3 class="font-weight-bold text-dark mb-1"><i class="ti-shield text-info"></i> Stage 2: HR Manager Approvals</h3>
-        <p class="text-muted mb-0">Review requests that have passed Stage 1 Line Manager sign-off.</p>
-    </div>
-</div>
-
 <?php if (!empty($error)): ?>
     <div class="alert alert-danger mb-4"><?php echo $error; ?></div>
 <?php endif; ?>
@@ -157,5 +150,8 @@ ob_start();
 <?php
 $pageContent = ob_get_clean();
 $pageTitle = 'Stage 2 HR Approvals | ' . APP_NAME;
+$pageHeading = 'Stage 2: HR Manager Approvals';
+$pageSubtitle = 'Review requests that have passed Stage 1 Line Manager sign-off.';
+$pageIcon = 'ti-shield';
 require_once __DIR__ . '/../../includes/layout.php';
 ?>

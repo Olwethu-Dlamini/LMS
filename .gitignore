@@ -10,6 +10,16 @@
 /uploads/attachments/*
 !/uploads/attachments/.gitkeep
 
+# Credential material must never be committed. tools/seed_employees.php writes
+# temporary passwords to $HOME/.ri-leave-uat/ (outside the repo); these patterns
+# are a second line of defence in case a copy is ever made in the tree.
+*initial-passwords*.csv
+*passwords*.csv
+*.pem
+*.key
+.env
+.env.*
+
 # System & IDE files
 .DS_Store
 Thumbs.db
