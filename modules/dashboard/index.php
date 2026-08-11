@@ -30,9 +30,9 @@ if (has_role([ROLE_MANAGER, ROLE_ADMIN])) {
             FROM leave_applications a 
             JOIN users u ON a.user_id = u.id 
             LEFT JOIN departments d ON u.department_id = d.id 
-            WHERE a.status = 'pending_manager' AND (u.manager_id = :mgr_id OR d.line_manager_id = :mgr_id)
+            WHERE a.status = 'pending_manager' AND (u.manager_id = :mgr_id OR d.line_manager_id = :dept_mgr_id)
         ");
-        $stmtCount->execute(['mgr_id' => $userId]);
+        $stmtCount->execute(['mgr_id' => $userId, 'dept_mgr_id' => $userId]);
     }
     $pendingStage1Count = (int)$stmtCount->fetchColumn();
 }
@@ -60,22 +60,6 @@ $myApplications = $stmtApps->fetchAll();
 
 ob_start();
 ?>
-
-<div class="row mb-4">
-    <div class="col-md-12">
-        <div class="d-flex justify-content-between align-items-center">
-            <div>
-                <h3 class="font-weight-bold text-dark mb-1">Welcome back, <?php echo htmlspecialchars($_SESSION['user_name']); ?>!</h3>
-                <p class="text-muted mb-0">Overview of your leave entitlements and approval queues for <?php echo date('Y'); ?>.</p>
-            </div>
-            <div>
-                <a href="<?php echo APP_URL; ?>/modules/leave/apply.php" class="btn btn-primary font-weight-bold">
-                    <i class="ti-plus"></i> Apply for Leave
-                </a>
-            </div>
-        </div>
-    </div>
-</div>
 
 <!-- Role Approval Notifications -->
 <?php if (has_role([ROLE_MANAGER, ROLE_HR, ROLE_EXECUTIVE, ROLE_ADMIN])): ?>
@@ -223,5 +207,9 @@ ob_start();
 <?php
 $pageContent = ob_get_clean();
 $pageTitle = 'Dashboard | ' . APP_NAME;
+$pageHeading = 'Welcome back, ' . ($_SESSION['user_name'] ?? '');
+$pageSubtitle = 'Overview of your leave entitlements and approval queues for ' . date('Y') . '.';
+$pageActions = '<a href="' . APP_URL . '/modules/leave/apply.php" class="btn btn-light font-weight-bold">'
+             . '<i class="ti-plus"></i> Apply for Leave</a>';
 require_once __DIR__ . '/../../includes/layout.php';
 ?>

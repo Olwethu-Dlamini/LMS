@@ -112,44 +112,133 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } else {
             try {
                 $pwdHash = password_hash($newPassword, PASSWORD_BCRYPT);
-                $stmtPwd = $db->prepare("UPDATE users SET password_hash = :pwd WHERE id = :id");
+                // Treat an admin-issued password as temporary: the user must
+                // replace it with their own on their next sign-in.
+                $stmtPwd = $db->prepare("
+                    UPDATE users
+                    SET password_hash = :pwd, must_change_password = 1
+                    WHERE id = :id
+                ");
                 $stmtPwd->execute(['pwd' => $pwdHash, 'id' => $resetUserId]);
-                set_flash('success', "User password reset successfully!");
+                set_flash('success', "Password reset. The user must set their own password at next sign-in.");
                 header('Location: ' . APP_URL . '/modules/admin/users.php');
                 exit;
             } catch (PDOException $e) {
                 $error = 'Error resetting password: ' . $e->getMessage();
             }
         }
+    } elseif ($action === 'archive' || $action === 'delete') {
+        $targetId = (int)($_POST['user_id'] ?? 0);
+
+        // How much history hangs off this account?
+        $stmtCounts = $db->prepare("
+            SELECT
+              (SELECT COUNT(*) FROM leave_applications  WHERE user_id     = :uid_apps) AS app_count,
+              (SELECT COUNT(*) FROM leave_approval_logs WHERE approver_id = :uid_logs) AS log_count,
+              (SELECT COUNT(*) FROM users              WHERE manager_id  = :uid_reports) AS report_count,
+              (SELECT COUNT(*) FROM departments        WHERE line_manager_id = :uid_depts) AS dept_count
+        ");
+        $stmtCounts->execute([
+            'uid_apps'    => $targetId,
+            'uid_logs'    => $targetId,
+            'uid_reports' => $targetId,
+            'uid_depts'   => $targetId,
+        ]);
+        $counts = $stmtCounts->fetch() ?: ['app_count' => 0, 'log_count' => 0, 'report_count' => 0, 'dept_count' => 0];
+
+        $stmtTarget = $db->prepare("
+            SELECT u.*, r.name AS role_name
+            FROM users u JOIN roles r ON r.id = u.role_id
+            WHERE u.id = :id
+        ");
+        $stmtTarget->execute(['id' => $targetId]);
+        $target = $stmtTarget->fetch();
+
+        $activeAdmins = (int)$db->query("
+            SELECT COUNT(*) FROM users u JOIN roles r ON r.id = u.role_id
+            WHERE r.name = 'admin' AND u.status = 'active'
+        ")->fetchColumn();
+
+        $targetName = $target ? $target['first_name'] . ' ' . $target['last_name'] : '';
+        $isLastAdmin = $target && $target['role_name'] === 'admin'
+                       && $target['status'] === 'active' && $activeAdmins <= 1;
+
+        if ($targetId <= 0 || !$target) {
+            $error = 'That user account no longer exists.';
+        } elseif ($targetId === (int)$_SESSION['user_id']) {
+            $error = 'You cannot archive or delete the account you are signed in with.';
+        } elseif ($isLastAdmin) {
+            $error = 'This is the only active administrator. Promote another admin before removing this one.';
+        } elseif ($action === 'archive') {
+            $newStatus = $target['status'] === 'active' ? 'inactive' : 'active';
+            $stmt = $db->prepare("UPDATE users SET status = :st WHERE id = :id");
+            $stmt->execute(['st' => $newStatus, 'id' => $targetId]);
+            set_flash('success', $newStatus === 'inactive'
+                ? "{$targetName} has been archived. They can no longer sign in, and their leave history is preserved."
+                : "{$targetName} has been reactivated and can sign in again.");
+            header('Location: ' . APP_URL . '/modules/admin/users.php');
+            exit;
+        } else {
+            // Hard delete only when there is genuinely nothing to lose. The FKs on
+            // leave_applications and leave_approval_logs cascade, so a delete with
+            // history attached would silently destroy the audit trail.
+            $hasHistory = (int)$counts['app_count'] > 0 || (int)$counts['log_count'] > 0;
+            if ($hasHistory) {
+                $stmt = $db->prepare("UPDATE users SET status = 'inactive' WHERE id = :id");
+                $stmt->execute(['id' => $targetId]);
+                set_flash('warning', sprintf(
+                    "%s has %d leave application(s) and %d approval log entry(ies), so the account was archived instead of deleted. Deleting it would have erased that audit trail.",
+                    $targetName, (int)$counts['app_count'], (int)$counts['log_count']
+                ));
+                header('Location: ' . APP_URL . '/modules/admin/users.php');
+                exit;
+            }
+            try {
+                $stmt = $db->prepare("DELETE FROM users WHERE id = :id");
+                $stmt->execute(['id' => $targetId]);
+                $note = '';
+                if ((int)$counts['report_count'] > 0) {
+                    $note .= sprintf(' %d staff member(s) now have no reporting manager.', (int)$counts['report_count']);
+                }
+                if ((int)$counts['dept_count'] > 0) {
+                    $note .= sprintf(' %d department(s) now have no designated line manager.', (int)$counts['dept_count']);
+                }
+                set_flash('success', "{$targetName} was deleted permanently." . $note);
+                header('Location: ' . APP_URL . '/modules/admin/users.php');
+                exit;
+            } catch (PDOException $e) {
+                $error = 'Error deleting user: ' . $e->getMessage();
+            }
+        }
     }
 }
 
-// Fetch Users List
+// Fetch Users List, with the history counts that decide archive vs delete
 $stmtUsers = $db->query("
-    SELECT u.*, r.name as role_name, d.name as dept_name, CONCAT(m.first_name, ' ', m.last_name) as manager_name
+    SELECT u.*, r.name as role_name, d.name as dept_name,
+           CONCAT(m.first_name, ' ', m.last_name) as manager_name,
+           (SELECT COUNT(*) FROM leave_applications a  WHERE a.user_id     = u.id) AS app_count,
+           (SELECT COUNT(*) FROM leave_approval_logs l WHERE l.approver_id = u.id) AS log_count,
+           (SELECT COUNT(*) FROM users rp             WHERE rp.manager_id = u.id) AS report_count,
+           (SELECT COUNT(*) FROM departments dp       WHERE dp.line_manager_id = u.id) AS heads_count
     FROM users u
     JOIN roles r ON u.role_id = r.id
     LEFT JOIN departments d ON u.department_id = d.id
     LEFT JOIN users m ON u.manager_id = m.id
-    ORDER BY u.created_at DESC
+    ORDER BY u.status ASC, r.id DESC, u.first_name ASC
 ");
 $usersList = $stmtUsers->fetchAll();
+
+$activeAdminCount = (int)$db->query("
+    SELECT COUNT(*) FROM users u JOIN roles r ON r.id = u.role_id
+    WHERE r.name = 'admin' AND u.status = 'active'
+")->fetchColumn();
 
 $roles = $db->query("SELECT * FROM roles ORDER BY id ASC")->fetchAll();
 $depts = $db->query("SELECT * FROM departments ORDER BY name ASC")->fetchAll();
 
 ob_start();
 ?>
-
-<div class="d-flex justify-content-between align-items-center mb-4">
-    <div>
-        <h3 class="font-weight-bold text-dark mb-1"><i class="ti-user text-primary"></i> User & Role Management</h3>
-        <p class="text-muted mb-0">Create accounts, assign user roles, and define reporting managers.</p>
-    </div>
-    <button type="button" class="btn btn-primary font-weight-bold" data-toggle="modal" data-target="#newUserModal">
-        <i class="ti-plus"></i> Create New User
-    </button>
-</div>
 
 <?php if (!empty($error)): ?>
     <div class="alert alert-danger mb-4"><?php echo $error; ?></div>
@@ -254,7 +343,7 @@ ob_start();
                 <tbody>
                     <?php foreach ($usersList as $u): ?>
                     <tr>
-                        <td class="font-weight-bold text-primary"><?php echo htmlspecialchars($u['emp_id']); ?></td>
+                        <td class="font-weight-bold text-primary ri-nowrap"><?php echo htmlspecialchars($u['emp_id']); ?></td>
                         <td><?php echo htmlspecialchars($u['first_name'] . ' ' . $u['last_name']); ?></td>
                         <td><?php echo htmlspecialchars($u['email']); ?></td>
                         <td><span class="badge badge-info"><?php echo strtoupper($u['role_name']); ?></span></td>
@@ -271,9 +360,116 @@ ob_start();
                             <button type="button" class="btn btn-xs btn-outline-primary font-weight-bold mr-1" data-toggle="modal" data-target="#editModal<?php echo $u['id']; ?>">
                                 <i class="ti-pencil"></i> Edit
                             </button>
-                            <button type="button" class="btn btn-xs btn-outline-warning font-weight-bold" data-toggle="modal" data-target="#pwdModal<?php echo $u['id']; ?>">
+                            <button type="button" class="btn btn-xs btn-outline-warning font-weight-bold mr-1" data-toggle="modal" data-target="#pwdModal<?php echo $u['id']; ?>">
                                 <i class="ti-key"></i> Password
                             </button>
+                            <?php
+                            $isSelf = (int)$u['id'] === (int)$_SESSION['user_id'];
+                            $isOnlyAdmin = $u['role_name'] === 'admin' && $u['status'] === 'active' && $activeAdminCount <= 1;
+                            $locked = $isSelf || $isOnlyAdmin;
+                            $hasHistory = (int)$u['app_count'] > 0 || (int)$u['log_count'] > 0;
+                            ?>
+                            <?php if (!$locked): ?>
+                                <button type="button" class="btn btn-xs btn-outline-secondary font-weight-bold mr-1" data-toggle="modal" data-target="#arcModal<?php echo $u['id']; ?>">
+                                    <i class="ti-<?php echo $u['status'] === 'active' ? 'archive' : 'back-right'; ?>"></i>
+                                    <?php echo $u['status'] === 'active' ? 'Archive' : 'Restore'; ?>
+                                </button>
+                                <button type="button" class="btn btn-xs btn-outline-danger font-weight-bold" data-toggle="modal" data-target="#delModal<?php echo $u['id']; ?>">
+                                    <i class="ti-trash"></i> Delete
+                                </button>
+                            <?php else: ?>
+                                <span class="badge badge-light" title="<?php echo $isSelf ? 'This is your own account' : 'The only active administrator'; ?>">
+                                    <i class="ti-lock"></i> <?php echo $isSelf ? 'Your account' : 'Only admin'; ?>
+                                </span>
+                            <?php endif; ?>
+
+                            <?php if (!$locked): ?>
+                            <!-- Archive / restore -->
+                            <div class="modal fade text-left" id="arcModal<?php echo $u['id']; ?>" tabindex="-1" role="dialog">
+                                <div class="modal-dialog" role="document">
+                                    <div class="modal-content">
+                                        <form method="POST" action="">
+                                            <input type="hidden" name="csrf_token" value="<?php echo generate_csrf_token(); ?>">
+                                            <input type="hidden" name="action" value="archive">
+                                            <input type="hidden" name="user_id" value="<?php echo $u['id']; ?>">
+                                            <div class="modal-header">
+                                                <h5 class="modal-title">
+                                                    <?php echo $u['status'] === 'active' ? 'Archive' : 'Restore'; ?>
+                                                    <?php echo htmlspecialchars($u['first_name'] . ' ' . $u['last_name']); ?>?
+                                                </h5>
+                                                <button type="button" class="close" data-dismiss="modal">&times;</button>
+                                            </div>
+                                            <div class="modal-body">
+                                                <?php if ($u['status'] === 'active'): ?>
+                                                    <p>They will no longer be able to sign in, and will drop out of
+                                                       approver and manager dropdowns.</p>
+                                                    <p class="mb-0 text-muted"><small>All leave history and audit
+                                                       records are kept. You can restore the account at any time.</small></p>
+                                                <?php else: ?>
+                                                    <p class="mb-0">This will let them sign in again and appear in
+                                                       manager and approver lists.</p>
+                                                <?php endif; ?>
+                                            </div>
+                                            <div class="modal-footer">
+                                                <button type="button" class="btn btn-outline-secondary" data-dismiss="modal">Cancel</button>
+                                                <button type="submit" class="btn btn-<?php echo $u['status'] === 'active' ? 'warning' : 'success'; ?> font-weight-bold">
+                                                    <?php echo $u['status'] === 'active' ? 'Archive Account' : 'Restore Account'; ?>
+                                                </button>
+                                            </div>
+                                        </form>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Delete (falls back to archive when history exists) -->
+                            <div class="modal fade text-left" id="delModal<?php echo $u['id']; ?>" tabindex="-1" role="dialog">
+                                <div class="modal-dialog" role="document">
+                                    <div class="modal-content">
+                                        <form method="POST" action="">
+                                            <input type="hidden" name="csrf_token" value="<?php echo generate_csrf_token(); ?>">
+                                            <input type="hidden" name="action" value="delete">
+                                            <input type="hidden" name="user_id" value="<?php echo $u['id']; ?>">
+                                            <div class="modal-header">
+                                                <h5 class="modal-title">Delete <?php echo htmlspecialchars($u['first_name'] . ' ' . $u['last_name']); ?>?</h5>
+                                                <button type="button" class="close" data-dismiss="modal">&times;</button>
+                                            </div>
+                                            <div class="modal-body">
+                                                <?php if ($hasHistory): ?>
+                                                    <div class="alert alert-warning mb-3">
+                                                        This account has
+                                                        <strong><?php echo (int)$u['app_count']; ?></strong> leave application(s)
+                                                        and <strong><?php echo (int)$u['log_count']; ?></strong> approval log entry(ies).
+                                                    </div>
+                                                    <p class="mb-0">Permanent delete is blocked to protect the audit trail.
+                                                       Confirming will <strong>archive</strong> the account instead.</p>
+                                                <?php else: ?>
+                                                    <p>This account has no leave history, so it can be removed permanently.</p>
+                                                    <?php if ((int)$u['report_count'] > 0 || (int)$u['heads_count'] > 0): ?>
+                                                        <div class="alert alert-warning mb-3">
+                                                            <?php if ((int)$u['report_count'] > 0): ?>
+                                                                <div><strong><?php echo (int)$u['report_count']; ?></strong> staff member(s) report to them and will be left without a manager.</div>
+                                                            <?php endif; ?>
+                                                            <?php if ((int)$u['heads_count'] > 0): ?>
+                                                                <div>They head <strong><?php echo (int)$u['heads_count']; ?></strong> department(s), which will be left unassigned.</div>
+                                                            <?php endif; ?>
+                                                        </div>
+                                                    <?php endif; ?>
+                                                    <div class="alert alert-danger mb-0">
+                                                        This also removes their leave entitlement allocations and cannot be undone.
+                                                    </div>
+                                                <?php endif; ?>
+                                            </div>
+                                            <div class="modal-footer">
+                                                <button type="button" class="btn btn-outline-secondary" data-dismiss="modal">Cancel</button>
+                                                <button type="submit" class="btn btn-danger font-weight-bold">
+                                                    <?php echo $hasHistory ? 'Archive Instead' : 'Delete Permanently'; ?>
+                                                </button>
+                                            </div>
+                                        </form>
+                                    </div>
+                                </div>
+                            </div>
+                            <?php endif; ?>
 
                             <!-- Edit User Modal -->
                             <div class="modal fade" id="editModal<?php echo $u['id']; ?>" tabindex="-1" role="dialog">
@@ -389,5 +585,10 @@ ob_start();
 <?php
 $pageContent = ob_get_clean();
 $pageTitle = 'User Management | ' . APP_NAME;
-require_once __DIR__ . '/../../includes/layout.php';
+$pageHeading = 'User & Role Management';
+$pageSubtitle = 'Create accounts, assign user roles, and define reporting managers.';
+$pageIcon = 'ti-user';
+$pageActions = '<button type="button" class="btn btn-light font-weight-bold" data-toggle="modal" data-target="#newUserModal">'
+             . '<i class="ti-plus"></i> Create New User</button>';
+require_once __DIR__ . '/../../includes/admin_layout.php';
 ?>
