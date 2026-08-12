@@ -55,7 +55,7 @@ $userEmpId = $_SESSION['user_emp_id'] ?? '';
         <div class="container">
             <div class="d-flex justify-content-between align-items-center flex-wrap">
                 <div class="d-flex align-items-center flex-wrap">
-                    <a href="<?php echo APP_URL; ?>/modules/dashboard/index.php">
+                    <a href="<?php echo landing_url(); ?>">
                         <img src="<?php echo APP_URL; ?>/assets/images/ri-logo-navy.png"
                              alt="<?php echo htmlspecialchars(ORG_NAME); ?>" class="ri-logo">
                     </a>

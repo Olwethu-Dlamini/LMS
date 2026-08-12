@@ -2,7 +2,7 @@
 require_once __DIR__ . '/../../includes/functions.php';
 
 if (isset($_SESSION['user_id'])) {
-    header('Location: ' . APP_URL . '/modules/dashboard/index.php');
+    header('Location: ' . landing_url());
     exit;
 }
 
@@ -43,7 +43,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 exit;
             }
 
-            header('Location: ' . APP_URL . '/modules/dashboard/index.php');
+            header('Location: ' . landing_url());
             exit;
         } else {
             $error = 'Invalid email address or password.';

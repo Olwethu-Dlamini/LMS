@@ -1,9 +1,14 @@
 <?php
 require_once __DIR__ . '/functions.php';
 
-/** Admin console navigation. Contains system administration only - no Apply,
- *  My Leave or Approvals. Those stay in the staff portal, reachable via the
- *  switcher on the right. */
+/** Admin console navigation. This is the admin's only navigation - there is no
+ *  switch back to the staff portal, because an admin account holds no leave
+ *  entitlement and cannot apply for leave.
+ *
+ *  Approvals and HR tooling appear under Leave Oversight. The three stage
+ *  screens are the admin's break-glass override for applications stranded when
+ *  the designated approver is unavailable; the pages themselves warn when an
+ *  admin is the one acting. */
 
 if (!function_exists('ri_nav_on')) {
     function ri_nav_on(array $paths): bool {
@@ -26,6 +31,17 @@ $adminLinks = [
     ['/admin/holidays.php',    'ti-calendar',       'Holidays'],
     ['/admin/audit_log.php',   'ti-files',          'Audit Log'],
 ];
+
+// Break-glass approval plus HR reporting, grouped so they read as oversight
+// rather than as part of the admin's own workflow.
+$oversightLinks = [
+    ['/manager/approvals.php',   'ti-check-box', 'Stage 1 · Line Manager'],
+    ['/hr/approvals.php',        'ti-shield',    'Stage 2 · HR Review'],
+    ['/executive/approvals.php', 'ti-crown',     'Stage 3 · Executive'],
+    ['/hr/allocations.php',      'ti-pie-chart', 'Leave Allocations'],
+    ['/hr/reports.php',          'ti-files',     'Leave Reports'],
+];
+$onOversight = ri_nav_on(array_column($oversightLinks, 0));
 ?>
 <div class="ri-nav ri-nav-admin">
     <div class="container">
@@ -46,12 +62,25 @@ $adminLinks = [
                             </a>
                         </li>
                     <?php endforeach; ?>
-                </ul>
-                <ul class="navbar-nav">
-                    <li class="nav-item">
-                        <a class="nav-link ri-switch" href="<?php echo APP_URL; ?>/modules/dashboard/index.php">
-                            <i class="ti-arrow-right"></i>Staff Portal
+
+                    <li class="nav-item dropdown<?php echo $onOversight ? ' active' : ''; ?>">
+                        <a class="nav-link dropdown-toggle" href="#" id="riAdminOversight" data-toggle="dropdown"
+                           aria-haspopup="true" aria-expanded="false">
+                            <i class="ti-eye"></i>Leave Oversight
                         </a>
+                        <div class="dropdown-menu" aria-labelledby="riAdminOversight">
+                            <h6 class="dropdown-header">Break-glass approval</h6>
+                            <?php foreach ($oversightLinks as $i => [$path, $icon, $label]): ?>
+                                <?php if ($i === 3): ?>
+                                    <div class="dropdown-divider"></div>
+                                    <h6 class="dropdown-header">HR management</h6>
+                                <?php endif; ?>
+                                <a class="dropdown-item<?php echo ri_admin_active($path); ?>"
+                                   href="<?php echo APP_URL . '/modules' . $path; ?>">
+                                    <i class="<?php echo $icon; ?>"></i><?php echo $label; ?>
+                                </a>
+                            <?php endforeach; ?>
+                        </div>
                     </li>
                 </ul>
             </div>

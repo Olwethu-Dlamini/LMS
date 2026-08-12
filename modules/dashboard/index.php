@@ -1,6 +1,6 @@
 <?php
 require_once __DIR__ . '/../../includes/functions.php';
-check_auth();
+require_staff();
 
 $userId = $_SESSION['user_id'];
 $userRole = $_SESSION['user_role'];
@@ -21,28 +21,26 @@ $pendingStage1Count = 0;
 $pendingStage2Count = 0;
 $pendingStage3Count = 0;
 
-if (has_role([ROLE_MANAGER, ROLE_ADMIN])) {
-    if ($userRole === ROLE_ADMIN) {
-        $stmtCount = $db->query("SELECT COUNT(*) FROM leave_applications WHERE status = 'pending_manager'");
-    } else {
-        $stmtCount = $db->prepare("
-            SELECT COUNT(*) 
-            FROM leave_applications a 
-            JOIN users u ON a.user_id = u.id 
-            LEFT JOIN departments d ON u.department_id = d.id 
-            WHERE a.status = 'pending_manager' AND (u.manager_id = :mgr_id OR d.line_manager_id = :dept_mgr_id)
-        ");
-        $stmtCount->execute(['mgr_id' => $userId, 'dept_mgr_id' => $userId]);
-    }
+// Admins never reach this page (require_staff sends them to the console), so
+// these queues are scoped to the staff roles that actually own each stage.
+if (has_role(ROLE_MANAGER, false)) {
+    $stmtCount = $db->prepare("
+        SELECT COUNT(*)
+        FROM leave_applications a
+        JOIN users u ON a.user_id = u.id
+        LEFT JOIN departments d ON u.department_id = d.id
+        WHERE a.status = 'pending_manager' AND (u.manager_id = :mgr_id OR d.line_manager_id = :dept_mgr_id)
+    ");
+    $stmtCount->execute(['mgr_id' => $userId, 'dept_mgr_id' => $userId]);
     $pendingStage1Count = (int)$stmtCount->fetchColumn();
 }
 
-if (has_role([ROLE_HR, ROLE_ADMIN])) {
+if (has_role(ROLE_HR, false)) {
     $stmtCount = $db->query("SELECT COUNT(*) FROM leave_applications WHERE status = 'pending_hr'");
     $pendingStage2Count = (int)$stmtCount->fetchColumn();
 }
 
-if (has_role([ROLE_EXECUTIVE, ROLE_ADMIN])) {
+if (has_role(ROLE_EXECUTIVE, false)) {
     $stmtCount = $db->query("SELECT COUNT(*) FROM leave_applications WHERE status = 'pending_executive'");
     $pendingStage3Count = (int)$stmtCount->fetchColumn();
 }
@@ -62,9 +60,9 @@ ob_start();
 ?>
 
 <!-- Role Approval Notifications -->
-<?php if (has_role([ROLE_MANAGER, ROLE_HR, ROLE_EXECUTIVE, ROLE_ADMIN])): ?>
+<?php if (has_role([ROLE_MANAGER, ROLE_HR, ROLE_EXECUTIVE], false)): ?>
 <div class="row mb-4">
-    <?php if (has_role([ROLE_MANAGER, ROLE_ADMIN])): ?>
+    <?php if (has_role(ROLE_MANAGER, false)): ?>
     <div class="col-md-4 mb-3">
         <div class="card border-left-warning bg-white">
             <div class="card-body">
@@ -84,7 +82,7 @@ ob_start();
     </div>
     <?php endif; ?>
 
-    <?php if (has_role([ROLE_HR, ROLE_ADMIN])): ?>
+    <?php if (has_role(ROLE_HR, false)): ?>
     <div class="col-md-4 mb-3">
         <div class="card border-left-info bg-white">
             <div class="card-body">
@@ -104,7 +102,7 @@ ob_start();
     </div>
     <?php endif; ?>
 
-    <?php if (has_role([ROLE_EXECUTIVE, ROLE_ADMIN])): ?>
+    <?php if (has_role(ROLE_EXECUTIVE, false)): ?>
     <div class="col-md-4 mb-3">
         <div class="card border-left-primary bg-white">
             <div class="card-body">

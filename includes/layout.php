@@ -7,9 +7,19 @@
  *   $pageActions   raw markup for buttons rendered on the right of the band
  * When $pageHeading is unset the band is skipped and the page keeps whatever
  * heading it renders inside $pageContent.
+ *
+ * Admins get the admin console navigation on every page they can reach, so the
+ * staff portal's My Leave / Apply items never appear for an account that holds
+ * no leave entitlement. The leave screens themselves are closed to admins by
+ * require_staff(); what remains reachable is their break-glass approval and HR
+ * tooling, and those keep the console's own nav.
  */
 require_once __DIR__ . '/header.php';
-require_once __DIR__ . '/navbar.php';
+if (is_admin()) {
+    require_once __DIR__ . '/admin_navbar.php';
+} else {
+    require_once __DIR__ . '/navbar.php';
+}
 ?>
 <div class="ri-content">
     <?php if (!empty($pageHeading)): ?>
