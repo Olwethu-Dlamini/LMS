@@ -95,17 +95,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $email = sanitize($_POST['email'] ?? '');
         $roleId = (int)($_POST['role_id'] ?? 0);
         $deptId = !empty($_POST['department_id']) ? (int)$_POST['department_id'] : null;
-        $managerId = !empty($_POST['manager_id']) ? (int)$_POST['manager_id'] : null;
         $status = in_array($_POST['status'] ?? '', ['active', 'inactive']) ? $_POST['status'] : 'active';
 
         if ($editUserId <= 0 || empty($firstName) || empty($email) || $roleId <= 0) {
             $error = 'Please fill in all mandatory fields for user edit.';
         } else {
             try {
+                // manager_id is intentionally not updated here: the form no longer
+                // offers the field, so including it would blank any override on
+                // every unrelated save. Stage 1 falls back to the department head.
                 $stmtEdit = $db->prepare("
-                    UPDATE users 
-                    SET first_name = :fn, last_name = :ln, email = :email, role_id = :role_id, 
-                        department_id = :dept_id, manager_id = :mgr_id, status = :status
+                    UPDATE users
+                    SET first_name = :fn, last_name = :ln, email = :email, role_id = :role_id,
+                        department_id = :dept_id, status = :status
                     WHERE id = :id
                 ");
                 $stmtEdit->execute([
@@ -114,7 +116,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     'email' => $email,
                     'role_id' => $roleId,
                     'dept_id' => $deptId,
-                    'mgr_id' => $managerId,
                     'status' => $status,
                     'id' => $editUserId
                 ]);
@@ -239,6 +240,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 $stmtUsers = $db->query("
     SELECT u.*, r.name as role_name, d.name as dept_name,
            CONCAT(m.first_name, ' ', m.last_name) as manager_name,
+           CONCAT(h.first_name, ' ', h.last_name) as dept_head_name,
            (SELECT COUNT(*) FROM leave_applications a  WHERE a.user_id     = u.id) AS app_count,
            (SELECT COUNT(*) FROM leave_approval_logs l WHERE l.approver_id = u.id) AS log_count,
            (SELECT COUNT(*) FROM users rp             WHERE rp.manager_id = u.id) AS report_count,
@@ -247,6 +249,7 @@ $stmtUsers = $db->query("
     JOIN roles r ON u.role_id = r.id
     LEFT JOIN departments d ON u.department_id = d.id
     LEFT JOIN users m ON u.manager_id = m.id
+    LEFT JOIN users h ON h.id = d.line_manager_id AND h.status = 'active'
     ORDER BY u.status ASC, r.id DESC, u.first_name ASC
 ");
 $usersList = $stmtUsers->fetchAll();
@@ -383,7 +386,7 @@ ob_start();
                         <th>Email</th>
                         <th>Role</th>
                         <th>Department</th>
-                        <th>Reporting Manager</th>
+                        <th>Approves Leave</th>
                         <th>Status</th>
                         <th>Actions</th>
                     </tr>
@@ -396,7 +399,29 @@ ob_start();
                         <td><?php echo htmlspecialchars($u['email']); ?></td>
                         <td><span class="badge badge-info"><?php echo strtoupper($u['role_name']); ?></span></td>
                         <td><?php echo htmlspecialchars($u['dept_name'] ?? 'N/A'); ?></td>
-                        <td><?php echo htmlspecialchars($u['manager_name'] ?? 'N/A'); ?></td>
+                        <td>
+                            <?php
+                            // Stage 1 accepts the explicit manager or the department
+                            // head; senior roles skip Stage 1 altogether.
+                            $skipsStage1 = in_array($u['role_name'], [ROLE_MANAGER, ROLE_HR, ROLE_EXECUTIVE], true);
+                            $approver = $u['manager_name'] ?: $u['dept_head_name'];
+                            ?>
+                            <?php if ($u['role_name'] === ROLE_ADMIN): ?>
+                                <span class="text-muted small">No leave entitlement</span>
+                            <?php elseif ($skipsStage1): ?>
+                                <span class="text-muted small">Skips Stage 1 &middot; HR reviews</span>
+                            <?php elseif ($approver): ?>
+                                <?php echo htmlspecialchars($approver); ?>
+                                <?php if (!$u['manager_name']): ?>
+                                    <small class="d-block text-muted">head of <?php echo htmlspecialchars($u['dept_name']); ?></small>
+                                <?php else: ?>
+                                    <small class="d-block text-muted">named directly</small>
+                                <?php endif; ?>
+                            <?php else: ?>
+                                <span class="badge badge-danger">No approver</span>
+                                <small class="d-block text-muted"><?php echo $u['dept_name'] ? 'department has no head' : 'no department set'; ?></small>
+                            <?php endif; ?>
+                        </td>
                         <td>
                             <?php if (($u['status'] ?? 'active') === 'active'): ?>
                                 <span class="badge badge-success">Active</span>
@@ -558,7 +583,7 @@ ob_start();
                                                     </div>
                                                 </div>
                                                 <div class="row">
-                                                    <div class="col-md-4 form-group mb-3">
+                                                    <div class="col-md-6 form-group mb-3">
                                                         <label class="font-weight-bold text-dark">Department</label>
                                                         <select name="department_id" class="form-control">
                                                             <option value="">-- None --</option>
@@ -567,20 +592,7 @@ ob_start();
                                                             <?php endforeach; ?>
                                                         </select>
                                                     </div>
-                                                    <div class="col-md-4 form-group mb-3">
-                                                        <label class="font-weight-bold text-dark">Line Manager</label>
-                                                        <select name="manager_id" class="form-control">
-                                                            <option value="">-- Department head --</option>
-                                                            <?php foreach ($usersList as $mgr): if ($mgr['id'] == $u['id']) continue; ?>
-                                                                <option value="<?php echo $mgr['id']; ?>" <?php echo $u['manager_id'] == $mgr['id'] ? 'selected' : ''; ?>><?php echo htmlspecialchars($mgr['first_name'] . ' ' . $mgr['last_name']); ?></option>
-                                                            <?php endforeach; ?>
-                                                        </select>
-                                                        <small class="form-text text-muted">
-                                                            Leave on <em>Department head</em> unless this person
-                                                            reports outside their department.
-                                                        </small>
-                                                    </div>
-                                                    <div class="col-md-4 form-group mb-3">
+                                                    <div class="col-md-6 form-group mb-3">
                                                         <label class="font-weight-bold text-dark">Account Status</label>
                                                         <select name="status" class="form-control">
                                                             <option value="active" <?php echo ($u['status'] ?? 'active') === 'active' ? 'selected' : ''; ?>>Active</option>
