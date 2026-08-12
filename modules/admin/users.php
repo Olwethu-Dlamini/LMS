@@ -263,11 +263,20 @@ $depts = $db->query("SELECT * FROM departments ORDER BY name ASC")->fetchAll();
 // stale preview in an open tab cannot produce a duplicate.
 $nextEmpId = next_emp_id($db);
 
-// Department -> designated line manager, so picking a department fills in the
-// reporting manager instead of the admin having to remember who heads it.
-$deptManagers = [];
-foreach ($depts as $d) {
-    $deptManagers[(int)$d['id']] = $d['line_manager_id'] !== null ? (int)$d['line_manager_id'] : null;
+// Stage 1 approval accepts either the applicant's own manager_id or the head of
+// their department (see ApprovalWorkflow::processAction), so a user in a
+// department that has a head needs no explicit line manager. Naming one anyway
+// duplicates the fact and goes stale when the department head changes, so the
+// form shows who will approve and keeps the manager field as an override.
+$deptHeadNames = [];
+$stmtHeads = $db->query("
+    SELECT d.id, CONCAT(m.first_name, ' ', m.last_name) AS head_name
+    FROM departments d
+    JOIN users m ON m.id = d.line_manager_id
+    WHERE m.status = 'active'
+");
+while ($row = $stmtHeads->fetch()) {
+    $deptHeadNames[(int)$row['id']] = $row['head_name'];
 }
 
 ob_start();
@@ -336,14 +345,18 @@ ob_start();
                             </select>
                         </div>
                         <div class="col-md-6 form-group mb-3">
-                            <label class="font-weight-bold text-dark">Line Manager</label>
-                            <select name="manager_id" id="newUserManager" class="form-control">
-                                <option value="">-- None --</option>
+                            <label class="font-weight-bold text-dark">Approves their leave</label>
+                            <p class="form-control-plaintext mb-1" id="newUserApprover">
+                                <span class="text-muted">Select a department first.</span>
+                            </p>
+                            <a href="#" id="newUserOverrideToggle" class="small">Reports to someone else</a>
+                            <select name="manager_id" id="newUserManager" class="form-control mt-2" style="display:none;">
+                                <option value="">-- Use the department head --</option>
                                 <?php foreach ($usersList as $u): ?>
+                                    <?php if (($u['status'] ?? 'active') !== 'active') continue; ?>
                                     <option value="<?php echo $u['id']; ?>"><?php echo htmlspecialchars($u['first_name'] . ' ' . $u['last_name'] . ' (' . strtoupper($u['role_name']) . ')'); ?></option>
                                 <?php endforeach; ?>
                             </select>
-                            <small class="form-text text-muted" id="newUserManagerHint"></small>
                         </div>
                     </div>
                 </div>
@@ -557,11 +570,15 @@ ob_start();
                                                     <div class="col-md-4 form-group mb-3">
                                                         <label class="font-weight-bold text-dark">Line Manager</label>
                                                         <select name="manager_id" class="form-control">
-                                                            <option value="">-- None --</option>
+                                                            <option value="">-- Department head --</option>
                                                             <?php foreach ($usersList as $mgr): if ($mgr['id'] == $u['id']) continue; ?>
                                                                 <option value="<?php echo $mgr['id']; ?>" <?php echo $u['manager_id'] == $mgr['id'] ? 'selected' : ''; ?>><?php echo htmlspecialchars($mgr['first_name'] . ' ' . $mgr['last_name']); ?></option>
                                                             <?php endforeach; ?>
                                                         </select>
+                                                        <small class="form-text text-muted">
+                                                            Leave on <em>Department head</em> unless this person
+                                                            reports outside their department.
+                                                        </small>
                                                     </div>
                                                     <div class="col-md-4 form-group mb-3">
                                                         <label class="font-weight-bold text-dark">Account Status</label>
@@ -618,37 +635,55 @@ ob_start();
 </div>
 
 <script>
-// Picking a department fills in that department's designated line manager. The
-// admin can still override it, and an explicit override is not overwritten by a
-// later department change.
+// Stage 1 approval already accepts the head of the applicant's department, so
+// the Line Manager field is an override for someone who reports outside it.
+// Showing who will approve keeps manager_id empty in the normal case, which
+// means the account follows the department if its head later changes.
 document.addEventListener("DOMContentLoaded", function () {
-    var deptSelect = document.getElementById("newUserDept");
-    var mgrSelect  = document.getElementById("newUserManager");
-    var hint       = document.getElementById("newUserManagerHint");
-    if (!deptSelect || !mgrSelect) return;
+    var deptSelect   = document.getElementById("newUserDept");
+    var mgrSelect    = document.getElementById("newUserManager");
+    var approverText = document.getElementById("newUserApprover");
+    var overrideLink = document.getElementById("newUserOverrideToggle");
+    if (!deptSelect || !mgrSelect || !approverText || !overrideLink) return;
 
-    var deptManagers = <?php echo json_encode($deptManagers, JSON_UNESCAPED_SLASHES); ?>;
-    var autoFilled = "";
+    var deptHeads = <?php echo json_encode($deptHeadNames, JSON_UNESCAPED_SLASHES); ?>;
+    var overrideShown = false;
 
-    deptSelect.addEventListener("change", function () {
-        var manuallySet = mgrSelect.value !== "" && mgrSelect.value !== autoFilled;
-        if (manuallySet) return;
+    function showOverride(show) {
+        overrideShown = show;
+        mgrSelect.style.display = show ? "" : "none";
+        overrideLink.textContent = show
+            ? "Use the department head instead"
+            : "Reports to someone else";
+        if (!show) mgrSelect.value = "";
+    }
 
-        var mgrId = deptManagers[deptSelect.value];
-        if (mgrId) {
-            mgrSelect.value = String(mgrId);
-            autoFilled = String(mgrId);
-            hint.textContent = mgrSelect.value === String(mgrId)
-                ? "Filled in from the selected department. Change it if this person reports elsewhere."
-                : "";
+    function render() {
+        var head = deptHeads[deptSelect.value];
+        if (!deptSelect.value) {
+            approverText.innerHTML = '<span class="text-muted">Select a department first.</span>';
+        } else if (head) {
+            approverText.innerHTML = '<strong></strong> <span class="text-muted small">'
+                + '&middot; head of this department</span>';
+            approverText.querySelector("strong").textContent = head;
         } else {
-            mgrSelect.value = "";
-            autoFilled = "";
-            hint.textContent = deptSelect.value
-                ? "This department has no designated line manager yet."
-                : "";
+            approverText.innerHTML = '<span class="text-danger">'
+                + 'This department has no head, so nobody can approve Stage 1. '
+                + 'Name a line manager below.</span>';
         }
+        // With no department head there is no fallback, so the override is the
+        // only way to give this person an approver: open it automatically.
+        if (deptSelect.value && !head && !overrideShown) {
+            showOverride(true);
+        }
+    }
+
+    overrideLink.addEventListener("click", function (e) {
+        e.preventDefault();
+        showOverride(!overrideShown);
     });
+    deptSelect.addEventListener("change", render);
+    render();
 });
 </script>
 

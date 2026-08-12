@@ -15,8 +15,6 @@ $totalUsers    = $one("SELECT COUNT(*) FROM users");
 $activeUsers   = $one("SELECT COUNT(*) FROM users WHERE status = 'active'");
 $archivedUsers = $one("SELECT COUNT(*) FROM users WHERE status = 'inactive'");
 $pendingFirst  = $one("SELECT COUNT(*) FROM users WHERE must_change_password = 1");
-$noManager     = $one("SELECT COUNT(*) FROM users u JOIN roles r ON r.id = u.role_id
-                       WHERE u.manager_id IS NULL AND u.status = 'active' AND r.name = 'employee'");
 $noDept        = $one("SELECT COUNT(*) FROM users WHERE department_id IS NULL AND status = 'active'");
 
 // An approval chain only works if somebody actually holds each role. With no
@@ -152,7 +150,7 @@ ob_start();
 </div>
 <?php endif; ?>
 
-<?php if ($pendingFirst > 0 || $noManager > 0 || $noDept > 0 || $deptsNoHead > 0 || $holidayCount === 0): ?>
+<?php if ($pendingFirst > 0 || $noDept > 0 || $deptsNoHead > 0 || $holidayCount === 0): ?>
 <div class="card">
     <div class="card-header"><i class="ti-alert"></i> Setup Attention</div>
     <div class="card-body">
@@ -165,16 +163,6 @@ ob_start();
                         placed there get no reporting manager filled in automatically.
                     </span>
                     <a href="<?php echo APP_URL; ?>/modules/admin/departments.php" class="btn btn-sm btn-outline-primary">Assign heads</a>
-                </li>
-            <?php endif; ?>
-            <?php if ($noManager > 0): ?>
-                <li class="mb-3 d-flex justify-content-between align-items-center flex-wrap">
-                    <span>
-                        <span class="badge badge-warning mr-2"><?php echo $noManager; ?></span>
-                        active employee(s) have <strong>no reporting manager</strong> &mdash; their
-                        Stage&nbsp;1 approval can only be cleared by an admin.
-                    </span>
-                    <a href="<?php echo APP_URL; ?>/modules/admin/users.php" class="btn btn-sm btn-outline-primary">Assign managers</a>
                 </li>
             <?php endif; ?>
             <?php if ($noDept > 0): ?>
