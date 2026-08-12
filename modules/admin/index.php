@@ -19,6 +19,30 @@ $noManager     = $one("SELECT COUNT(*) FROM users u JOIN roles r ON r.id = u.rol
                        WHERE u.manager_id IS NULL AND u.status = 'active' AND r.name = 'employee'");
 $noDept        = $one("SELECT COUNT(*) FROM users WHERE department_id IS NULL AND status = 'active'");
 
+// An approval chain only works if somebody actually holds each role. With no
+// active HR account every application stalls at Stage 2; with no executive,
+// at Stage 3. Both are invisible until leave starts piling up, so surface them.
+$roleHolders = function (string $role) use ($one): int {
+    return $one("SELECT COUNT(*) FROM users u JOIN roles r ON r.id = u.role_id
+                 WHERE r.name = :role AND u.status = 'active'", ['role' => $role]);
+};
+$hrCount   = $roleHolders('hr');
+$execCount = $roleHolders('executive');
+$mgrCount  = $roleHolders('manager');
+
+// Employees with neither a personal line manager nor a department head have
+// nobody to clear Stage 1 for them.
+$noApprover = $one("SELECT COUNT(*) FROM users u
+                    JOIN roles r ON r.id = u.role_id
+                    LEFT JOIN departments d ON d.id = u.department_id
+                    WHERE u.status = 'active' AND r.name = 'employee'
+                      AND u.manager_id IS NULL
+                      AND (d.line_manager_id IS NULL OR u.department_id IS NULL)");
+
+$deptsNoHead = $one("SELECT COUNT(*) FROM departments WHERE line_manager_id IS NULL");
+
+$chainBroken = $hrCount === 0 || $execCount === 0 || $noApprover > 0;
+
 $deptCount     = $one("SELECT COUNT(*) FROM departments");
 $typesActive   = $one("SELECT COUNT(*) FROM leave_types WHERE is_active = 1");
 $typesRetired  = $one("SELECT COUNT(*) FROM leave_types WHERE is_active = 0");
@@ -52,6 +76,11 @@ ob_start();
                 <span><?php echo $activeUsers; ?> active</span>
                 <span><?php echo $archivedUsers; ?> archived</span>
             </div>
+            <div class="ri-stat-foot">
+                <span<?php echo $mgrCount  === 0 ? ' class="text-danger font-weight-bold"' : ''; ?>><?php echo $mgrCount; ?> mgr</span>
+                <span<?php echo $hrCount   === 0 ? ' class="text-danger font-weight-bold"' : ''; ?>><?php echo $hrCount; ?> hr</span>
+                <span<?php echo $execCount === 0 ? ' class="text-danger font-weight-bold"' : ''; ?>><?php echo $execCount; ?> exec</span>
+            </div>
         </div>
     </div>
     <div class="col-md-3 mb-4">
@@ -79,11 +108,65 @@ ob_start();
     </div>
 </div>
 
-<?php if ($pendingFirst > 0 || $noManager > 0 || $noDept > 0 || $holidayCount === 0): ?>
+<?php if ($chainBroken): ?>
+<div class="card border-danger">
+    <div class="card-header bg-danger text-white">
+        <i class="ti-alert"></i> Approval chain incomplete &mdash; leave requests will stall
+    </div>
+    <div class="card-body">
+        <ul class="list-unstyled mb-0">
+            <?php if ($hrCount === 0): ?>
+                <li class="mb-3 d-flex justify-content-between align-items-center flex-wrap">
+                    <span>
+                        <span class="badge badge-danger mr-2">!</span>
+                        <strong>No active HR account.</strong> Stage&nbsp;2 has no approver, so every
+                        request &mdash; including a manager's or an executive's, which enter at
+                        Stage&nbsp;2 &mdash; will stop there. Assign the HR role to someone.
+                    </span>
+                    <a href="<?php echo APP_URL; ?>/modules/admin/users.php" class="btn btn-sm btn-danger">Assign HR role</a>
+                </li>
+            <?php endif; ?>
+            <?php if ($execCount === 0): ?>
+                <li class="mb-3 d-flex justify-content-between align-items-center flex-wrap">
+                    <span>
+                        <span class="badge badge-danger mr-2">!</span>
+                        <strong>No active executive account.</strong> Stage&nbsp;3 has no approver, so
+                        nothing can reach final approval.
+                    </span>
+                    <a href="<?php echo APP_URL; ?>/modules/admin/users.php" class="btn btn-sm btn-danger">Assign executive role</a>
+                </li>
+            <?php endif; ?>
+            <?php if ($noApprover > 0): ?>
+                <li class="mb-0 d-flex justify-content-between align-items-center flex-wrap">
+                    <span>
+                        <span class="badge badge-danger mr-2"><?php echo $noApprover; ?></span>
+                        employee(s) have <strong>no line manager and no department head</strong>, so
+                        nobody can clear their Stage&nbsp;1. Give them a reporting manager, or put them
+                        in a department that has one.
+                    </span>
+                    <a href="<?php echo APP_URL; ?>/modules/admin/users.php" class="btn btn-sm btn-danger">Fix reporting lines</a>
+                </li>
+            <?php endif; ?>
+        </ul>
+    </div>
+</div>
+<?php endif; ?>
+
+<?php if ($pendingFirst > 0 || $noManager > 0 || $noDept > 0 || $deptsNoHead > 0 || $holidayCount === 0): ?>
 <div class="card">
     <div class="card-header"><i class="ti-alert"></i> Setup Attention</div>
     <div class="card-body">
         <ul class="list-unstyled mb-0">
+            <?php if ($deptsNoHead > 0): ?>
+                <li class="mb-3 d-flex justify-content-between align-items-center flex-wrap">
+                    <span>
+                        <span class="badge badge-warning mr-2"><?php echo $deptsNoHead; ?></span>
+                        department(s) have <strong>no designated line manager</strong>, so new users
+                        placed there get no reporting manager filled in automatically.
+                    </span>
+                    <a href="<?php echo APP_URL; ?>/modules/admin/departments.php" class="btn btn-sm btn-outline-primary">Assign heads</a>
+                </li>
+            <?php endif; ?>
             <?php if ($noManager > 0): ?>
                 <li class="mb-3 d-flex justify-content-between align-items-center flex-wrap">
                     <span>
