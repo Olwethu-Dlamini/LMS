@@ -22,8 +22,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } else {
         $res = $workflow->processAction($appId, $approverId, $approverRole, $action, $comments);
         if ($res['success']) {
-            $msg = ($action === 'approve') 
-                ? 'Request Stage 2 Approved by HR! Transferred to Stage 3 (Executive Sign-off).' 
+            $msg = ($action === 'approve')
+                ? stage_transition_message($res['new_status']) 
                 : 'Request Rejected by HR. Reserved days released.';
             set_flash($action === 'approve' ? 'success' : 'warning', $msg);
             header('Location: ' . APP_URL . '/modules/hr/approvals.php');
@@ -36,10 +36,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 // Fetch Stage 2 Pending Applications
 $stmt = $db->query("
-    SELECT a.*, t.name as leave_name, u.first_name, u.last_name, u.emp_id, d.name as dept_name
+    SELECT a.*, t.name as leave_name, u.first_name, u.last_name, u.emp_id, d.name as dept_name,
+           r.name AS applicant_role
     FROM leave_applications a
     JOIN leave_types t ON a.leave_type_id = t.id
     JOIN users u ON a.user_id = u.id
+    JOIN roles r ON r.id = u.role_id
     LEFT JOIN departments d ON u.department_id = d.id
     WHERE a.status = 'pending_hr'
     ORDER BY a.created_at ASC
@@ -52,6 +54,16 @@ ob_start();
 <?php if (!empty($error)): ?>
     <div class="alert alert-danger mb-4"><?php echo $error; ?></div>
 <?php endif; ?>
+
+<?php if (is_admin()): ?>
+    <div class="alert alert-warning mb-4">
+        <strong><i class="ti-alert"></i> Administrator override.</strong>
+        You are acting outside the normal approval chain. Use this only when the
+        designated approver is unavailable &mdash; every action is recorded in the
+        audit log against your account.
+    </div>
+<?php endif; ?>
+
 
 <div class="card">
     <div class="card-header bg-white">
@@ -76,12 +88,19 @@ ob_start();
                     <?php if (empty($pendingApps)): ?>
                         <tr><td colspan="8" class="text-center py-4 text-muted">No pending Stage 2 HR applications. All clear!</td></tr>
                     <?php else: ?>
-                        <?php foreach ($pendingApps as $app): ?>
+                        <?php foreach ($pendingApps as $app):
+                            // HR is the last word on an executive's own leave; there is
+                            // no Stage 3 above them.
+                            $isFinal = strtolower($app['applicant_role']) === ROLE_EXECUTIVE;
+                        ?>
                         <tr>
                             <td class="font-weight-bold text-primary"><?php echo htmlspecialchars($app['application_no']); ?></td>
                             <td>
                                 <strong><?php echo htmlspecialchars($app['first_name'] . ' ' . $app['last_name']); ?></strong>
                                 <small class="d-block text-muted"><?php echo htmlspecialchars($app['emp_id']); ?></small>
+                                <?php if ($isFinal): ?>
+                                    <span class="badge badge-primary">Executive &middot; your approval is final</span>
+                                <?php endif; ?>
                             </td>
                             <td><?php echo htmlspecialchars($app['dept_name'] ?? 'N/A'); ?></td>
                             <td><?php echo htmlspecialchars($app['leave_name']); ?></td>
@@ -130,7 +149,7 @@ ob_start();
                                                         <i class="ti-close"></i> Reject Request
                                                     </button>
                                                     <button type="submit" name="action" value="approve" class="btn btn-info font-weight-bold">
-                                                        <i class="ti-check"></i> Approve Stage 2
+                                                        <i class="ti-check"></i> <?php echo $isFinal ? 'Approve (Final)' : 'Approve Stage 2'; ?>
                                                     </button>
                                                 </div>
                                             </form>
