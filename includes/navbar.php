@@ -16,12 +16,13 @@ function ri_nav_on(array $paths): bool {
 function ri_nav_active(array $paths): string { return ri_nav_on($paths) ? ' active' : ''; }
 function ri_item_active(string $path): string { return ri_nav_on([$path]) ? ' active' : ''; }
 
-$canApproveStage1 = has_role([ROLE_MANAGER, ROLE_ADMIN]);
-$canApproveStage2 = has_role([ROLE_HR, ROLE_ADMIN]);
-$canApproveStage3 = has_role([ROLE_EXECUTIVE, ROLE_ADMIN]);
+// Staff navigation only. Admins are redirected to the admin console by
+// require_staff() and never render this bar, so no admin override applies here.
+$canApproveStage1 = has_role(ROLE_MANAGER, false);
+$canApproveStage2 = has_role(ROLE_HR, false);
+$canApproveStage3 = has_role(ROLE_EXECUTIVE, false);
 $showApprovals    = $canApproveStage1 || $canApproveStage2 || $canApproveStage3;
-$showHr           = has_role([ROLE_HR, ROLE_ADMIN]);
-$showAdmin        = has_role([ROLE_ADMIN]);
+$showHr           = has_role(ROLE_HR, false);
 ?>
 <div class="ri-nav">
     <div class="container">
@@ -107,13 +108,6 @@ $showAdmin        = has_role([ROLE_ADMIN]);
                             <i class="ti-plus"></i>Apply
                         </a>
                     </li>
-                    <?php if ($showAdmin): ?>
-                    <li class="nav-item">
-                        <a class="nav-link ri-admin-link" href="<?php echo APP_URL; ?>/modules/admin/index.php">
-                            <i class="ti-settings"></i>Admin Console
-                        </a>
-                    </li>
-                    <?php endif; ?>
                 </ul>
             </div>
         </nav>

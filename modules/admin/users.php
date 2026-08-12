@@ -12,7 +12,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!verify_csrf_token($csrfToken)) {
         $error = 'Invalid security token.';
     } elseif ($action === 'create') {
-        $empId = sanitize($_POST['emp_id'] ?? '');
         $firstName = sanitize($_POST['first_name'] ?? '');
         $lastName = sanitize($_POST['last_name'] ?? '');
         $email = sanitize($_POST['email'] ?? '');
@@ -21,7 +20,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $deptId = !empty($_POST['department_id']) ? (int)$_POST['department_id'] : null;
         $managerId = !empty($_POST['manager_id']) ? (int)$_POST['manager_id'] : null;
 
-        if (empty($empId) || empty($firstName) || empty($email) || empty($password) || $roleId <= 0) {
+        if (empty($firstName) || empty($email) || empty($password) || $roleId <= 0) {
             $error = 'Please fill in all mandatory fields.';
         } else {
             try {
@@ -30,26 +29,47 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     INSERT INTO users (emp_id, first_name, last_name, email, password_hash, role_id, department_id, manager_id, status)
                     VALUES (:emp_id, :fn, :ln, :email, :pwd, :role_id, :dept_id, :mgr_id, 'active')
                 ");
-                $stmt->execute([
-                    'emp_id' => $empId,
-                    'fn' => $firstName,
-                    'ln' => $lastName,
-                    'email' => $email,
-                    'pwd' => $pwdHash,
-                    'role_id' => $roleId,
-                    'dept_id' => $deptId,
-                    'mgr_id' => $managerId
-                ]);
-                $newUserId = (int)$db->lastInsertId();
 
-                // Auto-seed default leave entitlements for current year
+                // Employee IDs are assigned by the system, never typed in. Two
+                // admins creating an account at the same moment would both read
+                // the same highest number, so a unique-key clash on emp_id is
+                // retried with a freshly read sequence rather than surfaced.
+                $empId = null;
+                $newUserId = 0;
+                for ($attempt = 1; $attempt <= 5; $attempt++) {
+                    $empId = next_emp_id($db);
+                    try {
+                        $stmt->execute([
+                            'emp_id' => $empId,
+                            'fn' => $firstName,
+                            'ln' => $lastName,
+                            'email' => $email,
+                            'pwd' => $pwdHash,
+                            'role_id' => $roleId,
+                            'dept_id' => $deptId,
+                            'mgr_id' => $managerId
+                        ]);
+                        $newUserId = (int)$db->lastInsertId();
+                        break;
+                    } catch (PDOException $e) {
+                        $isEmpIdClash = $e->getCode() === '23000'
+                                        && stripos($e->getMessage(), 'emp_id') !== false;
+                        if (!$isEmpIdClash || $attempt === 5) {
+                            throw $e;
+                        }
+                    }
+                }
+
+                // Seed leave entitlements for the current leave year. Retired
+                // leave types are skipped so archived policies are not allocated.
                 $year = (int)date('Y');
-                $stmtTypes = $db->query("SELECT id, max_days_per_year FROM leave_types");
+                $stmtTypes = $db->query("SELECT id, max_days_per_year FROM leave_types WHERE is_active = 1");
                 $stmtEntSeed = $db->prepare("
                     INSERT INTO leave_entitlements (user_id, leave_type_id, year, total_days, used_days, pending_days)
                     VALUES (:user_id, :type_id, :year, :total_days, 0, 0)
                     ON DUPLICATE KEY UPDATE total_days = VALUES(total_days)
                 ");
+                $seeded = 0;
                 while ($lt = $stmtTypes->fetch()) {
                     $stmtEntSeed->execute([
                         'user_id' => $newUserId,
@@ -57,9 +77,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         'year' => $year,
                         'total_days' => $lt['max_days_per_year']
                     ]);
+                    $seeded++;
                 }
 
-                set_flash('success', "User account {$email} created and default leave entitlements seeded!");
+                set_flash('success', "User account {$email} created as {$empId}. "
+                    . "{$seeded} leave entitlement(s) seeded for {$year}.");
                 header('Location: ' . APP_URL . '/modules/admin/users.php');
                 exit;
             } catch (PDOException $e) {
@@ -73,17 +95,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $email = sanitize($_POST['email'] ?? '');
         $roleId = (int)($_POST['role_id'] ?? 0);
         $deptId = !empty($_POST['department_id']) ? (int)$_POST['department_id'] : null;
-        $managerId = !empty($_POST['manager_id']) ? (int)$_POST['manager_id'] : null;
         $status = in_array($_POST['status'] ?? '', ['active', 'inactive']) ? $_POST['status'] : 'active';
 
         if ($editUserId <= 0 || empty($firstName) || empty($email) || $roleId <= 0) {
             $error = 'Please fill in all mandatory fields for user edit.';
         } else {
             try {
+                // manager_id is intentionally not updated here: the form no longer
+                // offers the field, so including it would blank any override on
+                // every unrelated save. Stage 1 falls back to the department head.
                 $stmtEdit = $db->prepare("
-                    UPDATE users 
-                    SET first_name = :fn, last_name = :ln, email = :email, role_id = :role_id, 
-                        department_id = :dept_id, manager_id = :mgr_id, status = :status
+                    UPDATE users
+                    SET first_name = :fn, last_name = :ln, email = :email, role_id = :role_id,
+                        department_id = :dept_id, status = :status
                     WHERE id = :id
                 ");
                 $stmtEdit->execute([
@@ -92,7 +116,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     'email' => $email,
                     'role_id' => $roleId,
                     'dept_id' => $deptId,
-                    'mgr_id' => $managerId,
                     'status' => $status,
                     'id' => $editUserId
                 ]);
@@ -217,6 +240,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 $stmtUsers = $db->query("
     SELECT u.*, r.name as role_name, d.name as dept_name,
            CONCAT(m.first_name, ' ', m.last_name) as manager_name,
+           CONCAT(h.first_name, ' ', h.last_name) as dept_head_name,
            (SELECT COUNT(*) FROM leave_applications a  WHERE a.user_id     = u.id) AS app_count,
            (SELECT COUNT(*) FROM leave_approval_logs l WHERE l.approver_id = u.id) AS log_count,
            (SELECT COUNT(*) FROM users rp             WHERE rp.manager_id = u.id) AS report_count,
@@ -225,6 +249,7 @@ $stmtUsers = $db->query("
     JOIN roles r ON u.role_id = r.id
     LEFT JOIN departments d ON u.department_id = d.id
     LEFT JOIN users m ON u.manager_id = m.id
+    LEFT JOIN users h ON h.id = d.line_manager_id AND h.status = 'active'
     ORDER BY u.status ASC, r.id DESC, u.first_name ASC
 ");
 $usersList = $stmtUsers->fetchAll();
@@ -236,6 +261,26 @@ $activeAdminCount = (int)$db->query("
 
 $roles = $db->query("SELECT * FROM roles ORDER BY id ASC")->fetchAll();
 $depts = $db->query("SELECT * FROM departments ORDER BY name ASC")->fetchAll();
+
+// Shown read-only on the create form. The value is re-read at insert time, so a
+// stale preview in an open tab cannot produce a duplicate.
+$nextEmpId = next_emp_id($db);
+
+// Stage 1 approval accepts either the applicant's own manager_id or the head of
+// their department (see ApprovalWorkflow::processAction), so a user in a
+// department that has a head needs no explicit line manager. Naming one anyway
+// duplicates the fact and goes stale when the department head changes, so the
+// form shows who will approve and keeps the manager field as an override.
+$deptHeadNames = [];
+$stmtHeads = $db->query("
+    SELECT d.id, CONCAT(m.first_name, ' ', m.last_name) AS head_name
+    FROM departments d
+    JOIN users m ON m.id = d.line_manager_id
+    WHERE m.status = 'active'
+");
+while ($row = $stmtHeads->fetch()) {
+    $deptHeadNames[(int)$row['id']] = $row['head_name'];
+}
 
 ob_start();
 ?>
@@ -258,8 +303,9 @@ ob_start();
                 <div class="modal-body">
                     <div class="row">
                         <div class="col-md-6 form-group mb-3">
-                            <label class="font-weight-bold text-dark">Employee ID *</label>
-                            <input type="text" name="emp_id" class="form-control" placeholder="EMP-1006" required>
+                            <label class="font-weight-bold text-dark">Employee ID</label>
+                            <input type="text" class="form-control bg-light" value="<?php echo htmlspecialchars($nextEmpId); ?>" readonly>
+                            <small class="form-text text-muted">Assigned automatically when the account is saved.</small>
                         </div>
                         <div class="col-md-6 form-group mb-3">
                             <label class="font-weight-bold text-dark">Email Address *</label>
@@ -294,7 +340,7 @@ ob_start();
                     <div class="row">
                         <div class="col-md-6 form-group mb-3">
                             <label class="font-weight-bold text-dark">Department</label>
-                            <select name="department_id" class="form-control">
+                            <select name="department_id" id="newUserDept" class="form-control">
                                 <option value="">-- None --</option>
                                 <?php foreach ($depts as $d): ?>
                                     <option value="<?php echo $d['id']; ?>"><?php echo htmlspecialchars($d['name']); ?></option>
@@ -302,10 +348,15 @@ ob_start();
                             </select>
                         </div>
                         <div class="col-md-6 form-group mb-3">
-                            <label class="font-weight-bold text-dark">Line Manager</label>
-                            <select name="manager_id" class="form-control">
-                                <option value="">-- None --</option>
+                            <label class="font-weight-bold text-dark">Approves their leave</label>
+                            <p class="form-control-plaintext mb-1" id="newUserApprover">
+                                <span class="text-muted">Select a department first.</span>
+                            </p>
+                            <a href="#" id="newUserOverrideToggle" class="small">Reports to someone else</a>
+                            <select name="manager_id" id="newUserManager" class="form-control mt-2" style="display:none;">
+                                <option value="">-- Use the department head --</option>
                                 <?php foreach ($usersList as $u): ?>
+                                    <?php if (($u['status'] ?? 'active') !== 'active') continue; ?>
                                     <option value="<?php echo $u['id']; ?>"><?php echo htmlspecialchars($u['first_name'] . ' ' . $u['last_name'] . ' (' . strtoupper($u['role_name']) . ')'); ?></option>
                                 <?php endforeach; ?>
                             </select>
@@ -335,7 +386,7 @@ ob_start();
                         <th>Email</th>
                         <th>Role</th>
                         <th>Department</th>
-                        <th>Reporting Manager</th>
+                        <th>Approves Leave</th>
                         <th>Status</th>
                         <th>Actions</th>
                     </tr>
@@ -348,7 +399,29 @@ ob_start();
                         <td><?php echo htmlspecialchars($u['email']); ?></td>
                         <td><span class="badge badge-info"><?php echo strtoupper($u['role_name']); ?></span></td>
                         <td><?php echo htmlspecialchars($u['dept_name'] ?? 'N/A'); ?></td>
-                        <td><?php echo htmlspecialchars($u['manager_name'] ?? 'N/A'); ?></td>
+                        <td>
+                            <?php
+                            // Stage 1 accepts the explicit manager or the department
+                            // head; senior roles skip Stage 1 altogether.
+                            $skipsStage1 = in_array($u['role_name'], [ROLE_MANAGER, ROLE_HR, ROLE_EXECUTIVE], true);
+                            $approver = $u['manager_name'] ?: $u['dept_head_name'];
+                            ?>
+                            <?php if ($u['role_name'] === ROLE_ADMIN): ?>
+                                <span class="text-muted small">No leave entitlement</span>
+                            <?php elseif ($skipsStage1): ?>
+                                <span class="text-muted small">Skips Stage 1 &middot; HR reviews</span>
+                            <?php elseif ($approver): ?>
+                                <?php echo htmlspecialchars($approver); ?>
+                                <?php if (!$u['manager_name']): ?>
+                                    <small class="d-block text-muted">head of <?php echo htmlspecialchars($u['dept_name']); ?></small>
+                                <?php else: ?>
+                                    <small class="d-block text-muted">named directly</small>
+                                <?php endif; ?>
+                            <?php else: ?>
+                                <span class="badge badge-danger">No approver</span>
+                                <small class="d-block text-muted"><?php echo $u['dept_name'] ? 'department has no head' : 'no department set'; ?></small>
+                            <?php endif; ?>
+                        </td>
                         <td>
                             <?php if (($u['status'] ?? 'active') === 'active'): ?>
                                 <span class="badge badge-success">Active</span>
@@ -510,7 +583,7 @@ ob_start();
                                                     </div>
                                                 </div>
                                                 <div class="row">
-                                                    <div class="col-md-4 form-group mb-3">
+                                                    <div class="col-md-6 form-group mb-3">
                                                         <label class="font-weight-bold text-dark">Department</label>
                                                         <select name="department_id" class="form-control">
                                                             <option value="">-- None --</option>
@@ -519,16 +592,7 @@ ob_start();
                                                             <?php endforeach; ?>
                                                         </select>
                                                     </div>
-                                                    <div class="col-md-4 form-group mb-3">
-                                                        <label class="font-weight-bold text-dark">Line Manager</label>
-                                                        <select name="manager_id" class="form-control">
-                                                            <option value="">-- None --</option>
-                                                            <?php foreach ($usersList as $mgr): if ($mgr['id'] == $u['id']) continue; ?>
-                                                                <option value="<?php echo $mgr['id']; ?>" <?php echo $u['manager_id'] == $mgr['id'] ? 'selected' : ''; ?>><?php echo htmlspecialchars($mgr['first_name'] . ' ' . $mgr['last_name']); ?></option>
-                                                            <?php endforeach; ?>
-                                                        </select>
-                                                    </div>
-                                                    <div class="col-md-4 form-group mb-3">
+                                                    <div class="col-md-6 form-group mb-3">
                                                         <label class="font-weight-bold text-dark">Account Status</label>
                                                         <select name="status" class="form-control">
                                                             <option value="active" <?php echo ($u['status'] ?? 'active') === 'active' ? 'selected' : ''; ?>>Active</option>
@@ -581,6 +645,59 @@ ob_start();
         </div>
     </div>
 </div>
+
+<script>
+// Stage 1 approval already accepts the head of the applicant's department, so
+// the Line Manager field is an override for someone who reports outside it.
+// Showing who will approve keeps manager_id empty in the normal case, which
+// means the account follows the department if its head later changes.
+document.addEventListener("DOMContentLoaded", function () {
+    var deptSelect   = document.getElementById("newUserDept");
+    var mgrSelect    = document.getElementById("newUserManager");
+    var approverText = document.getElementById("newUserApprover");
+    var overrideLink = document.getElementById("newUserOverrideToggle");
+    if (!deptSelect || !mgrSelect || !approverText || !overrideLink) return;
+
+    var deptHeads = <?php echo json_encode($deptHeadNames, JSON_UNESCAPED_SLASHES); ?>;
+    var overrideShown = false;
+
+    function showOverride(show) {
+        overrideShown = show;
+        mgrSelect.style.display = show ? "" : "none";
+        overrideLink.textContent = show
+            ? "Use the department head instead"
+            : "Reports to someone else";
+        if (!show) mgrSelect.value = "";
+    }
+
+    function render() {
+        var head = deptHeads[deptSelect.value];
+        if (!deptSelect.value) {
+            approverText.innerHTML = '<span class="text-muted">Select a department first.</span>';
+        } else if (head) {
+            approverText.innerHTML = '<strong></strong> <span class="text-muted small">'
+                + '&middot; head of this department</span>';
+            approverText.querySelector("strong").textContent = head;
+        } else {
+            approverText.innerHTML = '<span class="text-danger">'
+                + 'This department has no head, so nobody can approve Stage 1. '
+                + 'Name a line manager below.</span>';
+        }
+        // With no department head there is no fallback, so the override is the
+        // only way to give this person an approver: open it automatically.
+        if (deptSelect.value && !head && !overrideShown) {
+            showOverride(true);
+        }
+    }
+
+    overrideLink.addEventListener("click", function (e) {
+        e.preventDefault();
+        showOverride(!overrideShown);
+    });
+    deptSelect.addEventListener("change", render);
+    render();
+});
+</script>
 
 <?php
 $pageContent = ob_get_clean();

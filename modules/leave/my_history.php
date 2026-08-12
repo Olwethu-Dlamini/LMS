@@ -1,7 +1,7 @@
 <?php
 require_once __DIR__ . '/../../includes/functions.php';
 require_once __DIR__ . '/../../helpers/ApprovalWorkflow.php';
-check_auth();
+require_staff();
 
 $userId = $_SESSION['user_id'];
 $userRole = $_SESSION['user_role'];

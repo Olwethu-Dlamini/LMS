@@ -41,6 +41,14 @@ class ArrayMockPDO extends PDO {
     public array $holidays = [
         '2026-05-01' => 'Workers Day'
     ];
+    /** user_id => role name, mirroring the seeded accounts in schema.sql */
+    public array $roles = [
+        1 => 'admin',
+        2 => 'executive',
+        3 => 'hr',
+        4 => 'manager',
+        5 => 'employee',
+    ];
 
     public function __construct() {
         // Dummy constructor
@@ -81,8 +89,8 @@ class ArrayMockPDO extends PDO {
                         'total_days' => $params['days'] ?? 5.0,
                         'reason' => $params['reason'] ?? '',
                         'attachment_path' => $params['attachment'] ?? null,
-                        'status' => 'pending_manager',
-                        'current_approver_role' => 'manager'
+                        'status' => $params['status'] ?? 'pending_manager',
+                        'current_approver_role' => $params['approver_role'] ?? 'manager'
                     ];
                 }
 
@@ -167,6 +175,12 @@ class ArrayMockPDO extends PDO {
                         'attachment_threshold_days' => 0.0,
                         'is_active'                 => 1,
                     ];
+                }
+                if (stripos($this->query, 'JOIN roles') !== false) {
+                    $uid = (int)($this->lastParams['id'] ?? 0);
+                    return isset($this->pdo->roles[$uid])
+                        ? ['role_name' => $this->pdo->roles[$uid]]
+                        : false;
                 }
                 if (stripos($this->query, 'FROM users') !== false) {
                     return ['manager_id' => 4, 'line_manager_id' => 4];
@@ -285,5 +299,121 @@ $tester->assert($cancelRes['success'] === true, "Cancel Pending Leave Applicatio
 
 $entPendingAfter = $mockDb->entitlements[$entKey2]['pending_days'];
 $tester->assert((float)$entPendingAfter === 0.0, "Pending Days Released Back to Entitlements upon Cancellation", "Got {$entPendingAfter}");
+
+echo "\n--- 5. Testing Role-Aware Approval Routing ---\n";
+
+// Where each role's own application enters the chain. Pure functions, no DB.
+$tester->assert(
+    ApprovalWorkflow::initialStageFor(ROLE_EMPLOYEE) === [STATUS_PENDING_MANAGER, ROLE_MANAGER],
+    "Employee enters at Stage 1 (Line Manager)"
+);
+$tester->assert(
+    ApprovalWorkflow::initialStageFor(ROLE_MANAGER) === [STATUS_PENDING_HR, ROLE_HR],
+    "Manager skips Stage 1 and enters at HR"
+);
+$tester->assert(
+    ApprovalWorkflow::initialStageFor(ROLE_HR) === [STATUS_PENDING_EXECUTIVE, ROLE_EXECUTIVE],
+    "HR skips Stages 1-2 and enters at Executive"
+);
+$tester->assert(
+    ApprovalWorkflow::initialStageFor(ROLE_EXECUTIVE) === [STATUS_PENDING_HR, ROLE_HR],
+    "Executive skips Stage 1 and enters at HR"
+);
+
+$adminBlocked = false;
+try {
+    ApprovalWorkflow::initialStageFor(ROLE_ADMIN);
+} catch (Exception $e) {
+    $adminBlocked = strpos($e->getMessage(), 'cannot apply') !== false;
+}
+$tester->assert($adminBlocked, "Admin cannot apply for leave");
+
+// HR sign-off is terminal for an executive, intermediate for everyone else.
+$tester->assert(
+    ApprovalWorkflow::nextStageFor(ROLE_EXECUTIVE, STATUS_PENDING_HR) === [STATUS_APPROVED, 'none'],
+    "HR approval is FINAL on an executive's own leave"
+);
+$tester->assert(
+    ApprovalWorkflow::nextStageFor(ROLE_MANAGER, STATUS_PENDING_HR) === [STATUS_PENDING_EXECUTIVE, ROLE_EXECUTIVE],
+    "HR approval escalates a manager's leave to Stage 3"
+);
+
+echo "\n--- 6. Manager Leave End-to-End (deadlock regression) ---\n";
+$mgrStart = date('Y-m-d', strtotime('monday +9 weeks'));
+$mgrEnd   = date('Y-m-d', strtotime($mgrStart . ' +2 days'));
+$mgrKey   = '4_1_' . date('Y', strtotime($mgrStart));
+$mockDb->entitlements[$mgrKey] = ['total_days' => 20.0, 'used_days' => 0.0, 'pending_days' => 0.0];
+
+$mgrSub = $workflow->submitApplication(4, 1, $mgrStart, $mgrEnd, 3.0, "Manager leave", null);
+$mgrAppId = (int)$mgrSub['id'];
+$tester->assert(
+    $mgrSub['success'] === true && $mgrSub['status'] === STATUS_PENDING_HR,
+    "Manager's application never lands in the Stage 1 queue it owns",
+    "Got " . ($mgrSub['status'] ?? 'n/a')
+);
+
+$mgrStage2 = $workflow->processAction($mgrAppId, 3, 'hr', 'approve', 'HR ok');
+$tester->assert(
+    $mgrStage2['success'] === true && $mgrStage2['new_status'] === STATUS_PENDING_EXECUTIVE,
+    "Manager leave: HR approval -> Stage 3 Executive",
+    "Got " . ($mgrStage2['new_status'] ?? $mgrStage2['error'])
+);
+
+$mgrStage3 = $workflow->processAction($mgrAppId, 2, 'executive', 'approve', 'Boss ok');
+$tester->assert(
+    $mgrStage3['success'] === true && $mgrStage3['new_status'] === STATUS_APPROVED,
+    "Manager leave: Executive approval -> APPROVED",
+    "Got " . ($mgrStage3['new_status'] ?? $mgrStage3['error'])
+);
+$tester->assert(
+    (float)$mockDb->entitlements[$mgrKey]['used_days'] === 3.0
+    && (float)$mockDb->entitlements[$mgrKey]['pending_days'] === 0.0,
+    "Manager leave: balance deducted once approved",
+    "Used: {$mockDb->entitlements[$mgrKey]['used_days']}, Pending: {$mockDb->entitlements[$mgrKey]['pending_days']}"
+);
+
+echo "\n--- 7. Executive Leave End-to-End (HR sign-off is final) ---\n";
+$exStart = date('Y-m-d', strtotime('monday +12 weeks'));
+$exEnd   = date('Y-m-d', strtotime($exStart . ' +1 day'));
+$exKey   = '2_1_' . date('Y', strtotime($exStart));
+$mockDb->entitlements[$exKey] = ['total_days' => 20.0, 'used_days' => 0.0, 'pending_days' => 0.0];
+
+$exSub = $workflow->submitApplication(2, 1, $exStart, $exEnd, 2.0, "Executive leave", null);
+$exAppId = (int)$exSub['id'];
+$tester->assert(
+    $exSub['success'] === true && $exSub['status'] === STATUS_PENDING_HR,
+    "Executive application enters at HR",
+    "Got " . ($exSub['status'] ?? 'n/a')
+);
+
+$exFinal = $workflow->processAction($exAppId, 3, 'hr', 'approve', 'Recorded by HR');
+$tester->assert(
+    $exFinal['success'] === true && $exFinal['new_status'] === STATUS_APPROVED,
+    "Executive leave: HR approval finalises the application",
+    "Got " . ($exFinal['new_status'] ?? $exFinal['error'])
+);
+$tester->assert(
+    (float)$mockDb->entitlements[$exKey]['used_days'] === 2.0
+    && (float)$mockDb->entitlements[$exKey]['pending_days'] === 0.0,
+    "Executive leave: balance deducted at HR sign-off",
+    "Used: {$mockDb->entitlements[$exKey]['used_days']}, Pending: {$mockDb->entitlements[$exKey]['pending_days']}"
+);
+
+echo "\n--- 8. Testing Skipped-Stage Notices ---\n";
+$tester->assert(
+    ApprovalWorkflow::skippedStagesFor(ROLE_EMPLOYEE) === [],
+    "Employees skip no stages"
+);
+$tester->assert(
+    count(ApprovalWorkflow::skippedStagesFor(ROLE_HR)) === 2,
+    "HR is shown two skipped stages"
+);
+
+echo "\n--- 9. Testing Auto-Assigned Employee IDs ---\n";
+$tester->assert(format_emp_id(1006) === 'EMP-1006', "Employee ID format", format_emp_id(1006));
+$tester->assert(next_emp_sequence(1005) === 1006, "Sequence increments from highest existing");
+$tester->assert(next_emp_sequence(null) === 1001, "Empty table starts the sequence at 1001");
+$tester->assert(next_emp_sequence(0) === 1001, "Sequence floor holds when no canonical IDs exist");
+$tester->assert(next_emp_sequence(2500) === 2501, "Sequence follows IDs above the seed range");
 
 exit($tester->summary());

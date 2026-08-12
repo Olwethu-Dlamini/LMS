@@ -3,10 +3,16 @@ require_once __DIR__ . '/../../includes/functions.php';
 require_once __DIR__ . '/../../helpers/LeaveCalculator.php';
 require_once __DIR__ . '/../../helpers/ApprovalWorkflow.php';
 
-check_auth();
+require_staff();
 
 $userId = $_SESSION['user_id'];
+$userRole = $_SESSION['user_role'];
 $db = getDBConnection();
+
+// Senior roles do not queue behind themselves, so show up front which stages
+// this applicant's request will skip and who decides it.
+$skippedStages = ApprovalWorkflow::skippedStagesFor($userRole);
+[$firstStage] = ApprovalWorkflow::initialStageFor($userRole);
 $calculator = new LeaveCalculator($db);
 $workflow = new ApprovalWorkflow($db);
 
@@ -56,7 +62,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if (empty($error)) {
                 $res = $workflow->submitApplication($userId, $leaveTypeId, $startDate, $endDate, $validation['days'], $reason, $attachmentPath);
                 if ($res['success']) {
-                    set_flash('success', "Leave Application {$res['application_no']} submitted successfully! It is now pending Stage 1 (Line Manager) approval.");
+                    set_flash('success', "Leave Application {$res['application_no']} submitted successfully! "
+                        . "It is now pending " . pending_stage_label($res['status']) . " approval.");
                     header('Location: ' . APP_URL . '/modules/leave/my_history.php');
                     exit;
                 } else {
@@ -80,6 +87,17 @@ ob_start();
             <div class="card-body p-4">
                 <?php if (!empty($error)): ?>
                     <div class="alert alert-danger mb-4"><?php echo $error; ?></div>
+                <?php endif; ?>
+
+                <?php if (!empty($skippedStages)): ?>
+                    <div class="alert alert-info mb-4">
+                        <strong><i class="ti-info-alt"></i> Shortened approval route.</strong>
+                        Because of your role this request skips
+                        <strong><?php echo htmlspecialchars(implode(' and ', $skippedStages)); ?></strong>.
+                        It goes straight to <strong><?php echo htmlspecialchars(pending_stage_label($firstStage)); ?></strong><?php
+                            echo $firstStage === STATUS_PENDING_HR && $userRole === ROLE_EXECUTIVE
+                                ? ', whose decision is final.' : '.'; ?>
+                    </div>
                 <?php endif; ?>
 
                 <form method="POST" action="" enctype="multipart/form-data" id="leaveForm">
