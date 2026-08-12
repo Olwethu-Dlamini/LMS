@@ -12,7 +12,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!verify_csrf_token($csrfToken)) {
         $error = 'Invalid security token.';
     } elseif ($action === 'create') {
-        $empId = sanitize($_POST['emp_id'] ?? '');
         $firstName = sanitize($_POST['first_name'] ?? '');
         $lastName = sanitize($_POST['last_name'] ?? '');
         $email = sanitize($_POST['email'] ?? '');
@@ -21,7 +20,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $deptId = !empty($_POST['department_id']) ? (int)$_POST['department_id'] : null;
         $managerId = !empty($_POST['manager_id']) ? (int)$_POST['manager_id'] : null;
 
-        if (empty($empId) || empty($firstName) || empty($email) || empty($password) || $roleId <= 0) {
+        if (empty($firstName) || empty($email) || empty($password) || $roleId <= 0) {
             $error = 'Please fill in all mandatory fields.';
         } else {
             try {
@@ -30,26 +29,47 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     INSERT INTO users (emp_id, first_name, last_name, email, password_hash, role_id, department_id, manager_id, status)
                     VALUES (:emp_id, :fn, :ln, :email, :pwd, :role_id, :dept_id, :mgr_id, 'active')
                 ");
-                $stmt->execute([
-                    'emp_id' => $empId,
-                    'fn' => $firstName,
-                    'ln' => $lastName,
-                    'email' => $email,
-                    'pwd' => $pwdHash,
-                    'role_id' => $roleId,
-                    'dept_id' => $deptId,
-                    'mgr_id' => $managerId
-                ]);
-                $newUserId = (int)$db->lastInsertId();
 
-                // Auto-seed default leave entitlements for current year
+                // Employee IDs are assigned by the system, never typed in. Two
+                // admins creating an account at the same moment would both read
+                // the same highest number, so a unique-key clash on emp_id is
+                // retried with a freshly read sequence rather than surfaced.
+                $empId = null;
+                $newUserId = 0;
+                for ($attempt = 1; $attempt <= 5; $attempt++) {
+                    $empId = next_emp_id($db);
+                    try {
+                        $stmt->execute([
+                            'emp_id' => $empId,
+                            'fn' => $firstName,
+                            'ln' => $lastName,
+                            'email' => $email,
+                            'pwd' => $pwdHash,
+                            'role_id' => $roleId,
+                            'dept_id' => $deptId,
+                            'mgr_id' => $managerId
+                        ]);
+                        $newUserId = (int)$db->lastInsertId();
+                        break;
+                    } catch (PDOException $e) {
+                        $isEmpIdClash = $e->getCode() === '23000'
+                                        && stripos($e->getMessage(), 'emp_id') !== false;
+                        if (!$isEmpIdClash || $attempt === 5) {
+                            throw $e;
+                        }
+                    }
+                }
+
+                // Seed leave entitlements for the current leave year. Retired
+                // leave types are skipped so archived policies are not allocated.
                 $year = (int)date('Y');
-                $stmtTypes = $db->query("SELECT id, max_days_per_year FROM leave_types");
+                $stmtTypes = $db->query("SELECT id, max_days_per_year FROM leave_types WHERE is_active = 1");
                 $stmtEntSeed = $db->prepare("
                     INSERT INTO leave_entitlements (user_id, leave_type_id, year, total_days, used_days, pending_days)
                     VALUES (:user_id, :type_id, :year, :total_days, 0, 0)
                     ON DUPLICATE KEY UPDATE total_days = VALUES(total_days)
                 ");
+                $seeded = 0;
                 while ($lt = $stmtTypes->fetch()) {
                     $stmtEntSeed->execute([
                         'user_id' => $newUserId,
@@ -57,9 +77,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         'year' => $year,
                         'total_days' => $lt['max_days_per_year']
                     ]);
+                    $seeded++;
                 }
 
-                set_flash('success', "User account {$email} created and default leave entitlements seeded!");
+                set_flash('success', "User account {$email} created as {$empId}. "
+                    . "{$seeded} leave entitlement(s) seeded for {$year}.");
                 header('Location: ' . APP_URL . '/modules/admin/users.php');
                 exit;
             } catch (PDOException $e) {
@@ -237,6 +259,17 @@ $activeAdminCount = (int)$db->query("
 $roles = $db->query("SELECT * FROM roles ORDER BY id ASC")->fetchAll();
 $depts = $db->query("SELECT * FROM departments ORDER BY name ASC")->fetchAll();
 
+// Shown read-only on the create form. The value is re-read at insert time, so a
+// stale preview in an open tab cannot produce a duplicate.
+$nextEmpId = next_emp_id($db);
+
+// Department -> designated line manager, so picking a department fills in the
+// reporting manager instead of the admin having to remember who heads it.
+$deptManagers = [];
+foreach ($depts as $d) {
+    $deptManagers[(int)$d['id']] = $d['line_manager_id'] !== null ? (int)$d['line_manager_id'] : null;
+}
+
 ob_start();
 ?>
 
@@ -258,8 +291,9 @@ ob_start();
                 <div class="modal-body">
                     <div class="row">
                         <div class="col-md-6 form-group mb-3">
-                            <label class="font-weight-bold text-dark">Employee ID *</label>
-                            <input type="text" name="emp_id" class="form-control" placeholder="EMP-1006" required>
+                            <label class="font-weight-bold text-dark">Employee ID</label>
+                            <input type="text" class="form-control bg-light" value="<?php echo htmlspecialchars($nextEmpId); ?>" readonly>
+                            <small class="form-text text-muted">Assigned automatically when the account is saved.</small>
                         </div>
                         <div class="col-md-6 form-group mb-3">
                             <label class="font-weight-bold text-dark">Email Address *</label>
@@ -294,7 +328,7 @@ ob_start();
                     <div class="row">
                         <div class="col-md-6 form-group mb-3">
                             <label class="font-weight-bold text-dark">Department</label>
-                            <select name="department_id" class="form-control">
+                            <select name="department_id" id="newUserDept" class="form-control">
                                 <option value="">-- None --</option>
                                 <?php foreach ($depts as $d): ?>
                                     <option value="<?php echo $d['id']; ?>"><?php echo htmlspecialchars($d['name']); ?></option>
@@ -303,12 +337,13 @@ ob_start();
                         </div>
                         <div class="col-md-6 form-group mb-3">
                             <label class="font-weight-bold text-dark">Line Manager</label>
-                            <select name="manager_id" class="form-control">
+                            <select name="manager_id" id="newUserManager" class="form-control">
                                 <option value="">-- None --</option>
                                 <?php foreach ($usersList as $u): ?>
                                     <option value="<?php echo $u['id']; ?>"><?php echo htmlspecialchars($u['first_name'] . ' ' . $u['last_name'] . ' (' . strtoupper($u['role_name']) . ')'); ?></option>
                                 <?php endforeach; ?>
                             </select>
+                            <small class="form-text text-muted" id="newUserManagerHint"></small>
                         </div>
                     </div>
                 </div>
@@ -581,6 +616,41 @@ ob_start();
         </div>
     </div>
 </div>
+
+<script>
+// Picking a department fills in that department's designated line manager. The
+// admin can still override it, and an explicit override is not overwritten by a
+// later department change.
+document.addEventListener("DOMContentLoaded", function () {
+    var deptSelect = document.getElementById("newUserDept");
+    var mgrSelect  = document.getElementById("newUserManager");
+    var hint       = document.getElementById("newUserManagerHint");
+    if (!deptSelect || !mgrSelect) return;
+
+    var deptManagers = <?php echo json_encode($deptManagers, JSON_UNESCAPED_SLASHES); ?>;
+    var autoFilled = "";
+
+    deptSelect.addEventListener("change", function () {
+        var manuallySet = mgrSelect.value !== "" && mgrSelect.value !== autoFilled;
+        if (manuallySet) return;
+
+        var mgrId = deptManagers[deptSelect.value];
+        if (mgrId) {
+            mgrSelect.value = String(mgrId);
+            autoFilled = String(mgrId);
+            hint.textContent = mgrSelect.value === String(mgrId)
+                ? "Filled in from the selected department. Change it if this person reports elsewhere."
+                : "";
+        } else {
+            mgrSelect.value = "";
+            autoFilled = "";
+            hint.textContent = deptSelect.value
+                ? "This department has no designated line manager yet."
+                : "";
+        }
+    });
+});
+</script>
 
 <?php
 $pageContent = ob_get_clean();
