@@ -51,7 +51,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $success = true;
 
             set_flash('success', 'Your password has been updated successfully.');
-            header('Location: ' . APP_URL . '/modules/dashboard/index.php');
+            header('Location: ' . landing_url());
             exit;
         }
     }
@@ -132,7 +132,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 </button>
 
                 <?php if (!$forced): ?>
-                    <a href="<?php echo APP_URL; ?>/modules/dashboard/index.php"
+                    <a href="<?php echo landing_url(); ?>"
                        class="btn btn-outline-secondary btn-block font-weight-bold mt-2">Cancel</a>
                 <?php else: ?>
                     <a href="<?php echo APP_URL; ?>/modules/auth/logout.php"

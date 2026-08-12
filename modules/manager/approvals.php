@@ -22,8 +22,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } else {
         $res = $workflow->processAction($appId, $approverId, $approverRole, $action, $comments);
         if ($res['success']) {
-            $msg = ($action === 'approve') 
-                ? 'Request Stage 1 Approved! Transferred to Stage 2 (HR Review).' 
+            $msg = ($action === 'approve')
+                ? stage_transition_message($res['new_status'])
                 : 'Request Rejected. Reserved days released back to employee.';
             set_flash($action === 'approve' ? 'success' : 'warning', $msg);
             header('Location: ' . APP_URL . '/modules/manager/approvals.php');
@@ -61,6 +61,16 @@ ob_start();
 <?php if (!empty($error)): ?>
     <div class="alert alert-danger mb-4"><?php echo $error; ?></div>
 <?php endif; ?>
+
+<?php if (is_admin()): ?>
+    <div class="alert alert-warning mb-4">
+        <strong><i class="ti-alert"></i> Administrator override.</strong>
+        You are acting outside the normal approval chain. Use this only when the
+        designated approver is unavailable &mdash; every action is recorded in the
+        audit log against your account.
+    </div>
+<?php endif; ?>
+
 
 <div class="card">
     <div class="card-header bg-white">

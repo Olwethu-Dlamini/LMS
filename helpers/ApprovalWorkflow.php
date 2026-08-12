@@ -10,6 +10,94 @@ class ApprovalWorkflow {
     }
 
     /**
+     * Where an application enters the chain, based on the applicant's own role.
+     *
+     * Nobody is asked to sign off on a peer or on themselves, so senior roles
+     * skip the stages they would otherwise be the approver for:
+     *   employee  -> Stage 1 line manager, then HR, then executive
+     *   manager   -> straight to HR (they are the Stage 1 approver)
+     *   hr        -> straight to the executive (they are the Stage 2 approver)
+     *   executive -> HR, and HR's approval is final (nobody sits above them)
+     * Admin is a system role with no leave entitlement and cannot apply.
+     *
+     * @return array{0:string,1:string} [status, current_approver_role]
+     */
+    public static function initialStageFor(string $applicantRole): array {
+        switch ($applicantRole) {
+            case ROLE_EMPLOYEE:
+                return [STATUS_PENDING_MANAGER, ROLE_MANAGER];
+            case ROLE_MANAGER:
+            case ROLE_EXECUTIVE:
+                return [STATUS_PENDING_HR, ROLE_HR];
+            case ROLE_HR:
+                return [STATUS_PENDING_EXECUTIVE, ROLE_EXECUTIVE];
+            case ROLE_ADMIN:
+                throw new Exception("System administrators do not hold leave entitlement and cannot apply for leave.");
+            default:
+                // Unknown roles get the full chain rather than a shortcut.
+                return [STATUS_PENDING_MANAGER, ROLE_MANAGER];
+        }
+    }
+
+    /**
+     * Which stage an approval moves the application to next.
+     *
+     * The applicant's role matters here, not just the current status: HR sign-off
+     * is the final decision on an executive's own leave, but only the middle
+     * stage for everyone else.
+     *
+     * @return array{0:string,1:string} [status, current_approver_role]
+     */
+    public static function nextStageFor(string $applicantRole, string $currentStatus): array {
+        if ($currentStatus === STATUS_PENDING_MANAGER) {
+            return [STATUS_PENDING_HR, ROLE_HR];
+        }
+        if ($currentStatus === STATUS_PENDING_HR) {
+            return $applicantRole === ROLE_EXECUTIVE
+                ? [STATUS_APPROVED, 'none']
+                : [STATUS_PENDING_EXECUTIVE, ROLE_EXECUTIVE];
+        }
+        if ($currentStatus === STATUS_PENDING_EXECUTIVE) {
+            return [STATUS_APPROVED, 'none'];
+        }
+        throw new Exception("Application is already finalized.");
+    }
+
+    /**
+     * Human-readable list of the stages an applicant's role skips, for the
+     * notice shown on the application form.
+     */
+    public static function skippedStagesFor(string $applicantRole): array {
+        switch ($applicantRole) {
+            case ROLE_MANAGER:
+                return ['Stage 1 · Line Manager'];
+            case ROLE_HR:
+                return ['Stage 1 · Line Manager', 'Stage 2 · HR Review'];
+            case ROLE_EXECUTIVE:
+                return ['Stage 1 · Line Manager', 'Stage 3 · Executive Sign-Off'];
+            default:
+                return [];
+        }
+    }
+
+    /**
+     * The applicant's role name, used to pick their routing.
+     */
+    private function roleOf(int $userId): string {
+        $stmt = $this->db->prepare("
+            SELECT r.name AS role_name
+            FROM users u JOIN roles r ON r.id = u.role_id
+            WHERE u.id = :id
+        ");
+        $stmt->execute(['id' => $userId]);
+        $row = $stmt->fetch();
+        if (!$row) {
+            throw new Exception("Applicant account not found.");
+        }
+        return strtolower($row['role_name']);
+    }
+
+    /**
      * Submit a new leave application
      */
     public function submitApplication(int $userId, int $leaveTypeId, string $startDate, string $endDate, float $totalDays, string $reason, ?string $attachmentPath): array {
@@ -19,11 +107,16 @@ class ApprovalWorkflow {
             $appNo = 'LV-' . date('Y') . '-' . strtoupper(substr(uniqid(), -6));
             $year = (int)date('Y', strtotime($startDate));
 
+            // Route the application by the applicant's own role, so senior staff
+            // do not sit in a queue waiting for themselves.
+            $applicantRole = $this->roleOf($userId);
+            [$initialStatus, $initialRole] = self::initialStageFor($applicantRole);
+
             // 1. Create Application
             $stmt = $this->db->prepare("
-                INSERT INTO leave_applications 
+                INSERT INTO leave_applications
                 (application_no, user_id, leave_type_id, start_date, end_date, total_days, reason, attachment_path, status, current_approver_role)
-                VALUES (:app_no, :user_id, :type_id, :start_date, :end_date, :days, :reason, :attachment, 'pending_manager', 'manager')
+                VALUES (:app_no, :user_id, :type_id, :start_date, :end_date, :days, :reason, :attachment, :status, :approver_role)
             ");
             $stmt->execute([
                 'app_no' => $appNo,
@@ -33,7 +126,9 @@ class ApprovalWorkflow {
                 'end_date' => $endDate,
                 'days' => $totalDays,
                 'reason' => $reason,
-                'attachment' => $attachmentPath
+                'attachment' => $attachmentPath,
+                'status' => $initialStatus,
+                'approver_role' => $initialRole
             ]);
 
             $appId = (int)$this->db->lastInsertId();
@@ -52,7 +147,14 @@ class ApprovalWorkflow {
             ]);
 
             $this->db->commit();
-            return ['success' => true, 'application_no' => $appNo, 'id' => $appId];
+            return [
+                'success' => true,
+                'application_no' => $appNo,
+                'id' => $appId,
+                'status' => $initialStatus,
+                'next_approver_role' => $initialRole,
+                'skipped_stages' => self::skippedStagesFor($applicantRole)
+            ];
         } catch (Exception $e) {
             $this->db->rollBack();
             return ['success' => false, 'error' => $e->getMessage()];
@@ -80,6 +182,7 @@ class ApprovalWorkflow {
             $userId = (int)$app['user_id'];
             $leaveTypeId = (int)$app['leave_type_id'];
             $year = (int)date('Y', strtotime($app['start_date']));
+            $applicantRole = $this->roleOf($userId);
 
             // Self-approval restriction
             if ((int)$userId === (int)$approverId && $action === 'approve') {
@@ -132,20 +235,15 @@ class ApprovalWorkflow {
                     'year' => $year
                 ]);
             } else {
-                // Approval Transition Path
-                if ($currentStatus === STATUS_PENDING_MANAGER) {
-                    $newStatus = STATUS_PENDING_HR;
-                    $nextRole = ROLE_HR;
-                } elseif ($currentStatus === STATUS_PENDING_HR) {
-                    $newStatus = STATUS_PENDING_EXECUTIVE;
-                    $nextRole = ROLE_EXECUTIVE;
-                } elseif ($currentStatus === STATUS_PENDING_EXECUTIVE) {
-                    $newStatus = STATUS_APPROVED;
-                    $nextRole = 'none';
+                // Approval Transition Path. Where this lands depends on the
+                // applicant's role, not just the current stage: HR sign-off is
+                // final for an executive's own leave.
+                [$newStatus, $nextRole] = self::nextStageFor($applicantRole, $currentStatus);
 
+                if ($newStatus === STATUS_APPROVED) {
                     // Deduct from pending_days and add to used_days
                     $stmtDeduct = $this->db->prepare("
-                        UPDATE leave_entitlements 
+                        UPDATE leave_entitlements
                         SET pending_days = GREATEST(0, pending_days - :days),
                             used_days = used_days + :used_days
                         WHERE user_id = :user_id AND leave_type_id = :type_id AND year = :year
@@ -157,8 +255,6 @@ class ApprovalWorkflow {
                         'type_id' => $leaveTypeId,
                         'year' => $year
                     ]);
-                } else {
-                    throw new Exception("Application is already finalized.");
                 }
             }
 

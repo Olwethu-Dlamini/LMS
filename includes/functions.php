@@ -81,26 +81,94 @@ function password_policy_errors(string $password): array {
 }
 
 /**
- * Check if active user has a specific role or list of roles
+ * Is the signed-in user a system administrator?
  */
-function has_role($roles): bool {
+function is_admin(): bool {
+    return ($_SESSION['user_role'] ?? '') === ROLE_ADMIN;
+}
+
+/**
+ * Check if active user has a specific role or list of roles.
+ *
+ * Admin retains a break-glass override on approval and policy checks, which is
+ * why $allowAdmin defaults to true. Pass false for anything that decides what a
+ * user *sees* - navigation, staff-portal entry, leave entitlement - so the admin
+ * console stays the admin's only home instead of admin inheriting every screen.
+ */
+function has_role($roles, bool $allowAdmin = true): bool {
     if (!isset($_SESSION['user_role'])) {
         return false;
     }
     $allowed = is_array($roles) ? $roles : [$roles];
-    return in_array($_SESSION['user_role'], $allowed) || $_SESSION['user_role'] === ROLE_ADMIN;
+    if (in_array($_SESSION['user_role'], $allowed, true)) {
+        return true;
+    }
+    return $allowAdmin && is_admin();
 }
 
 /**
  * Enforce minimum role access
  */
-function require_role($roles): void {
+function require_role($roles, bool $allowAdmin = true): void {
     check_auth();
-    if (!has_role($roles)) {
+    if (!has_role($roles, $allowAdmin)) {
         set_flash('error', 'Access Denied: You do not have permission for this section.');
-        header('Location: ' . APP_URL . '/modules/dashboard/index.php');
+        header('Location: ' . landing_url());
         exit;
     }
+}
+
+/**
+ * Where a signed-in user belongs after login. Admins land in the console; every
+ * other role lands on the staff dashboard.
+ */
+function landing_url(): string {
+    return APP_URL . (is_admin()
+        ? '/modules/admin/index.php'
+        : '/modules/dashboard/index.php');
+}
+
+/**
+ * Guard the staff portal. Admins hold no leave entitlement and do not sit in the
+ * approval chain, so they are sent to the admin console rather than shown leave
+ * screens that do not apply to them. Their break-glass approval override lives
+ * under Leave Oversight in the console navigation.
+ */
+function require_staff(): void {
+    check_auth();
+    if (is_admin()) {
+        header('Location: ' . landing_url());
+        exit;
+    }
+}
+
+/**
+ * Next employee ID in the EMP-#### sequence. Split into a pure helper so the
+ * numbering rule is testable without a database.
+ */
+function format_emp_id(int $sequence): string {
+    return 'EMP-' . $sequence;
+}
+
+/**
+ * Sequence numbers start at 1001 so a fresh install matches the seeded accounts.
+ */
+function next_emp_sequence(?int $highestExisting): int {
+    return max(1000, (int)$highestExisting) + 1;
+}
+
+/**
+ * Read the highest existing EMP-#### number and return the next ID. Only IDs in
+ * the canonical format are considered, so hand-entered legacy IDs never make the
+ * sequence jump or collide.
+ */
+function next_emp_id(PDO $db): string {
+    $highest = $db->query("
+        SELECT MAX(CAST(SUBSTRING(emp_id, 5) AS UNSIGNED))
+        FROM users
+        WHERE emp_id REGEXP '^EMP-[0-9]+$'
+    ")->fetchColumn();
+    return format_emp_id(next_emp_sequence($highest === null || $highest === false ? null : (int)$highest));
 }
 
 /**
@@ -129,6 +197,40 @@ function display_flash(): string {
                 </div>';
     }
     return '';
+}
+
+/**
+ * Human-readable name of the stage an application is waiting on.
+ */
+function pending_stage_label(string $status): string {
+    switch ($status) {
+        case STATUS_PENDING_MANAGER:
+            return 'Stage 1 (Line Manager)';
+        case STATUS_PENDING_HR:
+            return 'Stage 2 (HR Review)';
+        case STATUS_PENDING_EXECUTIVE:
+            return 'Stage 3 (Executive Sign-Off)';
+        default:
+            return 'review';
+    }
+}
+
+/**
+ * Message describing where an approval left the application. Driven by the
+ * status the workflow actually returned, because the stage after HR depends on
+ * the applicant's role - HR sign-off is final on an executive's own leave.
+ */
+function stage_transition_message(string $newStatus): string {
+    switch ($newStatus) {
+        case STATUS_PENDING_HR:
+            return 'Approved. Transferred to Stage 2 (HR Review).';
+        case STATUS_PENDING_EXECUTIVE:
+            return 'Approved. Transferred to Stage 3 (Executive Sign-Off).';
+        case STATUS_APPROVED:
+            return 'Fully approved. The leave balance has been deducted.';
+        default:
+            return 'Application updated.';
+    }
 }
 
 /**
