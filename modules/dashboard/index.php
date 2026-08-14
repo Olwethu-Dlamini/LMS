@@ -29,9 +29,9 @@ if (has_role(ROLE_MANAGER, false)) {
         FROM leave_applications a
         JOIN users u ON a.user_id = u.id
         LEFT JOIN departments d ON u.department_id = d.id
-        WHERE a.status = 'pending_manager' AND (u.manager_id = :mgr_id OR d.line_manager_id = :dept_mgr_id)
+        WHERE a.status = 'pending_manager' AND " . manager_scope_clause() . "
     ");
-    $stmtCount->execute(['mgr_id' => $userId, 'dept_mgr_id' => $userId]);
+    $stmtCount->execute(manager_scope_params($userId));
     $pendingStage1Count = (int)$stmtCount->fetchColumn();
 }
 

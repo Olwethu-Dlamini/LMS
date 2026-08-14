@@ -38,9 +38,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 $whereClause = "WHERE a.status = 'pending_manager'";
 $params = [];
 if ($approverRole !== ROLE_ADMIN) {
-    $whereClause .= " AND (u.manager_id = :mgr_id OR d.line_manager_id = :dept_mgr_id)";
-    $params['mgr_id'] = $approverId;
-    $params['dept_mgr_id'] = $approverId;
+    $whereClause .= ' AND ' . manager_scope_clause();
+    $params = manager_scope_params($approverId);
 }
 
 $stmt = $db->prepare("
