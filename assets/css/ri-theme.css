@@ -544,7 +544,65 @@ hr { border-top: 1px solid var(--ri-grey-line); }
 .ri-pwrules li.ok { color: var(--ri-success); }
 .ri-pwrules li.ok::before { content: "●"; color: var(--ri-success); }
 
-/* ---------- 15. responsive ---------------------------------------------- */
+/* ---------- 15. team leave calendar ------------------------------------- */
+.ri-cal-toolbar {
+  display: flex; align-items: center; justify-content: space-between;
+  flex-wrap: wrap; gap: 14px;
+}
+.ri-cal-monthnav { display: flex; align-items: center; gap: 8px; }
+.ri-cal-monthlabel { color: var(--ri-navy); font-size: 15px; min-width: 150px; text-align: center; }
+.ri-cal-deptpick select { min-width: 190px; }
+.ri-cal-legend { display: flex; align-items: center; gap: 16px; font-size: 12px; color: var(--ri-muted); }
+.ri-cal-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 5px; }
+.ri-cal-dot-ok   { background: #dfe4ee; }
+.ri-cal-dot-at   { background: #e9b949; }
+.ri-cal-dot-over { background: var(--ri-danger); }
+
+.ri-cal { table-layout: fixed; }
+.ri-cal thead th {
+  font-size: 11px; text-transform: uppercase; letter-spacing: .7px;
+  color: var(--ri-muted); text-align: left;
+}
+.ri-cal td.ri-cal-cell {
+  vertical-align: top; height: 104px; padding: 6px 7px;
+  border: 1px solid var(--ri-grey-line); background: var(--ri-white);
+}
+.ri-cal .ri-cal-weekend { background: #fafbfd; }
+.ri-cal .ri-cal-outside { background: #f4f5f9; color: var(--ri-muted-soft); }
+.ri-cal .ri-cal-holiday { background: var(--ri-info-bg); }
+.ri-cal .ri-cal-today { box-shadow: inset 0 0 0 2px var(--ri-teal); }
+.ri-cal .ri-cal-at   { background: var(--ri-warning-bg); }
+.ri-cal .ri-cal-over { background: var(--ri-danger-bg); }
+
+.ri-cal-daytop { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; }
+.ri-cal-daynum { font-weight: 700; font-size: 13px; color: var(--ri-navy); }
+.ri-cal-outside .ri-cal-daynum { color: var(--ri-muted-soft); }
+.ri-cal-count {
+  font-size: 10.5px; font-weight: 700; color: var(--ri-muted);
+  background: var(--ri-grey); border-radius: var(--ri-pill); padding: 1px 7px;
+}
+.ri-cal-at .ri-cal-count   { background: #f6e3bb; color: var(--ri-warning); }
+.ri-cal-over .ri-cal-count { background: #f8d3d0; color: var(--ri-danger); }
+.ri-cal-note { font-size: 10.5px; color: var(--ri-info); margin-bottom: 3px; }
+
+.ri-cal-person {
+  display: flex; align-items: baseline; gap: 5px;
+  font-size: 11px; line-height: 1.35; padding: 2px 5px; margin-bottom: 3px;
+  background: #eef2f8; border-left: 3px solid var(--ri-teal); border-radius: 3px;
+}
+.ri-cal-person-pending {
+  background: transparent; border: 1px dashed var(--ri-muted-soft); border-left: 3px solid var(--ri-warning);
+}
+.ri-cal-person-name { font-weight: 600; color: var(--ri-navy); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ri-cal-person-tag { font-size: 9.5px; text-transform: uppercase; letter-spacing: .4px; color: var(--ri-muted); }
+.ri-cal-flag { font-size: 10px; font-weight: 700; color: var(--ri-danger); margin-top: 2px; }
+.ri-cal-flag-soft { color: var(--ri-warning); }
+
+/* coverage warning shown to an approver before they act */
+.ri-coverage { font-size: 12.5px; }
+.ri-coverage ul { margin: 6px 0 0; padding-left: 18px; }
+
+/* ---------- 16. responsive ---------------------------------------------- */
 @media (max-width: 991.98px) {
   .ri-nav .navbar-nav { padding: 8px 0 12px; }
   .ri-nav .nav-item > .nav-link,
@@ -565,4 +623,10 @@ hr { border-top: 1px solid var(--ri-grey-line); }
   .ri-pagehead h1, .ri-pagehead h3 { font-size: 20px; }
   .ri-stat .ri-stat-value { font-size: 28px; }
   .ri-footer .ri-footer-top { justify-content: center; text-align: center; }
+  /* The month grid cannot usefully shrink below a readable cell, so it scrolls
+     sideways inside its .table-responsive wrapper instead of squashing. */
+  .ri-cal { min-width: 720px; }
+  .ri-cal td.ri-cal-cell { height: 92px; }
+  .ri-cal-toolbar { justify-content: flex-start; }
+  .ri-cal-legend { width: 100%; }
 }

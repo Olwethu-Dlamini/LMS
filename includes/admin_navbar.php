@@ -32,14 +32,17 @@ $adminLinks = [
     ['/admin/audit_log.php',   'ti-files',          'Audit Log'],
 ];
 
-// Break-glass approval plus HR reporting, grouped so they read as oversight
-// rather than as part of the admin's own workflow.
+// Break-glass approval, HR reporting and the coverage view, grouped so they read
+// as oversight rather than as part of the admin's own workflow. A fourth element
+// opens a new group, which keeps the headings beside the links they describe
+// instead of pinned to a positional index.
 $oversightLinks = [
-    ['/manager/approvals.php',   'ti-check-box', 'Stage 1 · Line Manager'],
-    ['/hr/approvals.php',        'ti-shield',    'Stage 2 · HR Review'],
-    ['/executive/approvals.php', 'ti-crown',     'Stage 3 · Executive'],
-    ['/hr/allocations.php',      'ti-pie-chart', 'Leave Allocations'],
-    ['/hr/reports.php',          'ti-files',     'Leave Reports'],
+    ['/manager/approvals.php',   'ti-check-box',    'Stage 1 · Line Manager', 'Break-glass approval'],
+    ['/hr/approvals.php',        'ti-shield',       'Stage 2 · HR Review'],
+    ['/executive/approvals.php', 'ti-crown',        'Stage 3 · Executive'],
+    ['/hr/allocations.php',      'ti-pie-chart',    'Leave Allocations',      'HR management'],
+    ['/hr/reports.php',          'ti-files',        'Leave Reports'],
+    ['/leave/team_calendar.php', 'ti-layout-grid3', 'Team Calendar',          'Coverage'],
 ];
 $onOversight = ri_nav_on(array_column($oversightLinks, 0));
 ?>
@@ -69,11 +72,11 @@ $onOversight = ri_nav_on(array_column($oversightLinks, 0));
                             <i class="ti-eye"></i>Leave Oversight
                         </a>
                         <div class="dropdown-menu" aria-labelledby="riAdminOversight">
-                            <h6 class="dropdown-header">Break-glass approval</h6>
-                            <?php foreach ($oversightLinks as $i => [$path, $icon, $label]): ?>
-                                <?php if ($i === 3): ?>
-                                    <div class="dropdown-divider"></div>
-                                    <h6 class="dropdown-header">HR management</h6>
+                            <?php foreach ($oversightLinks as $i => $link): ?>
+                                <?php [$path, $icon, $label] = $link; $group = $link[3] ?? null; ?>
+                                <?php if ($group !== null): ?>
+                                    <?php if ($i > 0): ?><div class="dropdown-divider"></div><?php endif; ?>
+                                    <h6 class="dropdown-header"><?php echo $group; ?></h6>
                                 <?php endif; ?>
                                 <a class="dropdown-item<?php echo ri_admin_active($path); ?>"
                                    href="<?php echo APP_URL . '/modules' . $path; ?>">
