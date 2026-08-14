@@ -86,6 +86,10 @@ $onOversight = ri_nav_on(array_column($oversightLinks, 0));
                         </div>
                     </li>
                 </ul>
+
+                <ul class="navbar-nav">
+                    <?php require __DIR__ . '/notification_bell.php'; ?>
+                </ul>
             </div>
         </nav>
     </div>

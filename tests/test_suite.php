@@ -9,6 +9,7 @@ require_once __DIR__ . '/../includes/functions.php';
 require_once __DIR__ . '/../helpers/LeaveCalculator.php';
 require_once __DIR__ . '/../helpers/ApprovalWorkflow.php';
 require_once __DIR__ . '/../helpers/LeaveCapacity.php';
+require_once __DIR__ . '/../helpers/Notifier.php';
 
 class LMS_TestCase {
     private int $passed = 0;
@@ -36,6 +37,8 @@ class LMS_TestCase {
 class ArrayMockPDO extends PDO {
     public array $applications = [];
     public array $logs = [];
+    /** Notifications raised through the workflow, newest last. */
+    public array $notifications = [];
     public array $entitlements = [
         '5_1_2026' => ['total_days' => 20.0, 'used_days' => 0.0, 'pending_days' => 0.0]
     ];
@@ -123,6 +126,18 @@ class ArrayMockPDO extends PDO {
                     }
                 }
 
+                // Handle INSERT INTO notifications
+                if (stripos($this->query, 'INSERT INTO notifications') !== false) {
+                    $this->pdo->notifications[] = [
+                        'user_id' => (int)($params['user_id'] ?? 0),
+                        'type'    => $params['type'] ?? '',
+                        'title'   => $params['title'] ?? '',
+                        'body'    => $params['body'] ?? '',
+                        'link'    => $params['link'] ?? '',
+                        'app_id'  => $params['app_id'] ?? null,
+                    ];
+                }
+
                 // Handle UPDATE leave_applications SET status = ...
                 if (stripos($this->query, 'UPDATE leave_applications') !== false) {
                     $id = (int)($params['id'] ?? 0);
@@ -136,6 +151,18 @@ class ArrayMockPDO extends PDO {
             }
 
             public function fetchAll(int $mode = PDO::FETCH_ASSOC): array {
+                // Notifier resolving the holders of an approving role.
+                if (stripos($this->query, 'FROM users u') !== false
+                    && stripos($this->query, 'JOIN roles r') !== false) {
+                    $wanted = $this->lastParams['role'] ?? '';
+                    $ids = [];
+                    foreach ($this->pdo->roles as $userId => $roleName) {
+                        if ($roleName === $wanted) {
+                            $ids[] = $userId;
+                        }
+                    }
+                    return $ids;
+                }
                 if (stripos($this->query, 'FROM holidays') !== false) {
                     $start = $this->lastParams['start'] ?? '';
                     $end = $this->lastParams['end'] ?? '';
@@ -151,6 +178,27 @@ class ArrayMockPDO extends PDO {
             }
 
             public function fetch(int $mode = PDO::FETCH_ASSOC) {
+                // Notifier's context read: the application joined to its type,
+                // applicant and department. Checked before the plain
+                // leave_applications branch below, which would otherwise answer
+                // it without the applicant's name or approver ids.
+                if (stripos($this->query, 'FROM leave_applications a') !== false
+                    && stripos($this->query, 'JOIN leave_types t') !== false
+                    && stripos($this->query, 'JOIN users u') !== false) {
+                    $id = (int)($this->lastParams['id'] ?? 1);
+                    $app = $this->pdo->applications[$id] ?? null;
+                    if (!$app) {
+                        return false;
+                    }
+                    return $app + [
+                        'leave_name'      => 'Annual Leave',
+                        'first_name'      => 'Test',
+                        'last_name'       => 'Applicant',
+                        'manager_id'      => 4,
+                        'department_id'   => 1,
+                        'line_manager_id' => 4,
+                    ];
+                }
                 if (stripos($this->query, 'FROM leave_applications') !== false) {
                     $id = (int)($this->lastParams['id'] ?? 1);
                     return $this->pdo->applications[$id] ?? false;
@@ -512,6 +560,127 @@ $tester->assert(
 $tester->assert(
     isset($withoutDates['2026-08-17']) && !isset($withoutDates['2026-08-20']),
     "Excluding a request clears the days only it covered"
+);
+
+echo "\n--- 11. Testing Notification Wording & Routing ---\n";
+
+$tester->assert(
+    Notifier::outcomeFor('reject', STATUS_REJECTED)[0] === Notifier::TYPE_REJECTED,
+    "A rejection is reported as a rejection"
+);
+$tester->assert(
+    Notifier::outcomeFor('approve', STATUS_APPROVED)[1] === 'Your leave request is fully approved',
+    "Final approval is announced as fully approved"
+);
+$tester->assert(
+    Notifier::outcomeFor('approve', STATUS_PENDING_HR)[0] === Notifier::TYPE_ADVANCED,
+    "A Stage 1 approval reads as progress, not as approval"
+);
+$tester->assert(
+    strpos(Notifier::awaitingTitle(STATUS_PENDING_EXECUTIVE), 'Stage 3') !== false,
+    "An approver is told which stage is waiting on them",
+    Notifier::awaitingTitle(STATUS_PENDING_EXECUTIVE)
+);
+$tester->assert(
+    strpos(Notifier::describe([
+        'application_no' => 'LV-2026-ABC123',
+        'leave_name'     => 'Annual Leave',
+        'total_days'     => 3.0,
+        'start_date'     => '2026-09-07',
+        'end_date'       => '2026-09-09',
+    ]), 'LV-2026-ABC123 - Annual Leave, 3 working day(s), 7 Sep to 9 Sep 2026') === 0,
+    "A request describes itself in one line"
+);
+$tester->assert(
+    strpos(Notifier::describe([
+        'application_no' => 'LV-2026-ONE',
+        'leave_name'     => 'Sick Leave',
+        'total_days'     => 0.5,
+        'start_date'     => '2026-09-07',
+        'end_date'       => '2026-09-07',
+    ]), '0.5 working day(s), Mon 7 Sep 2026') !== false,
+    "A single half-day reads as one date, not a range"
+);
+
+// End to end: an employee's request notifies the applicant and the Stage 1
+// approver, and the Stage 1 approval then notifies HR.
+$notifyDb = new ArrayMockPDO();
+$notifyFlow = new ApprovalWorkflow($notifyDb);
+$notifyDb->entitlements['5_1_2026'] = ['total_days' => 20.0, 'used_days' => 0.0, 'pending_days' => 0.0];
+$submitted = $notifyFlow->submitApplication(5, 1, '2026-09-07', '2026-09-09', 3.0, 'Family time', null);
+
+$recipients = array_column($notifyDb->notifications, 'user_id');
+$types = array_column($notifyDb->notifications, 'type');
+$tester->assert(
+    $submitted['success'] === true && in_array(5, $recipients, true)
+    && in_array(Notifier::TYPE_SUBMITTED, $types, true),
+    "Submitting notifies the applicant that it was received",
+    json_encode($types)
+);
+$tester->assert(
+    in_array(4, $recipients, true) && in_array(Notifier::TYPE_AWAITING, $types, true),
+    "Submitting puts the request in front of the Stage 1 approver",
+    json_encode($recipients)
+);
+$tester->assert(
+    !in_array(3, $recipients, true) && !in_array(2, $recipients, true),
+    "Later stages are not told about a request that has not reached them",
+    json_encode($recipients)
+);
+
+$notifyDb->notifications = [];
+$stage1 = $notifyFlow->processAction((int)$submitted['id'], 4, ROLE_MANAGER, 'approve', 'Cover arranged');
+$afterRecipients = array_column($notifyDb->notifications, 'user_id');
+$afterTitles = array_column($notifyDb->notifications, 'title');
+$tester->assert(
+    $stage1['success'] === true && in_array(5, $afterRecipients, true),
+    "An approval tells the applicant their request moved",
+    json_encode($afterTitles)
+);
+$tester->assert(
+    in_array(3, $afterRecipients, true),
+    "An approval tells the next stage the request has arrived",
+    json_encode($afterRecipients)
+);
+$tester->assert(
+    !in_array(4, $afterRecipients, true),
+    "The approver who just acted is not notified about their own decision",
+    json_encode($afterRecipients)
+);
+$remarksCarried = false;
+foreach ($notifyDb->notifications as $n) {
+    if ((int)$n['user_id'] === 5 && strpos((string)$n['body'], 'Cover arranged') !== false) {
+        $remarksCarried = true;
+    }
+}
+$tester->assert($remarksCarried, "Approver remarks reach the applicant");
+
+// A rejection releases the reservation and says so, without claiming approval.
+$rejectDb = new ArrayMockPDO();
+$rejectFlow = new ApprovalWorkflow($rejectDb);
+$rejected = $rejectFlow->submitApplication(5, 1, '2026-10-05', '2026-10-06', 2.0, 'Trip', null);
+$rejectDb->notifications = [];
+$rejectRes = $rejectFlow->processAction((int)$rejected['id'], 4, ROLE_MANAGER, 'reject', 'Peak week');
+$rejectTypes = array_column($rejectDb->notifications, 'type');
+$tester->assert(
+    $rejectRes['success'] === true && in_array(Notifier::TYPE_REJECTED, $rejectTypes, true)
+    && !in_array(Notifier::TYPE_AWAITING, $rejectTypes, true),
+    "A rejection notifies the applicant and nobody downstream",
+    json_encode($rejectTypes)
+);
+
+// A withdrawal tells the approver who was waiting on it.
+$cancelDb = new ArrayMockPDO();
+$cancelFlow = new ApprovalWorkflow($cancelDb);
+$toCancel = $cancelFlow->submitApplication(5, 1, '2026-11-02', '2026-11-03', 2.0, 'Personal', null);
+$cancelDb->notifications = [];
+$cancelRes = $cancelFlow->cancelApplication((int)$toCancel['id'], 5, ROLE_EMPLOYEE, 'Plans changed');
+$cancelRecipients = array_column($cancelDb->notifications, 'user_id');
+$tester->assert(
+    $cancelRes['success'] === true && in_array(4, $cancelRecipients, true)
+    && !in_array(5, $cancelRecipients, true),
+    "Withdrawing a pending request tells the waiting approver, not the applicant who did it",
+    json_encode($cancelDb->notifications)
 );
 
 exit($tester->summary());

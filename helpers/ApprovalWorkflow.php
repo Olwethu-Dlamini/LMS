@@ -1,12 +1,18 @@
 <?php
 require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../config/constants.php';
+require_once __DIR__ . '/Notifier.php';
 
 class ApprovalWorkflow {
     private PDO $db;
+    private Notifier $notifier;
 
     public function __construct(?PDO $db = null) {
         $this->db = $db ?? getDBConnection();
+        // Notices are raised after each commit, never inside the transaction:
+        // routing must not depend on them, and nobody should be told about an
+        // approval that was rolled back.
+        $this->notifier = new Notifier($this->db);
     }
 
     /**
@@ -147,6 +153,9 @@ class ApprovalWorkflow {
             ]);
 
             $this->db->commit();
+
+            $this->notifier->applicationSubmitted($appId);
+
             return [
                 'success' => true,
                 'application_no' => $appNo,
@@ -283,6 +292,9 @@ class ApprovalWorkflow {
             ]);
 
             $this->db->commit();
+
+            $this->notifier->decisionRecorded($applicationId, $action, $newStatus, $comments);
+
             return ['success' => true, 'new_status' => $newStatus];
         } catch (Exception $e) {
             $this->db->rollBack();
@@ -374,6 +386,9 @@ class ApprovalWorkflow {
             ]);
 
             $this->db->commit();
+
+            $this->notifier->applicationCancelled($applicationId, $isOwner, $currentStatus, $reason);
+
             return ['success' => true];
         } catch (Exception $e) {
             $this->db->rollBack();
