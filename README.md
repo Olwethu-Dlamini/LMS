@@ -68,6 +68,37 @@ mv docs/manual.docx docs/08_USER_MANUAL.docx
 
 ---
 
+## 📅 Coverage & Notifications
+
+**Team calendar** (`modules/leave/team_calendar.php`) — a server-rendered month per
+department: who is off each working day and how many that leaves away out of the
+team. Pending requests are shown in outline and counted, so a clash is visible
+before it is approved. Weekends and public holidays are never counted as absence.
+Employees see their own department without leave categories, since sick and
+maternity leave should not be disclosed to colleagues; managers see the
+departments they approve for; HR, executives and admins see any department.
+
+**Coverage limits** — `departments.max_concurrent_absences` sets how many members
+may be away at once, edited per department in the admin console. Calendar days turn
+amber on the limit and red past it, and every approval stage shows a notice saying
+whether *this* request is what tips the department over, or whether it was already
+short. Nothing is blocked: sick leave does not wait for a convenient rota.
+
+**In-app notifications** — a bell with an unread count in both navigation bars.
+Applicants hear about submission, each stage cleared, approval, rejection (with
+remarks) and cancellation; approvers hear when a request reaches their queue or is
+withdrawn from it. Recipients are derived from the workflow, so reassigning a
+department's head redirects future notices. Notices are raised after each commit
+and every write is guarded, so a notification problem can never roll back an
+approval. There is no email dependency.
+
+The shared engines are `helpers/LeaveCapacity.php` (who is away, and does that
+break cover), `helpers/Notifier.php` (who to tell, and what to say) and
+`helpers/DashboardInsights.php` (the dashboard figures). The day arithmetic and
+aggregation in each are pure functions, covered by the test suite.
+
+---
+
 ## 🛠️ Technology Stack
 
 - **Core**: PHP 8.0+ (PDO, Native Sessions, Clean Modular Component Architecture)
@@ -104,6 +135,27 @@ mv docs/manual.docx docs/08_USER_MANUAL.docx
 
 `APP_URL` in `config/constants.php` is `http://localhost:8000`; change it if you
 serve the app from a different host or port.
+
+### Upgrading an existing database
+
+`schema.sql` is the full current schema, applied only to a fresh install. An
+existing database is brought up to date with the numbered files in `migrations/`,
+applied in order:
+
+```bash
+mysql -u root -p lms_db < migrations/001-role-aware-routing.sql
+mysql -u root -p lms_db < migrations/002-calendar-and-notifications.sql
+```
+
+Each is safe to re-run and ends with a check query you can read to confirm it took.
+
+| Migration | What it does |
+|---|---|
+| `001-role-aware-routing` | Moves in-flight applications onto role-aware routing. No schema change. |
+| `002-calendar-and-notifications` | Adds `departments.max_concurrent_absences` and the `notifications` table. |
+
+Until `002` is applied, the portal keeps working: the notification bell stays
+hidden and the team calendar shows no coverage limits, rather than failing.
 
 ### Local UAT environment
 
