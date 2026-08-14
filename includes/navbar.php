@@ -109,6 +109,7 @@ $showHr           = has_role(ROLE_HR, false);
                 </ul>
 
                 <ul class="navbar-nav">
+                    <?php require __DIR__ . '/notification_bell.php'; ?>
                     <li class="nav-item">
                         <a class="nav-link" href="<?php echo APP_URL; ?>/modules/leave/apply.php">
                             <i class="ti-plus"></i>Apply
