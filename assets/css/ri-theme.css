@@ -630,7 +630,42 @@ hr { border-top: 1px solid var(--ri-grey-line); }
 .ri-notif-body { font-size: 12.5px; color: var(--ri-muted); margin-top: 3px; }
 .ri-notif-main { min-width: 0; }
 
-/* ---------- 17. responsive ---------------------------------------------- */
+/* ---------- 17. dashboard insight widgets ------------------------------- */
+.ri-nextleave-when { font-size: 17px; font-weight: 700; color: var(--ri-navy); }
+.ri-nextleave-count { font-size: 12.5px; font-weight: 600; color: var(--ri-teal); margin-top: 2px; }
+
+/* used / pending share of an entitlement */
+.ri-usebar {
+  display: flex; height: 7px; margin-top: 10px;
+  background: var(--ri-grey-line); border-radius: 4px; overflow: hidden;
+}
+.ri-usebar-used    { background: var(--ri-teal); }
+.ri-usebar-pending { background: #e9b949; }
+
+/* seven-day away strip */
+.ri-week { display: flex; gap: 6px; flex-wrap: wrap; }
+.ri-week-day {
+  flex: 1 1 0; min-width: 74px; padding: 7px 6px;
+  border: 1px solid var(--ri-grey-line); border-radius: 8px; background: #fafbfd;
+}
+.ri-week-at   { background: var(--ri-warning-bg); border-color: #f0dcae; }
+.ri-week-over { background: var(--ri-danger-bg); border-color: #f2c4c0; }
+.ri-week-date { font-size: 10.5px; text-transform: uppercase; letter-spacing: .5px; color: var(--ri-muted); }
+.ri-week-date span { display: block; font-size: 15px; font-weight: 700; color: var(--ri-navy); letter-spacing: 0; }
+.ri-week-count { font-size: 10.5px; font-weight: 700; color: var(--ri-muted); margin: 3px 0 5px; }
+.ri-week-who {
+  display: inline-block; font-size: 9.5px; font-weight: 700; color: var(--ri-white);
+  background: var(--ri-teal); border-radius: var(--ri-pill);
+  padding: 1px 6px; margin: 0 3px 3px 0;
+}
+
+/* per-department utilisation rows */
+.ri-util-row { padding: 10px 0; border-bottom: 1px solid var(--ri-grey-line); }
+.ri-util-row:last-of-type { border-bottom: none; }
+.ri-util-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+.ri-util-foot { display: flex; gap: 14px; flex-wrap: wrap; margin-top: 5px; }
+
+/* ---------- 18. responsive ---------------------------------------------- */
 @media (max-width: 991.98px) {
   .ri-nav .navbar-nav { padding: 8px 0 12px; }
   .ri-nav .nav-item > .nav-link,
