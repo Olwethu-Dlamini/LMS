@@ -8,6 +8,7 @@ require_once __DIR__ . '/../config/constants.php';
 require_once __DIR__ . '/../includes/functions.php';
 require_once __DIR__ . '/../helpers/LeaveCalculator.php';
 require_once __DIR__ . '/../helpers/ApprovalWorkflow.php';
+require_once __DIR__ . '/../helpers/LeaveCapacity.php';
 
 class LMS_TestCase {
     private int $passed = 0;
@@ -415,5 +416,102 @@ $tester->assert(next_emp_sequence(1005) === 1006, "Sequence increments from high
 $tester->assert(next_emp_sequence(null) === 1001, "Empty table starts the sequence at 1001");
 $tester->assert(next_emp_sequence(0) === 1001, "Sequence floor holds when no canonical IDs exist");
 $tester->assert(next_emp_sequence(2500) === 2501, "Sequence follows IDs above the seed range");
+
+echo "\n--- 10. Testing Team Capacity & Coverage Warnings ---\n";
+
+// Mon 2026-08-17 to Fri 2026-08-21, with the weekend either side and one holiday.
+$workingDates = LeaveCapacity::workingDatesBetween('2026-08-15', '2026-08-23', ['2026-08-19']);
+$tester->assert(
+    $workingDates === ['2026-08-17', '2026-08-18', '2026-08-20', '2026-08-21'],
+    "Working dates exclude weekends and public holidays",
+    implode(', ', $workingDates)
+);
+$tester->assert(
+    LeaveCapacity::workingDatesBetween('2026-08-22', '2026-08-23') === [],
+    "A weekend-only range contains no working dates"
+);
+$tester->assert(
+    LeaveCapacity::workingDatesBetween('2026-08-21', '2026-08-17') === [],
+    "An inverted range yields no dates rather than an error"
+);
+
+// Two IT staff (department 1) away, overlapping on the 18th, plus one in HR.
+$absenceRows = [
+    ['application_id' => 101, 'department_id' => 1, 'user_id' => 5,
+     'start_date' => '2026-08-17', 'end_date' => '2026-08-18', 'status' => STATUS_APPROVED],
+    ['application_id' => 102, 'department_id' => 1, 'user_id' => 6,
+     'start_date' => '2026-08-18', 'end_date' => '2026-08-21', 'status' => STATUS_PENDING_MANAGER],
+    ['application_id' => 103, 'department_id' => 2, 'user_id' => 7,
+     'start_date' => '2026-08-18', 'end_date' => '2026-08-18', 'status' => STATUS_APPROVED],
+];
+$byDay = LeaveCapacity::spreadAcrossDays($absenceRows, $workingDates);
+
+$tester->assert(
+    count($byDay['2026-08-17']) === 1 && count($byDay['2026-08-18']) === 3,
+    "Absences spread across every working day they cover",
+    "17th: " . count($byDay['2026-08-17']) . ", 18th: " . count($byDay['2026-08-18'])
+);
+$tester->assert(
+    array_key_exists('2026-08-19', $byDay) === false,
+    "The public holiday never appears as an absence day"
+);
+$tester->assert(
+    count($byDay['2026-08-20']) === 1 && count($byDay['2026-08-21']) === 1,
+    "A request running past a weekend still covers the days after it"
+);
+
+// Department 1 permits 1 absence at a time: the 18th has 2 and is a breach.
+$warnings = LeaveCapacity::capacityWarnings($byDay, 1, 1);
+$byDate = [];
+foreach ($warnings as $w) {
+    $byDate[$w['date']] = $w;
+}
+$tester->assert(
+    isset($byDate['2026-08-18']) && $byDate['2026-08-18']['state'] === LeaveCapacity::OVER_LIMIT
+    && $byDate['2026-08-18']['away'] === 2,
+    "Two away against a limit of one is flagged over limit",
+    json_encode($byDate['2026-08-18'] ?? null)
+);
+$tester->assert(
+    isset($byDate['2026-08-17']) && $byDate['2026-08-17']['state'] === LeaveCapacity::AT_LIMIT,
+    "Sitting exactly on the limit is reported as at limit, not a breach"
+);
+$tester->assert(
+    count($warnings) === 4,
+    "Only the department under test is counted, not the whole organisation",
+    "Warned on " . count($warnings) . " days"
+);
+$tester->assert(
+    count(LeaveCapacity::breachesOnly($warnings)) === 1,
+    "Breaches are the subset that exceed the limit"
+);
+$tester->assert(
+    LeaveCapacity::capacityWarnings($byDay, 1, null) === [],
+    "No configured limit means no warnings"
+);
+$tester->assert(
+    LeaveCapacity::capacityWarnings($byDay, 1, 5) === [],
+    "A generous limit leaves the calendar clean"
+);
+$tester->assert(
+    LeaveCapacity::capacityWarnings([], 1, 0) === [],
+    "A zero limit does not flag days on which nobody is away"
+);
+
+// Excluding the pending request shows what the department looked like before it.
+$withoutPending = LeaveCapacity::capacityWarnings($byDay, 1, 1, 102);
+$withoutDates = [];
+foreach ($withoutPending as $w) {
+    $withoutDates[$w['date']] = $w['state'];
+}
+$tester->assert(
+    ($withoutDates['2026-08-18'] ?? null) === LeaveCapacity::AT_LIMIT,
+    "Excluding a request drops it out of the count for that day",
+    json_encode($withoutDates)
+);
+$tester->assert(
+    isset($withoutDates['2026-08-17']) && !isset($withoutDates['2026-08-20']),
+    "Excluding a request clears the days only it covered"
+);
 
 exit($tester->summary());
