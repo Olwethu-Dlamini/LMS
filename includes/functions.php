@@ -143,6 +143,71 @@ function require_staff(): void {
 }
 
 /**
+ * SQL condition limiting leave applications to the people a line manager is
+ * accountable for: their own direct reports, plus everybody in a department they
+ * are the designated line manager of. The second half is what lets one manager
+ * head more than one department and see every request from all of them.
+ *
+ * The query using this must expose `users u` and a joined `departments d`.
+ * Pair it with manager_scope_params(); the two placeholders are deliberately
+ * distinct because native (non-emulated) prepares reject a named placeholder
+ * that appears twice.
+ */
+function manager_scope_clause(): string {
+    return '(u.manager_id = :scope_manager_id OR d.line_manager_id = :scope_dept_manager_id)';
+}
+
+/**
+ * Bound values for manager_scope_clause().
+ */
+function manager_scope_params(int $managerId): array {
+    return [
+        'scope_manager_id'      => $managerId,
+        'scope_dept_manager_id' => $managerId,
+    ];
+}
+
+/**
+ * Departments whose leave calendar a user may look at.
+ *
+ * Employees see the department they belong to and nothing else. A manager also
+ * sees every department they head and every department their direct reports sit
+ * in, so their coverage view matches their approval queue. HR, executives and
+ * administrators oversee the whole organisation, signalled by an empty array
+ * meaning "no restriction" - callers treat that as all departments.
+ *
+ * @return array{0:bool,1:int[]} [isUnrestricted, departmentIds]
+ */
+function visible_department_ids(PDO $db, int $userId, string $role, ?int $ownDepartmentId): array {
+    if (in_array($role, [ROLE_HR, ROLE_EXECUTIVE, ROLE_ADMIN], true)) {
+        return [true, []];
+    }
+
+    $ids = [];
+    if ($ownDepartmentId !== null) {
+        $ids[] = (int)$ownDepartmentId;
+    }
+
+    if ($role === ROLE_MANAGER) {
+        $stmt = $db->prepare("
+            SELECT d.id
+            FROM departments d
+            WHERE d.line_manager_id = :head_id
+            UNION
+            SELECT u.department_id
+            FROM users u
+            WHERE u.manager_id = :report_of_id AND u.department_id IS NOT NULL
+        ");
+        $stmt->execute(['head_id' => $userId, 'report_of_id' => $userId]);
+        foreach ($stmt->fetchAll(PDO::FETCH_COLUMN) as $deptId) {
+            $ids[] = (int)$deptId;
+        }
+    }
+
+    return [false, array_values(array_unique($ids))];
+}
+
+/**
  * Next employee ID in the EMP-#### sequence. Split into a pure helper so the
  * numbering rule is testable without a database.
  */
