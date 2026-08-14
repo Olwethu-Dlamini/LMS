@@ -10,6 +10,7 @@ require_once __DIR__ . '/../helpers/LeaveCalculator.php';
 require_once __DIR__ . '/../helpers/ApprovalWorkflow.php';
 require_once __DIR__ . '/../helpers/LeaveCapacity.php';
 require_once __DIR__ . '/../helpers/Notifier.php';
+require_once __DIR__ . '/../helpers/DashboardInsights.php';
 
 class LMS_TestCase {
     private int $passed = 0;
@@ -681,6 +682,77 @@ $tester->assert(
     && !in_array(5, $cancelRecipients, true),
     "Withdrawing a pending request tells the waiting approver, not the applicant who did it",
     json_encode($cancelDb->notifications)
+);
+
+echo "\n--- 12. Testing Dashboard Insight Figures ---\n";
+
+$tester->assert(
+    DashboardInsights::daysUntil('2026-08-20', '2026-08-14') === 6,
+    "Countdown counts whole days to the start date",
+    (string)DashboardInsights::daysUntil('2026-08-20', '2026-08-14')
+);
+$tester->assert(
+    DashboardInsights::daysUntil('2026-08-10', '2026-08-14') === -4,
+    "Leave already under way counts back, not forward"
+);
+$tester->assert(
+    DashboardInsights::countdownLabel(0) === 'starts today'
+    && DashboardInsights::countdownLabel(1) === 'starts tomorrow'
+    && DashboardInsights::countdownLabel(9) === 'starts in 9 days'
+    && DashboardInsights::countdownLabel(-2) === 'in progress',
+    "Countdown reads naturally at each boundary"
+);
+
+$tester->assert(
+    DashboardInsights::committedShare(20.0, 5.0, 5.0) === 0.5,
+    "Committed share counts taken and pending days together",
+    (string)DashboardInsights::committedShare(20.0, 5.0, 5.0)
+);
+$tester->assert(
+    DashboardInsights::committedShare(0.0, 0.0, 0.0) === 0.0,
+    "An unallocated entitlement reads as untouched rather than dividing by zero"
+);
+$tester->assert(
+    DashboardInsights::committedShare(10.0, 12.0, 0.0) === 1.0,
+    "Over-drawn leave caps at a full bar instead of overflowing it"
+);
+
+// Two departments: one healthy, one where people are banking leave and one
+// person has no allocation at all.
+$utilRows = [
+    ['department_id' => 1, 'department_name' => 'NOC',   'user_id' => 1, 'total' => 20, 'used' => 10, 'pending' => 0],
+    ['department_id' => 1, 'department_name' => 'NOC',   'user_id' => 2, 'total' => 20, 'used' => 1,  'pending' => 1],
+    ['department_id' => 1, 'department_name' => 'NOC',   'user_id' => 3, 'total' => 0,  'used' => 0,  'pending' => 0],
+    ['department_id' => 2, 'department_name' => 'Sales', 'user_id' => 4, 'total' => 20, 'used' => 20, 'pending' => 0],
+];
+$summary = DashboardInsights::summarise($utilRows);
+
+$tester->assert(
+    $summary[1]['members'] === 3 && $summary[1]['total'] === 40.0 && $summary[1]['used'] === 11.0,
+    "Departments are summed per member, including members with no allocation",
+    json_encode($summary[1])
+);
+$tester->assert(
+    round($summary[1]['share'], 4) === 0.3,
+    "Department share is committed days over allocated days",
+    (string)$summary[1]['share']
+);
+$tester->assert(
+    $summary[1]['low_usage'] === 1,
+    "Somebody on 10% of their allowance is flagged as banking leave",
+    (string)$summary[1]['low_usage']
+);
+$tester->assert(
+    $summary[1]['unallocated'] === 1 && $summary[1]['low_usage'] !== 2,
+    "A member with no allocation is counted as unallocated, not as banking leave"
+);
+$tester->assert(
+    $summary[2]['share'] === 1.0 && $summary[2]['low_usage'] === 0,
+    "A fully booked department is neither flagged nor mis-summed"
+);
+$tester->assert(
+    DashboardInsights::summarise([]) === [],
+    "No staff in scope produces no rows rather than an error"
 );
 
 exit($tester->summary());
