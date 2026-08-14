@@ -1,6 +1,8 @@
 <?php
 require_once __DIR__ . '/../../includes/functions.php';
 require_once __DIR__ . '/../../helpers/ApprovalWorkflow.php';
+require_once __DIR__ . '/../../helpers/LeaveCapacity.php';
+require_once __DIR__ . '/../../includes/coverage_notice.php';
 require_role([ROLE_HR, ROLE_ADMIN]);
 
 $db = getDBConnection();
@@ -47,6 +49,14 @@ $stmt = $db->query("
     ORDER BY a.created_at ASC
 ");
 $pendingApps = $stmt->fetchAll();
+
+// Coverage impact per request, so Stage 2 sees the same staffing picture the
+// line manager saw at Stage 1.
+$capacity = new LeaveCapacity($db);
+$coverage = [];
+foreach ($pendingApps as $app) {
+    $coverage[$app['id']] = $capacity->coverageImpact((int)$app['id']);
+}
 
 ob_start();
 ?>
@@ -102,7 +112,13 @@ ob_start();
                                     <span class="badge badge-primary">Executive &middot; your approval is final</span>
                                 <?php endif; ?>
                             </td>
-                            <td><?php echo htmlspecialchars($app['dept_name'] ?? 'N/A'); ?></td>
+                            <td>
+                                <?php echo htmlspecialchars($app['dept_name'] ?? 'N/A'); ?>
+                                <?php $badge = coverage_badge($coverage[$app['id']]); ?>
+                                <?php if ($badge !== ''): ?>
+                                    <small class="d-block mt-1"><?php echo $badge; ?></small>
+                                <?php endif; ?>
+                            </td>
                             <td><?php echo htmlspecialchars($app['leave_name']); ?></td>
                             <td>
                                 <small class="d-block font-weight-bold"><?php echo htmlspecialchars($app['start_date']); ?></small>
@@ -138,7 +154,20 @@ ob_start();
                                                     <p class="mb-1"><strong>Employee:</strong> <?php echo htmlspecialchars($app['first_name'] . ' ' . $app['last_name']); ?></p>
                                                     <p class="mb-1"><strong>Category:</strong> <?php echo htmlspecialchars($app['leave_name']); ?></p>
                                                     <p class="mb-3"><strong>Working Days:</strong> <?php echo number_format($app['total_days'], 1); ?> Days (<?php echo $app['start_date']; ?> to <?php echo $app['end_date']; ?>)</p>
-                                                    
+
+                                                    <?php echo coverage_notice($coverage[$app['id']]); ?>
+
+                                                    <?php if (($coverage[$app['id']]['limit'] ?? null) !== null): ?>
+                                                        <p class="mb-3">
+                                                            <a href="<?php echo APP_URL . '/modules/leave/team_calendar.php?month='
+                                                                . htmlspecialchars(date('Y-m', strtotime($app['start_date'])))
+                                                                . '&dept=' . (int)$coverage[$app['id']]['department_id']; ?>"
+                                                               target="_blank" class="btn btn-xs btn-outline-primary">
+                                                                <i class="ti-calendar"></i> Open the team calendar for these dates
+                                                            </a>
+                                                        </p>
+                                                    <?php endif; ?>
+
                                                     <div class="form-group mb-3">
                                                         <label class="font-weight-bold text-dark">HR Policy Remarks</label>
                                                         <textarea name="comments" class="form-control" rows="3" placeholder="Add HR compliance notes or remarks..."></textarea>
