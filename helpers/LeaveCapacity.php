@@ -32,10 +32,33 @@ class LeaveCapacity {
 
     private PDO $db;
     private LeaveCalculator $calculator;
+    /** Cached answer to "has migration 002 run?", per request. */
+    private ?bool $hasLimitColumn = null;
 
     public function __construct(?PDO $db = null) {
         $this->db = $db ?? getDBConnection();
         $this->calculator = new LeaveCalculator($this->db);
+    }
+
+    /**
+     * Whether departments.max_concurrent_absences exists.
+     *
+     * The dashboard is the landing page and reads capacity, so an installation
+     * that has pulled this code without running migration 002 would otherwise
+     * fatal on the first screen after login and lock everybody out. Instead the
+     * limit reads as unset: calendars and dashboards work, and no coverage
+     * warnings appear until the migration is applied.
+     */
+    private function limitColumnAvailable(): bool {
+        if ($this->hasLimitColumn === null) {
+            try {
+                $stmt = $this->db->query("SHOW COLUMNS FROM departments LIKE 'max_concurrent_absences'");
+                $this->hasLimitColumn = $stmt !== false && $stmt->fetch() !== false;
+            } catch (Throwable $e) {
+                $this->hasLimitColumn = false;
+            }
+        }
+        return $this->hasLimitColumn;
     }
 
     /**
@@ -283,7 +306,10 @@ class LeaveCapacity {
      * @return array<int, array{name:string, limit:int|null}>
      */
     public function departmentLimits(array $departmentIds = []): array {
-        $sql = "SELECT id, name, max_concurrent_absences FROM departments";
+        $limitColumn = $this->limitColumnAvailable()
+            ? 'max_concurrent_absences'
+            : 'NULL AS max_concurrent_absences';
+        $sql = "SELECT id, name, {$limitColumn} FROM departments";
         $params = [];
         if (!empty($departmentIds)) {
             $placeholders = [];
@@ -326,9 +352,12 @@ class LeaveCapacity {
      *               headcount:int, warnings:array, without_this:array, tips_over:array}
      */
     public function coverageImpact(int $applicationId): array {
+        $limitColumn = $this->limitColumnAvailable()
+            ? 'd.max_concurrent_absences'
+            : 'NULL AS max_concurrent_absences';
         $stmt = $this->db->prepare("
             SELECT a.start_date, a.end_date, u.department_id, d.name AS department_name,
-                   d.max_concurrent_absences
+                   {$limitColumn}
             FROM leave_applications a
             JOIN users u ON u.id = a.user_id
             LEFT JOIN departments d ON d.id = u.department_id

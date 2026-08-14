@@ -163,11 +163,11 @@ ob_start();
                                 : '<span class="badge badge-warning">Unassigned</span>'; ?></td>
                         <td><span class="badge badge-light"><?php echo (int)$d['member_count']; ?></span></td>
                         <td>
-                            <?php if ($d['max_concurrent_absences'] === null): ?>
+                            <?php if (($d['max_concurrent_absences'] ?? null) === null): ?>
                                 <span class="text-muted small">No limit</span>
                             <?php else: ?>
-                                <span class="badge badge-info"><?php echo (int)$d['max_concurrent_absences']; ?></span>
-                                <?php if ((int)$d['max_concurrent_absences'] >= (int)$d['member_count'] && (int)$d['member_count'] > 0): ?>
+                                <span class="badge badge-info"><?php echo (int)($d['max_concurrent_absences'] ?? 0); ?></span>
+                                <?php if ((int)($d['max_concurrent_absences'] ?? 0) >= (int)$d['member_count'] && (int)$d['member_count'] > 0): ?>
                                     <small class="d-block text-muted">
                                         Cannot be exceeded &mdash; it is not below the headcount
                                     </small>
@@ -217,7 +217,7 @@ ob_start();
                                                     <label>Maximum Away At Once</label>
                                                     <input type="number" name="max_concurrent_absences" class="form-control"
                                                            min="0" step="1" placeholder="Leave blank for no limit"
-                                                           value="<?php echo $d['max_concurrent_absences'] === null
+                                                           value="<?php echo ($d['max_concurrent_absences'] ?? null) === null
                                                                ? ''
                                                                : (int)$d['max_concurrent_absences']; ?>">
                                                     <small class="form-text text-muted">
