@@ -82,6 +82,57 @@ tile gives the days you have left, with the full breakdown underneath:
 | **Pending** | Days on requests still working through approval. They are held back so you cannot accidentally spend the same days twice. |
 | **Days available** | Total, minus used, minus pending. This is the number you can actually book. |
 
+The bar across each tile shows how much of that allocation is already committed —
+solid for days taken, amber for days still awaiting approval.
+
+Above the tiles:
+
+- **Your Next Leave** — your next approved dates and how long until they start.
+- **Away This Week** — the coming seven working days for your department, with the
+  initials of whoever is off and a count of how many that is out of the team.
+  Amber means the department has reached the number it is allowed to have away at
+  once; red means it has gone past it.
+
+Managers, HR and executives also get **Annual Leave Utilisation**: how much of the
+year's allocation each of their departments has committed, flagging staff who have
+booked almost nothing yet — they are the ones who come looking for three weeks in
+December — and anyone with no allocation at all, who cannot apply until HR runs the
+annual entitlement.
+
+### Notifications
+
+The **Alerts** bell in the navigation bar carries a red count of anything you have
+not read yet. You are notified when:
+
+- your request is submitted, so you have confirmation it was received;
+- it clears a stage, is fully approved, or is declined — with the approver's
+  remarks;
+- a request needs *your* approval;
+- a request in your queue is withdrawn by the person who made it;
+- HR or an administrator cancels a request of yours.
+
+Selecting a notification takes you to the request or queue it refers to and marks
+it read. **View all notifications** lists everything, newest first, with **Mark all
+as read**.
+
+> Notifications are in-app only. The system does not send email, so nothing
+> depends on a mail server being reachable.
+
+### The team calendar
+
+**Team Calendar** shows a month at a time for your department: who is off on each
+working day, and how many that leaves away out of the team. Weekends and public
+holidays are never counted as absence, and holidays are labelled so an empty day
+reads as a closure rather than as available cover.
+
+Requests still awaiting approval appear in outline and are counted, so a clash is
+visible before somebody signs it off.
+
+What you see depends on your role. Employees see their own department with names
+only — leave categories are withheld, because sick and maternity leave are nobody
+else's business. Managers see the departments they are responsible for, in full.
+HR, executives and administrators can select any department.
+
 ### Applying for leave
 
 1. Select **Apply** in the top bar, or **My Leave → Apply for Leave**.
@@ -204,11 +255,36 @@ ever sees it.
 5. Choose **Approve Stage 1** to pass it to HR, or **Reject Request** to decline
    it and release the days.
 
+### Protecting your cover
+
+Each department can be given a limit on how many people may be away on the same
+working day. Administrators set it; you see the consequences.
+
+When you open a request for review, the screen tells you what approving it would do
+to your cover:
+
+| Notice | Meaning |
+|---|---|
+| Green | The department stays within its limit. Nothing to weigh up. |
+| Amber — *takes the department to its limit* | Allowed, but it uses the last slot. No cover left if somebody falls ill. |
+| Amber — *already over its limit* | The department is short on those days whether or not you approve this one. Worth raising separately. |
+| Red — *leaves the department short* | **This request** is what pushes the department past its limit, on the days listed. |
+
+The queue itself flags the affected rows, so you can see which requests need a
+closer look without opening each one, and every notice links straight to the month
+on the team calendar.
+
+**Nothing is blocked.** Sick leave does not wait for a rota to be convenient, and
+the notice does not stop you approving anything — it makes sure you know what you
+are agreeing to. If a department has no limit configured, no notice appears.
+
 ### Whose leave you see
 
 Your queue is filtered to your own people. A request reaches you if the employee
 has you set as their **reporting manager**, or if you are the **designated head**
-of their department. You will never see another manager's team.
+of their department. You will never see another manager's team. The team calendar
+follows the same boundary, so you can see cover for every department you approve
+for — including a second department if you head more than one.
 
 > **You cannot approve your own leave.** The system blocks self-approval outright.
 > Your own requests go to whoever manages you, exactly like anyone else's.
@@ -354,6 +430,20 @@ A department cannot be deleted while people still belong to it — move them fir
 Holidays can be added, edited and removed freely, but a change only affects
 **future** calculations; leave that has already been submitted keeps the day count
 it was approved with.
+
+**Maximum Away At Once** sets how many of a department's members may be on leave on
+the same working day. It drives the shading on the team calendar and the coverage
+notice approvers see before they sign off.
+
+- Leave it **blank** for no limit. Nothing is shaded and no notice appears.
+- **Zero** means nobody may be away at all — accepted, if that is genuinely what
+  the department needs.
+- A limit that is **at or above the department's headcount** can never be exceeded;
+  the listing points this out, so you are not left wondering why no warning ever
+  appears.
+
+Set it below the headcount by the number of people the team can actually spare. A
+team of six that needs four on the floor has a limit of two.
 
 > **Administrators can approve at any stage.** An administrator can act on
 > Stage 1, 2 or 3. Use it to unblock a queue when an approver is away — but the
