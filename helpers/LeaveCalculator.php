@@ -52,14 +52,23 @@ class LeaveCalculator {
             $workingDays += 1.0;
         }
 
-        if ($workingDays > 0 && in_array($dayType, ['half_morning', 'half_afternoon', 'half'])) {
-            $workingDays -= 0.5;
-            if ($workingDays <= 0) {
-                $workingDays = 0.5;
-            }
+        // A half day is a property of one day, so it only applies to a request
+        // that covers one. Subtracting half from a longer range produced things
+        // like 4.5 days for a Monday-to-Friday booking: not a half day off, just
+        // half a day unaccounted for. Longer ranges are counted in full here and
+        // refused by validateEligibility(), which can say why.
+        if ($workingDays === 1.0 && self::isHalfDay($dayType)) {
+            $workingDays = 0.5;
         }
 
         return $workingDays;
+    }
+
+    /**
+     * Whether a duration selection means half a day.
+     */
+    public static function isHalfDay(string $dayType): bool {
+        return in_array($dayType, ['half_morning', 'half_afternoon', 'half'], true);
     }
 
     /**
@@ -120,14 +129,26 @@ class LeaveCalculator {
             return ['valid' => false, 'days' => 0, 'errors' => $errors];
         }
 
-        $isHalfDay = in_array($dayType, ['half_morning', 'half_afternoon', 'half'], true);
+        $isHalfDay = self::isHalfDay($dayType);
         if ($isHalfDay && (int)$leaveType['allow_half_day'] !== 1) {
             $errors[] = "{$leaveType['name']} must be taken as whole days.";
             $dayType = 'full';
+            $isHalfDay = false;
         }
 
         // 2. Compute working days
         $workingDays = $this->calculateWorkingDays($startDate, $endDate, $dayType);
+
+        // A half day only means something on a single day. Asking for half a day
+        // across a week is a mis-set form, and it used to submit quietly as the
+        // full range minus half a day.
+        if ($isHalfDay && $workingDays > 1.0) {
+            $errors[] = sprintf(
+                "A half day applies to a single day. This request covers %s working days, "
+                . "so choose Full Day(s) or set the start and end date to the same day.",
+                rtrim(rtrim(number_format($workingDays, 1), '0'), '.')
+            );
+        }
         if ($workingDays <= 0) {
             $errors[] = "Selected date range contains no working days (weekends or public holidays).";
             return ['valid' => false, 'days' => 0, 'errors' => $errors];
