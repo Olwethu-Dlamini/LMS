@@ -1,10 +1,30 @@
 <?php
-if (session_status() === PHP_SESSION_NONE) {
-    session_start();
-}
-
 require_once __DIR__ . '/../config/constants.php';
 require_once __DIR__ . '/../config/database.php';
+
+if (session_status() === PHP_SESSION_NONE) {
+    // Cookie rules are set here rather than left to php.ini, because the
+    // deployment cannot be relied on to have them and the cost of getting them
+    // wrong is somebody else's session. HttpOnly keeps script away from the
+    // cookie, SameSite=Lax stops another site posting as the signed-in user, and
+    // Secure is switched on whenever the request arrived over HTTPS - hardcoding
+    // it would lock out a plain-HTTP install and hardcoding it off would leak the
+    // cookie on the one that matters.
+    $isHttps = (!empty($_SERVER['HTTPS']) && strtolower($_SERVER['HTTPS']) !== 'off')
+        || (int)($_SERVER['SERVER_PORT'] ?? 0) === 443;
+
+    session_set_cookie_params([
+        'lifetime' => 0,
+        'path'     => '/',
+        'httponly' => true,
+        'samesite' => 'Lax',
+        'secure'   => $isHttps,
+    ]);
+    // Refuse a session id the server never issued, so one cannot be planted.
+    ini_set('session.use_strict_mode', '1');
+
+    session_start();
+}
 
 /**
  * Normalise a submitted value before it is stored.

@@ -197,3 +197,16 @@ CREATE TABLE IF NOT EXISTS `notifications` (
     KEY `idx_notifications_unread` (`user_id`, `read_at`),
     KEY `idx_notifications_recent` (`user_id`, `created_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- 10. Failed Sign-In Attempts
+-- Feeds the rate limit on the login form: too many failures for one email from
+-- one address inside the window and the door closes for a while. Successful
+-- sign-ins delete that caller's rows, and every write sweeps away expired ones,
+-- so this table stays small and is never a record of who signed in.
+CREATE TABLE IF NOT EXISTS `login_attempts` (
+    `id` INT AUTO_INCREMENT PRIMARY KEY,
+    `email` VARCHAR(150) NOT NULL,
+    `ip_address` VARCHAR(45) NOT NULL,
+    `attempted_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    INDEX `idx_login_attempts_lookup` (`email`, `ip_address`, `attempted_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
