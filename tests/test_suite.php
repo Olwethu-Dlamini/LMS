@@ -47,6 +47,26 @@ class ArrayMockPDO extends PDO {
     public array $holidays = [
         '2026-05-01' => 'Workers Day'
     ];
+    /**
+     * The leave type every rule lookup returns. Mirrors the configurable columns
+     * on leave_types so the calculator exercises the production code path, and is
+     * public so a test can reconfigure the policy - a category with no notice
+     * period, say - without a second mock.
+     */
+    public array $leaveType = [
+        'id'                        => 1,
+        'name'                      => 'Annual Leave',
+        'code'                      => 'ANN',
+        'max_days_per_year'         => 20,
+        'requires_attachment'       => 0,
+        'is_paid'                   => 1,
+        'min_days_per_request'      => 0.5,
+        'max_days_per_request'      => null,
+        'allow_half_day'            => 1,
+        'min_notice_days'           => 7,
+        'attachment_threshold_days' => 0.0,
+        'is_active'                 => 1,
+    ];
     /** user_id => role name, mirroring the seeded accounts in schema.sql */
     public array $roles = [
         1 => 'admin',
@@ -210,22 +230,7 @@ class ArrayMockPDO extends PDO {
                     return $this->pdo->entitlements[$key] ?? false;
                 }
                 if (stripos($this->query, 'FROM leave_types') !== false) {
-                    // Mirrors the configurable rule columns on leave_types so the
-                    // calculator exercises the same code path as production.
-                    return [
-                        'id'                        => 1,
-                        'name'                      => 'Annual Leave',
-                        'code'                      => 'ANN',
-                        'max_days_per_year'         => 20,
-                        'requires_attachment'       => 0,
-                        'is_paid'                   => 1,
-                        'min_days_per_request'      => 0.5,
-                        'max_days_per_request'      => null,
-                        'allow_half_day'            => 1,
-                        'min_notice_days'           => 7,
-                        'attachment_threshold_days' => 0.0,
-                        'is_active'                 => 1,
-                    ];
+                    return $this->pdo->leaveType;
                 }
                 if (stripos($this->query, 'JOIN roles') !== false) {
                     $uid = (int)($this->lastParams['id'] ?? 0);
@@ -299,6 +304,32 @@ $tester->assert($valValid['valid'] === true, "Leave Balance Eligibility Check - 
 
 $valOver = $calc->validateEligibility(5, 1, "2026-05-01", "2026-06-30"); // > 20 days
 $tester->assert($valOver['valid'] === false, "Leave Balance Eligibility Check - Over Balance Rejection");
+
+// Notice periods, and what a zero-notice category means. Sick leave is recorded
+// after the fact, so a type demanding no notice must accept a start date that
+// has already passed - the apply form's date picker is driven by the same rule.
+$noticeType = $mockDb->leaveType;
+
+$pastStart = date('Y-m-d', strtotime('last monday -1 week'));
+$pastEnd   = date('Y-m-d', strtotime($pastStart . ' +1 day'));
+$mockDb->entitlements['5_1_' . date('Y', strtotime($pastStart))] =
+    ['total_days' => 20.0, 'used_days' => 0.0, 'pending_days' => 0.0];
+
+$valBackdatedBlocked = $calc->validateEligibility(5, 1, $pastStart, $pastEnd);
+$tester->assert(
+    $valBackdatedBlocked['valid'] === false,
+    "A category demanding notice refuses a start date that has already passed"
+);
+
+$mockDb->leaveType = ['min_notice_days' => 0, 'name' => 'Sick Leave', 'code' => 'SICK'] + $noticeType;
+$valBackdated = $calc->validateEligibility(5, 1, $pastStart, $pastEnd);
+$tester->assert(
+    $valBackdated['valid'] === true,
+    "A category with no notice period accepts leave recorded after the fact",
+    implode(' | ', $valBackdated['errors'])
+);
+
+$mockDb->leaveType = $noticeType;
 
 echo "\n--- 3. Testing 3-Tier Approval Workflow Engine ---\n";
 $workflow = new ApprovalWorkflow($mockDb);

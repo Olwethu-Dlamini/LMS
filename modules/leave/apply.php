@@ -124,11 +124,15 @@ ob_start();
                     <div class="row">
                         <div class="col-md-4 form-group mb-4">
                             <label class="font-weight-bold text-dark">Start Date <span class="text-danger">*</span></label>
-                            <input type="date" name="start_date" id="start_date" class="form-control form-control-lg" min="<?php echo date('Y-m-d'); ?>" required value="<?php echo htmlspecialchars($_POST['start_date'] ?? ''); ?>">
+                            <!-- No min here: how far back a date may go is a property of the
+                                 leave type, applied by describeType() below. A category with no
+                                 notice period may be backdated, which is what lets sick leave be
+                                 recorded after the fact. -->
+                            <input type="date" name="start_date" id="start_date" class="form-control form-control-lg" required value="<?php echo htmlspecialchars($_POST['start_date'] ?? ''); ?>">
                         </div>
                         <div class="col-md-4 form-group mb-4">
                             <label class="font-weight-bold text-dark">End Date <span class="text-danger">*</span></label>
-                            <input type="date" name="end_date" id="end_date" class="form-control form-control-lg" min="<?php echo date('Y-m-d'); ?>" required value="<?php echo htmlspecialchars($_POST['end_date'] ?? ''); ?>">
+                            <input type="date" name="end_date" id="end_date" class="form-control form-control-lg" required value="<?php echo htmlspecialchars($_POST['end_date'] ?? ''); ?>">
                         </div>
                         <div class="col-md-4 form-group mb-4">
                             <label class="font-weight-bold text-dark">Duration Type <span class="text-danger">*</span></label>
@@ -260,8 +264,6 @@ document.addEventListener("DOMContentLoaded", function () {
         if (min > 0) bits.push("min " + min + " day(s) per request");
         if (max) bits.push("max " + max + " day(s) per request");
         bits.push(half ? "half-days allowed" : "whole days only");
-        typeRules.innerHTML = "<i class='ti-info-alt'></i> " + bits.join(" &middot; ");
-        typeRules.style.display = "block";
 
         Array.from(dayTypeSelect.options).forEach(function (o) {
             if (o.value.indexOf("half") === 0) o.disabled = !half;
@@ -270,6 +272,10 @@ document.addEventListener("DOMContentLoaded", function () {
             dayTypeSelect.value = "full";
         }
 
+        // The earliest bookable date is a property of the leave type. A type
+        // demanding notice pushes the floor forward; a type with no notice period
+        // has no floor at all, so sick leave can be recorded after the fact
+        // rather than being blocked by the date picker while the server allows it.
         if (notice > 0) {
             const d = new Date();
             d.setDate(d.getDate() + notice);
@@ -278,7 +284,14 @@ document.addEventListener("DOMContentLoaded", function () {
             endDateInput.min = earliest;
             if (startDateInput.value && startDateInput.value < earliest) startDateInput.value = "";
             if (endDateInput.value && endDateInput.value < earliest) endDateInput.value = "";
+        } else {
+            startDateInput.removeAttribute("min");
+            endDateInput.removeAttribute("min");
+            bits.push("may be backdated");
         }
+
+        typeRules.innerHTML = "<i class='ti-info-alt'></i> " + bits.join(" &middot; ");
+        typeRules.style.display = "block";
 
         attachHint.textContent = needsAtt
             ? (over > 0
