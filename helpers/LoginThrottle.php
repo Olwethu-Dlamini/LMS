@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/../config/database.php';
+require_once __DIR__ . '/../config/constants.php';
 
 /**
  * Rate limiting for the sign-in form.
@@ -16,6 +17,12 @@ require_once __DIR__ . '/../config/database.php';
  *
  * Successful sign-ins clear the count, so the limit is never felt by somebody
  * who simply mistyped once or twice.
+ *
+ * Currently SWITCHED OFF - see LOGIN_THROTTLE_ENABLED in config/constants.php.
+ * While the system is in testing, accounts are shared and passwords are guessed
+ * at deliberately, so the only person it ever locked out was the tester. The
+ * rules live on here rather than being deleted, because the day this system
+ * holds real staff records on a real network is the day it needs them.
  */
 class LoginThrottle {
     /** Failures allowed inside the window before the door closes. */
@@ -73,6 +80,19 @@ class LoginThrottle {
     }
 
     /**
+     * Whether rate limiting is switched on at all.
+     *
+     * LOGIN_THROTTLE_ENABLED in config/constants.php is the switch, and it is
+     * off during testing: shared accounts and deliberate wrong guesses lock out
+     * the tester rather than an attacker. Switched off, nothing is counted and
+     * nothing is ever refused - the table and the rules stay where they are,
+     * ready for the day it matters.
+     */
+    public static function enabled(): bool {
+        return defined('LOGIN_THROTTLE_ENABLED') && LOGIN_THROTTLE_ENABLED === true;
+    }
+
+    /**
      * Whether the attempts table exists.
      *
      * An installation that has pulled this code without running migration 004
@@ -98,7 +118,7 @@ class LoginThrottle {
      * @return array{failures:int, last_at:string|null}
      */
     public function recentFailures(string $email, string $ipAddress): array {
-        if (!$this->tableAvailable()) {
+        if (!self::enabled() || !$this->tableAvailable()) {
             return ['failures' => 0, 'last_at' => null];
         }
 
@@ -138,7 +158,7 @@ class LoginThrottle {
      * the form telling somebody their password was wrong.
      */
     public function recordFailure(string $email, string $ipAddress): void {
-        if (!$this->tableAvailable()) {
+        if (!self::enabled() || !$this->tableAvailable()) {
             return;
         }
         try {
@@ -156,7 +176,7 @@ class LoginThrottle {
      * anything older than the window so the table stays small on its own.
      */
     public function clear(string $email, string $ipAddress): void {
-        if (!$this->tableAvailable()) {
+        if (!self::enabled() || !$this->tableAvailable()) {
             return;
         }
         try {

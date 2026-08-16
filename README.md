@@ -247,11 +247,15 @@ a manager, only an admin can clear Stage 1 for them.
   cannot reach the rest of the app until they set their own password.
 - An admin password reset (**User Management → Password**) is always treated as
   temporary and re-raises that flag.
-- Sign-in is rate limited: five failures for the same address and email inside
-  fifteen minutes stops answering until the window passes. A successful sign-in
-  clears the count, so mistyping once or twice is never felt. Counting per email
-  *and* caller together is deliberate — per email alone would let anyone lock a
-  colleague out on purpose.
+- Sign-in rate limiting exists but is **switched off** while the system is in
+  testing — see `LOGIN_THROTTLE_ENABLED` in `config/constants.php`. Switched on,
+  five failures for the same address and email inside fifteen minutes stops
+  answering until the window passes, and a successful sign-in clears the count.
+  Counting per email *and* caller together is deliberate: per email alone would
+  let anyone lock a colleague out on purpose. **Turn it on before go-live.**
+- Password fields carry a show/hide eye, so a temporary password full of
+  punctuation can be checked before it is submitted rather than after being
+  locked out by it.
 
 ---
 
@@ -345,6 +349,9 @@ without the certificate it depends on.
 - [ ] Apply every migration in `migrations/`, in order.
 - [ ] Block `/uploads/` at the web server if you serve with nginx (Apache is
       covered by the `.htaccess` already in the directory).
+- [ ] Set `LOGIN_THROTTLE_ENABLED` to `true` in `config/constants.php`.
+- [ ] Re-issue everyone's password: `php tools/seed_employees.php --commit --reissue`.
+      UAT sets every account to `password123` for testing; that must not survive.
 - [ ] Turn `display_errors` **off** in production PHP config.
 - [ ] Assign every user a department, role and reporting manager.
 - [ ] Load the real public holiday calendar for the leave year.

@@ -104,8 +104,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                 <div class="form-group mb-4">
                     <label>Password</label>
-                    <input type="password" name="password" class="form-control" required
-                           autocomplete="current-password" placeholder="••••••••">
+                    <div class="ri-pwfield">
+                        <input type="password" name="password" class="form-control" required
+                               autocomplete="current-password" placeholder="••••••••" data-reveal>
+                    </div>
                 </div>
 
                 <button type="submit" class="btn btn-primary btn-block font-weight-bold py-2">
@@ -121,5 +123,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         </div>
     </div>
 </div>
+
+<script src="<?php echo APP_URL; ?>/assets/js/password-reveal.js"></script>
 </body>
 </html>

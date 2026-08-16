@@ -535,6 +535,30 @@ textarea.form-control { min-height: 90px; }
 .shadow-sm    { box-shadow: var(--ri-shadow) !important; }
 hr { border-top: 1px solid var(--ri-grey-line); }
 
+/* show/hide toggle on password fields (assets/js/password-reveal.js) */
+.ri-pwfield { position: relative; }
+/* Room for the button so a long password never runs underneath it. */
+.ri-pwfield .form-control { padding-right: 44px; }
+.ri-pwtoggle {
+    position: absolute;
+    top: 0;
+    right: 0;
+    height: 100%;
+    width: 42px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--ri-muted);
+    cursor: pointer;
+    line-height: 1;
+}
+.ri-pwtoggle:hover { color: var(--ri-navy); }
+.ri-pwtoggle:focus { outline: 2px solid var(--ri-navy); outline-offset: -2px; }
+.ri-pwtoggle[aria-pressed="true"] { color: var(--ri-navy); }
+
 /* password strength meter on the change-password screen */
 .ri-pwbar { height: 5px; border-radius: 3px; background: var(--ri-grey-line); overflow: hidden; margin-top: 8px; }
 .ri-pwbar span { display: block; height: 100%; width: 0; transition: width .25s, background .25s; }

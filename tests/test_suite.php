@@ -321,6 +321,17 @@ $tester->assert(
     && LoginThrottle::callerAddress(['HTTP_X_FORWARDED_FOR' => '1.2.3.4']) === 'unknown',
     "A forwarded-for header is never trusted as the caller's address"
 );
+// The switch, and the fact that the rules survive being switched off: the
+// arithmetic above still answers, it is simply never consulted.
+$tester->assert(
+    LoginThrottle::enabled() === LOGIN_THROTTLE_ENABLED,
+    "Rate limiting follows the LOGIN_THROTTLE_ENABLED switch"
+);
+$tester->assert(
+    LoginThrottle::enabled() === false,
+    "Rate limiting ships switched off for testing",
+    "LOGIN_THROTTLE_ENABLED is " . var_export(LOGIN_THROTTLE_ENABLED, true)
+);
 
 echo "\n--- 2. Testing LeaveCalculator Engine ---\n";
 $calc = new LeaveCalculator($mockDb);
