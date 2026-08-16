@@ -12,6 +12,7 @@ require_once __DIR__ . '/../helpers/LeaveCapacity.php';
 require_once __DIR__ . '/../helpers/Notifier.php';
 require_once __DIR__ . '/../helpers/DashboardInsights.php';
 require_once __DIR__ . '/../helpers/AttachmentStore.php';
+require_once __DIR__ . '/../helpers/LoginThrottle.php';
 
 class LMS_TestCase {
     private int $passed = 0;
@@ -289,6 +290,36 @@ $tester->assert(
     sanitize("bad\x00value\x07") === "badvalue",
     "Control characters are stripped before storage",
     sanitize("bad\x00value\x07")
+);
+
+// Sign-in rate limiting. The window runs from the most recent failure, so
+// somebody still guessing keeps the door shut and somebody who walked away
+// finds it open again.
+$tester->assert(
+    LoginThrottle::secondsToWait(4, '2026-09-09 10:00:00', '2026-09-09 10:00:30') === 0,
+    "Failures under the limit do not hold anybody up"
+);
+$tester->assert(
+    LoginThrottle::secondsToWait(5, '2026-09-09 10:00:00', '2026-09-09 10:00:30') === 870,
+    "The limit closes the door for the rest of the window",
+    (string)LoginThrottle::secondsToWait(5, '2026-09-09 10:00:00', '2026-09-09 10:00:30')
+);
+$tester->assert(
+    LoginThrottle::secondsToWait(9, '2026-09-09 10:00:00', '2026-09-09 10:20:00') === 0,
+    "Once the window has passed the door opens again"
+);
+$tester->assert(
+    LoginThrottle::secondsToWait(9, null, '2026-09-09 10:00:00') === 0,
+    "No recorded failure means nothing to wait for"
+);
+$tester->assert(
+    LoginThrottle::waitLabel(30) === 'a minute' && LoginThrottle::waitLabel(870) === '15 minutes',
+    "The wait is worded in whole minutes"
+);
+$tester->assert(
+    LoginThrottle::callerAddress(['REMOTE_ADDR' => '10.0.0.4']) === '10.0.0.4'
+    && LoginThrottle::callerAddress(['HTTP_X_FORWARDED_FOR' => '1.2.3.4']) === 'unknown',
+    "A forwarded-for header is never trusted as the caller's address"
 );
 
 echo "\n--- 2. Testing LeaveCalculator Engine ---\n";
