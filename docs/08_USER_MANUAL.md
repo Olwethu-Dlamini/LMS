@@ -63,6 +63,12 @@ top of any page. You will need your current password to set a new one.
 but it always arrives as a temporary one. You will be asked to set your own the
 next time you sign in.
 
+**If you are locked out** — after five failed attempts in a row the sign-in form
+stops answering for fifteen minutes. This protects your account from somebody
+guessing at it. Wait it out and try again, or ask IT to reset your password if
+you have genuinely forgotten it. Signing in successfully clears the count, so
+mistyping once or twice costs you nothing.
+
 ---
 
 ## 2. What everyone can do
@@ -82,6 +88,57 @@ tile gives the days you have left, with the full breakdown underneath:
 | **Pending** | Days on requests still working through approval. They are held back so you cannot accidentally spend the same days twice. |
 | **Days available** | Total, minus used, minus pending. This is the number you can actually book. |
 
+The bar across each tile shows how much of that allocation is already committed —
+solid for days taken, amber for days still awaiting approval.
+
+Above the tiles:
+
+- **Your Next Leave** — your next approved dates and how long until they start.
+- **Away This Week** — the coming seven working days for your department, with the
+  initials of whoever is off and a count of how many that is out of the team.
+  Amber means the department has reached the number it is allowed to have away at
+  once; red means it has gone past it.
+
+Managers, HR and executives also get **Annual Leave Utilisation**: how much of the
+year's allocation each of their departments has committed, flagging staff who have
+booked almost nothing yet — they are the ones who come looking for three weeks in
+December — and anyone with no allocation at all, who cannot apply until HR runs the
+annual entitlement.
+
+### Notifications
+
+The **Alerts** bell in the navigation bar carries a red count of anything you have
+not read yet. You are notified when:
+
+- your request is submitted, so you have confirmation it was received;
+- it clears a stage, is fully approved, or is declined — with the approver's
+  remarks;
+- a request needs *your* approval;
+- a request in your queue is withdrawn by the person who made it;
+- HR or an administrator cancels a request of yours.
+
+Selecting a notification takes you to the request or queue it refers to and marks
+it read. **View all notifications** lists everything, newest first, with **Mark all
+as read**.
+
+> Notifications are in-app only. The system does not send email, so nothing
+> depends on a mail server being reachable.
+
+### The team calendar
+
+**Team Calendar** shows a month at a time for your department: who is off on each
+working day, and how many that leaves away out of the team. Weekends and public
+holidays are never counted as absence, and holidays are labelled so an empty day
+reads as a closure rather than as available cover.
+
+Requests still awaiting approval appear in outline and are counted, so a clash is
+visible before somebody signs it off.
+
+What you see depends on your role. Employees see their own department with names
+only — leave categories are withheld, because sick and maternity leave are nobody
+else's business. Managers see the departments they are responsible for, in full.
+HR, executives and administrators can select any department.
+
 ### Applying for leave
 
 1. Select **Apply** in the top bar, or **My Leave → Apply for Leave**.
@@ -89,13 +146,21 @@ tile gives the days you have left, with the full breakdown underneath:
    that category's rules — notice required, minimum and maximum length, and
    whether half-days are allowed.
 3. Pick your **start** and **end** dates. If the category demands notice, the
-   date picker will not let you choose anything sooner.
+   date picker will not let you choose anything sooner. Categories that need no
+   notice — sick leave — have no such floor, so you can enter dates that have
+   already passed and record the leave after the fact.
 4. Choose a **duration type**: full days, or a half day (morning or afternoon).
    Half-day options are greyed out for categories that must be taken as whole days.
+   A half day applies to **one** day: if you want half a day off, set the start
+   and end date to the same date.
 5. Watch the **live summary**. It counts the working days, tells you your
    remaining balance, and warns you about anything that would block the request —
    before you submit.
-6. Give a **reason**, attach a document if the category needs one, and select
+6. Check the **cover panel** underneath it. If anyone else in your department is
+   already off on those dates it names them and says how many days each is out.
+   Where your department has a cover limit set, it also tells you whether your
+   request would take the team past it. See *Who else is away* below.
+7. Give a **reason**, attach a document if the category needs one, and select
    **Submit Application**.
 
 You are returned to your history with a confirmation and a reference number in
@@ -106,6 +171,34 @@ the form `LV-2026-XXXXXX`. Quote it if you need to ask about the request.
 > request over a week containing a holiday costs you four days, not five. A half
 > day costs 0.5.
 
+#### Who else is away
+
+The cover panel is advice, not a gate. Nothing it says will stop you submitting:
+sick leave cannot wait for a convenient rota, and your approver is the one who
+decides. What it does is put the staffing picture in front of the one person who
+can still move the dates cheaply — you, before the request is filed — instead of
+surfacing it days later as a rejection.
+
+| What it says | What it means |
+|---|---|
+| Names, in blue | Colleagues already off then. *Awaiting approval* marks a request that has not been decided yet, so it may still fall away. |
+| Amber | The department is already at or over its cover limit on some of those days, with or without you. |
+| Red | Your request is the one that would take the department past its limit. Move the dates if they can move; submit anyway if they cannot. |
+
+Leave categories are never shown for colleagues — only that they are away. The
+same rule applies on the team calendar, so nobody's sick or maternity leave is
+disclosed to the team.
+
+#### Supporting documents
+
+Documents you attach are private. Only you and the people who approve your
+request — your line manager, HR, the executive and system administrators — can
+open one. Colleagues who can see your absence on the team calendar cannot open
+the certificate behind it. PDF, JPG and PNG up to 5 MB are accepted.
+
+If a document fails to upload the whole request is refused rather than filed
+without it, so a certificate can never go missing quietly.
+
 ### Tracking and cancelling
 
 **My Leave → My Leave History** lists everything you have ever submitted with its
@@ -113,8 +206,13 @@ current status. Select **View Details** to see who has signed it off, when, and
 any remarks they left.
 
 **Cancel** withdraws a request. Cancel one that is still in approval and the held
-days return to your balance immediately. Cancel one that was already approved and
-the used days are given back.
+days return to your balance immediately. Cancel approved leave before it starts
+and the days are given back to you.
+
+Once leave has started you can no longer cancel it yourself and the button is
+gone: the days were taken, and handing them back afterwards would turn time off
+into credit. If the dates genuinely changed — you came back early, or never went
+— ask HR. They can correct it, and the correction is recorded in the audit log.
 
 ---
 
@@ -204,11 +302,36 @@ ever sees it.
 5. Choose **Approve Stage 1** to pass it to HR, or **Reject Request** to decline
    it and release the days.
 
+### Protecting your cover
+
+Each department can be given a limit on how many people may be away on the same
+working day. Administrators set it; you see the consequences.
+
+When you open a request for review, the screen tells you what approving it would do
+to your cover:
+
+| Notice | Meaning |
+|---|---|
+| Green | The department stays within its limit. Nothing to weigh up. |
+| Amber — *takes the department to its limit* | Allowed, but it uses the last slot. No cover left if somebody falls ill. |
+| Amber — *already over its limit* | The department is short on those days whether or not you approve this one. Worth raising separately. |
+| Red — *leaves the department short* | **This request** is what pushes the department past its limit, on the days listed. |
+
+The queue itself flags the affected rows, so you can see which requests need a
+closer look without opening each one, and every notice links straight to the month
+on the team calendar.
+
+**Nothing is blocked.** Sick leave does not wait for a rota to be convenient, and
+the notice does not stop you approving anything — it makes sure you know what you
+are agreeing to. If a department has no limit configured, no notice appears.
+
 ### Whose leave you see
 
 Your queue is filtered to your own people. A request reaches you if the employee
 has you set as their **reporting manager**, or if you are the **designated head**
-of their department. You will never see another manager's team.
+of their department. You will never see another manager's team. The team calendar
+follows the same boundary, so you can see cover for every department you approve
+for — including a second department if you head more than one.
 
 > **You cannot approve your own leave.** The system blocks self-approval outright.
 > Your own requests go to whoever manages you, exactly like anyone else's.
@@ -355,6 +478,20 @@ Holidays can be added, edited and removed freely, but a change only affects
 **future** calculations; leave that has already been submitted keeps the day count
 it was approved with.
 
+**Maximum Away At Once** sets how many of a department's members may be on leave on
+the same working day. It drives the shading on the team calendar and the coverage
+notice approvers see before they sign off.
+
+- Leave it **blank** for no limit. Nothing is shaded and no notice appears.
+- **Zero** means nobody may be away at all — accepted, if that is genuinely what
+  the department needs.
+- A limit that is **at or above the department's headcount** can never be exceeded;
+  the listing points this out, so you are not left wondering why no warning ever
+  appears.
+
+Set it below the headcount by the number of people the team can actually spare. A
+team of six that needs four on the floor has a limit of two.
+
 > **Administrators can approve at any stage.** An administrator can act on
 > Stage 1, 2 or 3. Use it to unblock a queue when an approver is away — but the
 > audit log records that it was you.
@@ -418,6 +555,8 @@ the apply form warns you about all of them before you submit.
 | **Overlapping dates** | You cannot hold two live requests covering the same day, even in different categories. Cancel the first one, or change the dates. |
 | **Missing document** | Sick leave over two days needs a certificate; maternity and paternity always do. Attach a PDF, JPG or PNG. |
 | **Half day on the wrong category** | Maternity, paternity and unpaid leave must be whole days. The half-day options are greyed out for them. |
+| **Half day across a range** | A half day belongs to one day. Choose half a day with a start and end date days apart and the form refuses it — set both dates to the same day instead. |
+| **Cancelling leave you are already taking** | Approved leave can be cancelled up to the day before it starts. From the first day onward only HR can correct it. |
 | **No working days in range** | A range covering only a weekend or only public holidays costs nothing, so there is nothing to approve. |
 | **Not enough left** | Remember that pending requests are already holding days. Your available figure is total minus used *minus pending*. |
 

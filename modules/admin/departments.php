@@ -11,14 +11,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $managerId = !empty($_POST['line_manager_id']) ? (int)$_POST['line_manager_id'] : null;
     $deptId    = (int)($_POST['dept_id'] ?? 0);
 
+    // Blank means "no limit", which is different from zero: zero would say
+    // nobody may ever be away. Both are accepted, an empty box is not treated
+    // as a mistake.
+    $rawLimit = trim((string)($_POST['max_concurrent_absences'] ?? ''));
+    $maxAway  = $rawLimit === '' ? null : (int)$rawLimit;
+    $limitInvalid = $rawLimit !== '' && (!ctype_digit($rawLimit) || $maxAway < 0);
+
     if (!verify_csrf_token($_POST['csrf_token'] ?? '')) {
         $error = 'Invalid security token.';
+    } elseif ($limitInvalid && in_array($action, ['create', 'edit'], true)) {
+        $error = 'The concurrent absence limit must be a whole number of people, or left blank for no limit.';
     } elseif ($action === 'create') {
         if ($name === '') {
             $error = 'Department name cannot be empty.';
         } else {
-            $stmt = $db->prepare("INSERT INTO departments (name, line_manager_id) VALUES (:name, :mgr_id)");
-            $stmt->execute(['name' => $name, 'mgr_id' => $managerId]);
+            $stmt = $db->prepare("
+                INSERT INTO departments (name, line_manager_id, max_concurrent_absences)
+                VALUES (:name, :mgr_id, :max_away)
+            ");
+            $stmt->execute(['name' => $name, 'mgr_id' => $managerId, 'max_away' => $maxAway]);
             set_flash('success', "Department '{$name}' created.");
             header('Location: ' . APP_URL . '/modules/admin/departments.php');
             exit;
@@ -27,8 +39,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($deptId <= 0 || $name === '') {
             $error = 'Please provide a valid department name.';
         } else {
-            $stmt = $db->prepare("UPDATE departments SET name = :name, line_manager_id = :mgr_id WHERE id = :id");
-            $stmt->execute(['name' => $name, 'mgr_id' => $managerId, 'id' => $deptId]);
+            $stmt = $db->prepare("
+                UPDATE departments
+                SET name = :name, line_manager_id = :mgr_id, max_concurrent_absences = :max_away
+                WHERE id = :id
+            ");
+            $stmt->execute(['name' => $name, 'mgr_id' => $managerId, 'max_away' => $maxAway, 'id' => $deptId]);
             set_flash('success', "Department '{$name}' updated.");
             header('Location: ' . APP_URL . '/modules/admin/departments.php');
             exit;
@@ -50,7 +66,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 header('Location: ' . APP_URL . '/modules/admin/departments.php');
                 exit;
             } catch (PDOException $e) {
-                $error = 'Error deleting department: ' . $e->getMessage();
+                $error = 'Error deleting department: ' . escape_html($e->getMessage());
             }
         }
     }
@@ -95,7 +111,7 @@ ob_start();
                         <label>Department Name *</label>
                         <input type="text" name="name" class="form-control" placeholder="e.g. Finance &amp; Operations" required>
                     </div>
-                    <div class="form-group mb-0">
+                    <div class="form-group mb-3">
                         <label>Designated Line Manager</label>
                         <select name="line_manager_id" class="form-control">
                             <option value="">-- None --</option>
@@ -103,6 +119,16 @@ ob_start();
                                 <option value="<?php echo (int)$m['id']; ?>"><?php echo htmlspecialchars($m['first_name'] . ' ' . $m['last_name'] . ' (' . $m['emp_id'] . ')'); ?></option>
                             <?php endforeach; ?>
                         </select>
+                    </div>
+                    <div class="form-group mb-0">
+                        <label>Maximum Away At Once</label>
+                        <input type="number" name="max_concurrent_absences" class="form-control" min="0" step="1"
+                               placeholder="Leave blank for no limit">
+                        <small class="form-text text-muted">
+                            How many members may be on leave on the same working day. The team calendar
+                            turns amber on days that reach this number and red on days that pass it, and
+                            approvers are warned before they sign off. Blank means no limit is enforced.
+                        </small>
                     </div>
                 </div>
                 <div class="modal-footer">
@@ -124,6 +150,7 @@ ob_start();
                         <th>Department</th>
                         <th>Designated Line Manager</th>
                         <th>Members</th>
+                        <th>Max Away At Once</th>
                         <th>Actions</th>
                     </tr>
                 </thead>
@@ -135,6 +162,18 @@ ob_start();
                                 ? htmlspecialchars($d['manager_name'])
                                 : '<span class="badge badge-warning">Unassigned</span>'; ?></td>
                         <td><span class="badge badge-light"><?php echo (int)$d['member_count']; ?></span></td>
+                        <td>
+                            <?php if (($d['max_concurrent_absences'] ?? null) === null): ?>
+                                <span class="text-muted small">No limit</span>
+                            <?php else: ?>
+                                <span class="badge badge-info"><?php echo (int)($d['max_concurrent_absences'] ?? 0); ?></span>
+                                <?php if ((int)($d['max_concurrent_absences'] ?? 0) >= (int)$d['member_count'] && (int)$d['member_count'] > 0): ?>
+                                    <small class="d-block text-muted">
+                                        Cannot be exceeded &mdash; it is not below the headcount
+                                    </small>
+                                <?php endif; ?>
+                            <?php endif; ?>
+                        </td>
                         <td class="ri-actions">
                             <button type="button" class="btn btn-xs btn-outline-primary mb-1"
                                     data-toggle="modal" data-target="#editDept<?php echo (int)$d['id']; ?>">
@@ -162,7 +201,7 @@ ob_start();
                                                     <input type="text" name="name" class="form-control" required
                                                            value="<?php echo htmlspecialchars($d['name']); ?>">
                                                 </div>
-                                                <div class="form-group mb-0">
+                                                <div class="form-group mb-3">
                                                     <label>Designated Line Manager</label>
                                                     <select name="line_manager_id" class="form-control">
                                                         <option value="">-- None --</option>
@@ -173,6 +212,18 @@ ob_start();
                                                             </option>
                                                         <?php endforeach; ?>
                                                     </select>
+                                                </div>
+                                                <div class="form-group mb-0">
+                                                    <label>Maximum Away At Once</label>
+                                                    <input type="number" name="max_concurrent_absences" class="form-control"
+                                                           min="0" step="1" placeholder="Leave blank for no limit"
+                                                           value="<?php echo ($d['max_concurrent_absences'] ?? null) === null
+                                                               ? ''
+                                                               : (int)$d['max_concurrent_absences']; ?>">
+                                                    <small class="form-text text-muted">
+                                                        Currently <?php echo (int)$d['member_count']; ?> member(s) in this
+                                                        department. Blank means no limit is enforced.
+                                                    </small>
                                                 </div>
                                             </div>
                                             <div class="modal-footer">

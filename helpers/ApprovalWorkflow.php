@@ -1,12 +1,18 @@
 <?php
 require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../config/constants.php';
+require_once __DIR__ . '/Notifier.php';
 
 class ApprovalWorkflow {
     private PDO $db;
+    private Notifier $notifier;
 
     public function __construct(?PDO $db = null) {
         $this->db = $db ?? getDBConnection();
+        // Notices are raised after each commit, never inside the transaction:
+        // routing must not depend on them, and nobody should be told about an
+        // approval that was rolled back.
+        $this->notifier = new Notifier($this->db);
     }
 
     /**
@@ -81,6 +87,56 @@ class ApprovalWorkflow {
     }
 
     /**
+     * Why a cancellation cannot go ahead, or null when it can.
+     *
+     * Pure, so the rule can be read and tested on its own.
+     *
+     * Anyone may withdraw a request that has not been decided, and may cancel
+     * approved leave they have not started taking - plans change, and that is
+     * the whole point of booking early. What nobody may do is cancel leave they
+     * have already begun: the days were taken, and handing them back to the
+     * balance afterwards turns time off into credit. HR and administrators can
+     * still do it, because a genuine correction has to be possible somewhere,
+     * and every one of those is written to the audit log.
+     *
+     * @param array $application status and start_date
+     * @param string|null $today injectable so the boundary can be tested
+     */
+    public static function cancellationRefusal(
+        array $application,
+        bool $isOwner,
+        string $userRole,
+        ?string $today = null
+    ): ?string {
+        $status = $application['status'] ?? '';
+
+        if (in_array($status, [STATUS_CANCELLED, STATUS_REJECTED], true)) {
+            return "Application is already {$status}.";
+        }
+
+        $isAuthorisedRole = in_array($userRole, [ROLE_HR, ROLE_ADMIN], true);
+        if (!$isOwner && !$isAuthorisedRole) {
+            return "Unauthorized: You do not have permission to cancel this application.";
+        }
+
+        if ($isAuthorisedRole) {
+            return null;
+        }
+
+        $startDate = $application['start_date'] ?? null;
+        if ($status === STATUS_APPROVED && $startDate !== null) {
+            $start = (new DateTime($startDate))->format('Y-m-d');
+            $now   = (new DateTime($today ?? 'today'))->format('Y-m-d');
+            if ($start <= $now) {
+                return "This leave has already started, so it can no longer be cancelled here. "
+                     . "Ask HR to correct it if the dates changed.";
+            }
+        }
+
+        return null;
+    }
+
+    /**
      * The applicant's role name, used to pick their routing.
      */
     private function roleOf(int $userId): string {
@@ -106,6 +162,53 @@ class ApprovalWorkflow {
 
             $appNo = 'LV-' . date('Y') . '-' . strtoupper(substr(uniqid(), -6));
             $year = (int)date('Y', strtotime($startDate));
+
+            // Re-check the two rules that depend on rows other requests can move,
+            // this time inside the transaction and holding the entitlement row.
+            //
+            // validateEligibility() runs before this against a snapshot nobody is
+            // holding, so two submissions racing each other - a double-clicked
+            // button is enough - both read the same balance, both find it
+            // sufficient, and both reserve against it. The result is a negative
+            // balance nobody can explain. Reading the row FOR UPDATE makes the
+            // second one queue behind the first and see what it did.
+            $stmtBalance = $this->db->prepare("
+                SELECT total_days, used_days, pending_days
+                FROM leave_entitlements
+                WHERE user_id = :user_id AND leave_type_id = :type_id AND year = :year
+                FOR UPDATE
+            ");
+            $stmtBalance->execute(['user_id' => $userId, 'type_id' => $leaveTypeId, 'year' => $year]);
+            $entitlement = $stmtBalance->fetch();
+
+            if (!$entitlement) {
+                throw new Exception("No leave balance allocation found for the year {$year}.");
+            }
+
+            $available = (float)$entitlement['total_days']
+                       - (float)$entitlement['used_days']
+                       - (float)$entitlement['pending_days'];
+            if ($totalDays > $available) {
+                throw new Exception(
+                    "Insufficient balance. Requested: {$totalDays} days, Available: {$available} days."
+                );
+            }
+
+            $stmtOverlap = $this->db->prepare("
+                SELECT COUNT(*) FROM leave_applications
+                WHERE user_id = :user_id
+                  AND status NOT IN ('rejected', 'cancelled')
+                  AND start_date <= :end_date
+                  AND end_date >= :start_date
+            ");
+            $stmtOverlap->execute([
+                'user_id'    => $userId,
+                'start_date' => $startDate,
+                'end_date'   => $endDate,
+            ]);
+            if ((int)$stmtOverlap->fetchColumn() > 0) {
+                throw new Exception("You already have an active leave request overlapping with this date range.");
+            }
 
             // Route the application by the applicant's own role, so senior staff
             // do not sit in a queue waiting for themselves.
@@ -147,6 +250,9 @@ class ApprovalWorkflow {
             ]);
 
             $this->db->commit();
+
+            $this->notifier->applicationSubmitted($appId);
+
             return [
                 'success' => true,
                 'application_no' => $appNo,
@@ -283,6 +389,9 @@ class ApprovalWorkflow {
             ]);
 
             $this->db->commit();
+
+            $this->notifier->decisionRecorded($applicationId, $action, $newStatus, $comments);
+
             return ['success' => true, 'new_status' => $newStatus];
         } catch (Exception $e) {
             $this->db->rollBack();
@@ -305,17 +414,14 @@ class ApprovalWorkflow {
                 throw new Exception("Leave application not found.");
             }
 
-            // Authorization check: Applicant, HR, or Admin
+            // Who may cancel what, and until when.
             $isOwner = ((int)$app['user_id'] === $userId);
-            $isAuthorizedRole = in_array($userRole, [ROLE_HR, ROLE_ADMIN]);
-            if (!$isOwner && !$isAuthorizedRole) {
-                throw new Exception("Unauthorized: You do not have permission to cancel this application.");
+            $refusal = self::cancellationRefusal($app, $isOwner, $userRole);
+            if ($refusal !== null) {
+                throw new Exception($refusal);
             }
 
             $currentStatus = $app['status'];
-            if (in_array($currentStatus, [STATUS_CANCELLED, STATUS_REJECTED])) {
-                throw new Exception("Application is already " . $currentStatus . ".");
-            }
 
             $totalDays = (float)$app['total_days'];
             $appUserId = (int)$app['user_id'];
@@ -374,6 +480,9 @@ class ApprovalWorkflow {
             ]);
 
             $this->db->commit();
+
+            $this->notifier->applicationCancelled($applicationId, $isOwner, $currentStatus, $reason);
+
             return ['success' => true];
         } catch (Exception $e) {
             $this->db->rollBack();

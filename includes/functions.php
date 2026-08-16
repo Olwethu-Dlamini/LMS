@@ -1,16 +1,62 @@
 <?php
-if (session_status() === PHP_SESSION_NONE) {
-    session_start();
-}
-
 require_once __DIR__ . '/../config/constants.php';
 require_once __DIR__ . '/../config/database.php';
 
+if (session_status() === PHP_SESSION_NONE) {
+    // Cookie rules are set here rather than left to php.ini, because the
+    // deployment cannot be relied on to have them and the cost of getting them
+    // wrong is somebody else's session. HttpOnly keeps script away from the
+    // cookie, SameSite=Lax stops another site posting as the signed-in user, and
+    // Secure is switched on whenever the request arrived over HTTPS - hardcoding
+    // it would lock out a plain-HTTP install and hardcoding it off would leak the
+    // cookie on the one that matters.
+    $isHttps = (!empty($_SERVER['HTTPS']) && strtolower($_SERVER['HTTPS']) !== 'off')
+        || (int)($_SERVER['SERVER_PORT'] ?? 0) === 443;
+
+    session_set_cookie_params([
+        'lifetime' => 0,
+        'path'     => '/',
+        'httponly' => true,
+        'samesite' => 'Lax',
+        'secure'   => $isHttps,
+    ]);
+    // Refuse a session id the server never issued, so one cannot be planted.
+    ini_set('session.use_strict_mode', '1');
+
+    session_start();
+}
+
 /**
- * Sanitize User Input for XSS Prevention
+ * Normalise a submitted value before it is stored.
+ *
+ * This used to HTML-escape as well, which sounds safer and was not: every
+ * screen escapes again on the way out, so the escaping happened twice and the
+ * second pass was the one people saw. "Sales & Marketing" was stored as
+ * "Sales &amp; Marketing" and rendered as "Sales &amp;amp; Marketing" - the
+ * department reads its own name wrong on every page, and an apostrophe in a
+ * leave reason arrives at the approver as &#039;.
+ *
+ * Escaping belongs at the point of output, where the target format is known.
+ * This function's job is only to remove what should never be stored: the
+ * surrounding whitespace, and the control characters that corrupt a log line or
+ * split a header.
  */
 function sanitize(string $data): string {
-    return htmlspecialchars(trim($data), ENT_QUOTES, 'UTF-8');
+    // Strip C0 controls and DEL, keeping tab, newline and carriage return so a
+    // multi-line reason survives intact.
+    $cleaned = preg_replace('/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/u', '', $data);
+    return trim($cleaned ?? $data);
+}
+
+/**
+ * Escape a value for output inside HTML.
+ *
+ * Every screen already calls htmlspecialchars() directly; this exists for the
+ * places that assemble a fragment before echoing it, so the escaping is not
+ * quietly forgotten when a variable is interpolated into a message.
+ */
+function escape_html(?string $value): string {
+    return htmlspecialchars((string)$value, ENT_QUOTES, 'UTF-8');
 }
 
 /**
@@ -140,6 +186,71 @@ function require_staff(): void {
         header('Location: ' . landing_url());
         exit;
     }
+}
+
+/**
+ * SQL condition limiting leave applications to the people a line manager is
+ * accountable for: their own direct reports, plus everybody in a department they
+ * are the designated line manager of. The second half is what lets one manager
+ * head more than one department and see every request from all of them.
+ *
+ * The query using this must expose `users u` and a joined `departments d`.
+ * Pair it with manager_scope_params(); the two placeholders are deliberately
+ * distinct because native (non-emulated) prepares reject a named placeholder
+ * that appears twice.
+ */
+function manager_scope_clause(): string {
+    return '(u.manager_id = :scope_manager_id OR d.line_manager_id = :scope_dept_manager_id)';
+}
+
+/**
+ * Bound values for manager_scope_clause().
+ */
+function manager_scope_params(int $managerId): array {
+    return [
+        'scope_manager_id'      => $managerId,
+        'scope_dept_manager_id' => $managerId,
+    ];
+}
+
+/**
+ * Departments whose leave calendar a user may look at.
+ *
+ * Employees see the department they belong to and nothing else. A manager also
+ * sees every department they head and every department their direct reports sit
+ * in, so their coverage view matches their approval queue. HR, executives and
+ * administrators oversee the whole organisation, signalled by an empty array
+ * meaning "no restriction" - callers treat that as all departments.
+ *
+ * @return array{0:bool,1:int[]} [isUnrestricted, departmentIds]
+ */
+function visible_department_ids(PDO $db, int $userId, string $role, ?int $ownDepartmentId): array {
+    if (in_array($role, [ROLE_HR, ROLE_EXECUTIVE, ROLE_ADMIN], true)) {
+        return [true, []];
+    }
+
+    $ids = [];
+    if ($ownDepartmentId !== null) {
+        $ids[] = (int)$ownDepartmentId;
+    }
+
+    if ($role === ROLE_MANAGER) {
+        $stmt = $db->prepare("
+            SELECT d.id
+            FROM departments d
+            WHERE d.line_manager_id = :head_id
+            UNION
+            SELECT u.department_id
+            FROM users u
+            WHERE u.manager_id = :report_of_id AND u.department_id IS NOT NULL
+        ");
+        $stmt->execute(['head_id' => $userId, 'report_of_id' => $userId]);
+        foreach ($stmt->fetchAll(PDO::FETCH_COLUMN) as $deptId) {
+            $ids[] = (int)$deptId;
+        }
+    }
+
+    return [false, array_values(array_unique($ids))];
 }
 
 /**
