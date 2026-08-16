@@ -101,14 +101,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                 <div class="form-group mb-3">
                     <label><?php echo $forced ? 'Temporary Password' : 'Current Password'; ?></label>
-                    <input type="password" name="current_password" class="form-control" required autofocus
-                           autocomplete="current-password" placeholder="Enter your current password">
+                    <div class="ri-pwfield">
+                        <input type="password" name="current_password" class="form-control" required autofocus
+                               autocomplete="current-password" placeholder="Enter your current password" data-reveal>
+                    </div>
                 </div>
 
                 <div class="form-group mb-2">
                     <label>New Password</label>
-                    <input type="password" name="new_password" id="newPw" class="form-control" required
-                           autocomplete="new-password" placeholder="Choose a new password">
+                    <div class="ri-pwfield">
+                        <input type="password" name="new_password" id="newPw" class="form-control" required
+                               autocomplete="new-password" placeholder="Choose a new password" data-reveal>
+                    </div>
                     <div class="ri-pwbar"><span id="pwBar"></span></div>
                     <ul class="ri-pwrules" id="pwRules">
                         <li data-rule="len">At least 10 characters</li>
@@ -120,8 +124,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                 <div class="form-group mb-4 mt-3">
                     <label>Confirm New Password</label>
-                    <input type="password" name="confirm_password" id="confirmPw" class="form-control" required
-                           autocomplete="new-password" placeholder="Re-enter the new password">
+                    <div class="ri-pwfield">
+                        <input type="password" name="confirm_password" id="confirmPw" class="form-control" required
+                               autocomplete="new-password" placeholder="Re-enter the new password" data-reveal>
+                    </div>
                     <small class="form-text text-danger" id="matchMsg" style="display:none;">
                         Passwords do not match.
                     </small>
@@ -185,5 +191,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     confirmPw.addEventListener('input', checkMatch);
 })();
 </script>
+<script src="<?php echo APP_URL; ?>/assets/js/password-reveal.js"></script>
 </body>
 </html>
