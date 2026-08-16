@@ -72,7 +72,7 @@ ob_start();
 <div class="alert alert-info mb-4">
     <i class="ti-info-alt"></i> Dates listed here are excluded from every working-day
     calculation. Editing or removing a holiday changes the duration of
-    <strong>future</strong> calculations only &mdash; leave already submitted keeps the
+    <strong>future</strong> calculations only. Leave already submitted keeps the
     day count it was approved with.
 </div>
 

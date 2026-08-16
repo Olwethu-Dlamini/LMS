@@ -109,7 +109,7 @@ ob_start();
 <?php if ($chainBroken): ?>
 <div class="card border-danger">
     <div class="card-header bg-danger text-white">
-        <i class="ti-alert"></i> Approval chain incomplete &mdash; leave requests will stall
+        <i class="ti-alert"></i> Approval chain incomplete: leave requests will stall
     </div>
     <div class="card-body">
         <ul class="list-unstyled mb-0">
@@ -118,8 +118,8 @@ ob_start();
                     <span>
                         <span class="badge badge-danger mr-2">!</span>
                         <strong>No active HR account.</strong> Stage&nbsp;2 has no approver, so every
-                        request &mdash; including a manager's or an executive's, which enter at
-                        Stage&nbsp;2 &mdash; will stop there. Assign the HR role to someone.
+                        request, including a manager's or an executive's, which enter at
+                        Stage&nbsp;2, will stop there. Assign the HR role to someone.
                     </span>
                     <a href="<?php echo APP_URL; ?>/modules/admin/users.php" class="btn btn-sm btn-danger">Assign HR role</a>
                 </li>

@@ -151,7 +151,7 @@ ob_start();
                                     </div>
                                 <?php elseif ($app['status'] === STATUS_APPROVED): ?>
                                     <span class="small text-muted d-inline-block" style="max-width: 220px;">
-                                        Under way &mdash; ask HR to correct it.
+                                        Under way. Ask HR to correct it.
                                     </span>
                                 <?php endif; ?>
                             </td>
