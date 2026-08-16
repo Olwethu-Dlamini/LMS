@@ -72,7 +72,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 header('Location: ' . APP_URL . '/modules/admin/leave_types.php');
                 exit;
             } catch (PDOException $e) {
-                $error = 'Error adding leave category: ' . $e->getMessage();
+                $error = 'Error adding leave category: ' . escape_html($e->getMessage());
             }
         }
     } elseif ($action === 'edit') {
@@ -106,7 +106,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 header('Location: ' . APP_URL . '/modules/admin/leave_types.php');
                 exit;
             } catch (PDOException $e) {
-                $error = 'Error updating leave category: ' . $e->getMessage();
+                $error = 'Error updating leave category: ' . escape_html($e->getMessage());
             }
         }
     } elseif ($action === 'retire') {
@@ -140,7 +140,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 header('Location: ' . APP_URL . '/modules/admin/leave_types.php');
                 exit;
             } catch (PDOException $e) {
-                $error = 'Error deleting leave category: ' . $e->getMessage();
+                $error = 'Error deleting leave category: ' . escape_html($e->getMessage());
             }
         }
     }

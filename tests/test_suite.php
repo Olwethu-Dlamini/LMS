@@ -262,7 +262,34 @@ $token = generate_csrf_token();
 $tester->assert(!empty($token), "CSRF Token Generation");
 $tester->assert(verify_csrf_token($token), "CSRF Token Verification Success");
 $tester->assert(!verify_csrf_token("invalid_token"), "CSRF Token Verification Rejection");
-$tester->assert(sanitize("<script>alert('xss');</script>") === "&lt;script&gt;alert(&#039;xss&#039;);&lt;/script&gt;", "Input XSS Sanitization");
+// Escaping happens on output, not on input: escaping in both places is what
+// made "Sales & Marketing" render as "Sales &amp; Marketing" on every screen.
+$tester->assert(
+    escape_html("<script>alert('xss');</script>") === "&lt;script&gt;alert(&#039;xss&#039;);&lt;/script&gt;",
+    "Output escaping neutralises markup"
+);
+$tester->assert(
+    sanitize("  Sales & Marketing  ") === "Sales & Marketing",
+    "Stored text keeps the characters people typed",
+    sanitize("  Sales & Marketing  ")
+);
+$tester->assert(
+    sanitize("Mum's 60th") === "Mum's 60th",
+    "An apostrophe survives storage instead of arriving as an entity"
+);
+$tester->assert(
+    escape_html(sanitize("<b>hi</b>")) === "&lt;b&gt;hi&lt;/b&gt;",
+    "Markup typed into a form is still inert once escaped for display"
+);
+$tester->assert(
+    sanitize("line one\nline two") === "line one\nline two",
+    "A multi-line reason keeps its line breaks"
+);
+$tester->assert(
+    sanitize("bad\x00value\x07") === "badvalue",
+    "Control characters are stripped before storage",
+    sanitize("bad\x00value\x07")
+);
 
 echo "\n--- 2. Testing LeaveCalculator Engine ---\n";
 $calc = new LeaveCalculator($mockDb);
