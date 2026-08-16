@@ -298,6 +298,26 @@ $tester->assert($days3 === 1.0, "Public Holiday Exclusion (Thu-Fri with Fri holi
 $daysHalf = $calc->calculateWorkingDays("2026-05-04", "2026-05-04", "half_morning");
 $tester->assert($daysHalf === 0.5, "Half Day Duration Calculation", "Got {$daysHalf}");
 
+// A half day belongs to one day. Across a range it used to quietly subtract
+// half a day from the total, so a Mon-Fri request came to 4.5.
+$daysHalfRange = $calc->calculateWorkingDays("2026-05-04", "2026-05-08", "half_morning");
+$tester->assert(
+    $daysHalfRange === 5.0,
+    "A half day across a multi-day range is counted in full, not as a week minus half a day",
+    "Got {$daysHalfRange}"
+);
+$valHalfRange = $calc->validateEligibility(5, 1, $futStart, $futEnd, null, 'half_morning');
+$tester->assert(
+    $valHalfRange['valid'] === false,
+    "A half day spanning several days is refused rather than silently reinterpreted"
+);
+$valHalfSingle = $calc->validateEligibility(5, 1, $futStart, $futStart, null, 'half_afternoon');
+$tester->assert(
+    $valHalfSingle['valid'] === true && $valHalfSingle['days'] === 0.5,
+    "A half day on a single day is still accepted",
+    implode(' | ', $valHalfSingle['errors'])
+);
+
 // Validation eligibility check
 $valValid = $calc->validateEligibility(5, 1, $futStart, $futEnd);
 $tester->assert($valValid['valid'] === true, "Leave Balance Eligibility Check - Valid");
