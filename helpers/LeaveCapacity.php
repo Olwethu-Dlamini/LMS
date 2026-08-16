@@ -174,6 +174,25 @@ class LeaveCapacity {
     }
 
     /**
+     * The same day map with one more person away on every day of it.
+     *
+     * Pure. This is how a request that does not exist yet is costed: the
+     * applicant is added to the days they are asking for, and the result is
+     * measured with capacityWarnings() exactly as a stored application would be.
+     *
+     * @param array<string, array> $byDay from spreadAcrossDays()
+     * @param array $absence the row to add, carrying at least department_id
+     * @return array<string, array> a new map; the one passed in is untouched
+     */
+    public static function withExtraAbsence(array $byDay, array $absence): array {
+        foreach ($byDay as $date => $absences) {
+            $absences[] = $absence;
+            $byDay[$date] = $absences;
+        }
+        return $byDay;
+    }
+
+    /**
      * The warnings from capacityWarnings() that are outright breaches.
      */
     public static function breachesOnly(array $warnings): array {
@@ -335,6 +354,129 @@ class LeaveCapacity {
             ];
         }
         return $limits;
+    }
+
+    /**
+     * Who else in somebody's department is away over a range, and what booking
+     * it would do to cover.
+     *
+     * This is coverageImpact() asked one step earlier: before the request
+     * exists, while the person is still choosing dates. An applicant should not
+     * have to submit and wait for a manager to find out that two colleagues are
+     * already off that week - the calendar has always held the answer, but only
+     * approvers were ever shown it.
+     *
+     * Nothing here blocks anything. It is the same "you should know what you are
+     * about to do" notice the approval queues carry, given to the person who can
+     * still move the dates.
+     *
+     * @return array{department_id:int|null, department_name:string|null, limit:int|null,
+     *                headcount:int, colleagues:array, warnings:array, tips_over:array,
+     *                already_over:array}
+     */
+    public function prospectiveImpact(int $userId, string $startDate, string $endDate): array {
+        $empty = [
+            'department_id'   => null,
+            'department_name' => null,
+            'limit'           => null,
+            'headcount'       => 0,
+            'colleagues'      => [],
+            'warnings'        => [],
+            'tips_over'       => [],
+            'already_over'    => [],
+        ];
+
+        if (strtotime($startDate) === false || strtotime($endDate) === false
+            || strtotime($startDate) > strtotime($endDate)) {
+            return $empty;
+        }
+
+        $limitColumn = $this->limitColumnAvailable()
+            ? 'd.max_concurrent_absences'
+            : 'NULL AS max_concurrent_absences';
+        $stmt = $this->db->prepare("
+            SELECT u.department_id, d.name AS department_name, {$limitColumn}
+            FROM users u
+            LEFT JOIN departments d ON d.id = u.department_id
+            WHERE u.id = :id
+        ");
+        $stmt->execute(['id' => $userId]);
+        $user = $stmt->fetch();
+
+        if (!$user || $user['department_id'] === null) {
+            // Nobody to be short-handed with.
+            return $empty;
+        }
+
+        $departmentId = (int)$user['department_id'];
+        $limit = $user['max_concurrent_absences'] === null
+            ? null
+            : (int)$user['max_concurrent_absences'];
+
+        $byDay = $this->absencesInRange([$departmentId], $startDate, $endDate);
+        if (empty($byDay)) {
+            // No working days in the range at all.
+            return $empty;
+        }
+
+        // Who is already away, folded to one entry per person with the days they
+        // are out, because a colleague listed once per day reads as a crowd.
+        $colleagues = [];
+        foreach ($byDay as $date => $absences) {
+            foreach ($absences as $absence) {
+                if ((int)($absence['department_id'] ?? 0) !== $departmentId
+                    || (int)($absence['user_id'] ?? 0) === $userId) {
+                    continue;
+                }
+                $key = (int)$absence['user_id'];
+                if (!isset($colleagues[$key])) {
+                    $colleagues[$key] = [
+                        'name'     => $absence['name'],
+                        'pending'  => $absence['status'] !== STATUS_APPROVED,
+                        'dates'    => [],
+                    ];
+                }
+                $colleagues[$key]['dates'][] = $date;
+                // A person with any pending request among their absences is
+                // shown as pending, so the count is never read as settled.
+                if ($absence['status'] !== STATUS_APPROVED) {
+                    $colleagues[$key]['pending'] = true;
+                }
+            }
+        }
+
+        $withMe = self::withExtraAbsence($byDay, [
+            'application_id' => 0,
+            'user_id'        => $userId,
+            'department_id'  => $departmentId,
+            'status'         => STATUS_PENDING_MANAGER,
+        ]);
+
+        $warnings = self::capacityWarnings($withMe, $departmentId, $limit);
+        $current  = self::capacityWarnings($byDay, $departmentId, $limit);
+
+        $alreadyOver = self::breachesOnly($current);
+        $breachedNow = [];
+        foreach ($alreadyOver as $warning) {
+            $breachedNow[$warning['date']] = true;
+        }
+        $tipsOver = array_values(array_filter(
+            self::breachesOnly($warnings),
+            function (array $warning) use ($breachedNow) {
+                return !isset($breachedNow[$warning['date']]);
+            }
+        ));
+
+        return [
+            'department_id'   => $departmentId,
+            'department_name' => $user['department_name'],
+            'limit'           => $limit,
+            'headcount'       => $this->headcounts([$departmentId])[$departmentId] ?? 0,
+            'colleagues'      => array_values($colleagues),
+            'warnings'        => $warnings,
+            'tips_over'       => $tipsOver,
+            'already_over'    => $alreadyOver,
+        ];
     }
 
     /**

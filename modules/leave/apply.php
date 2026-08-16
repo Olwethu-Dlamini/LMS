@@ -161,6 +161,16 @@ ob_start();
                         </div>
                     </div>
 
+                    <!-- Who else is already away over these dates. Filled by the same
+                         live lookup as the day count; hidden until there is something
+                         to say. This is the coverage notice approvers see, given to the
+                         person who can still move the dates. -->
+                    <div id="coverageCard" class="alert mb-4" style="display: none;">
+                        <div class="font-weight-bold" id="coverageHeadline"></div>
+                        <div class="small mt-1" id="coverageDetail"></div>
+                        <ul class="small mb-0 mt-2 pl-3" id="coveragePeople"></ul>
+                    </div>
+
                     <div class="form-group mb-4">
                         <label class="font-weight-bold text-dark">Reason for Leave <span class="text-danger">*</span></label>
                         <textarea name="reason" class="form-control" rows="4" placeholder="Provide clear justification for your leave request..." required><?php echo htmlspecialchars($_POST['reason'] ?? ''); ?></textarea>
@@ -223,16 +233,91 @@ document.addEventListener("DOMContentLoaded", function () {
                             errorBox.style.display = "block";
                             errorBox.innerHTML = "⚠️ " + data.errors.join("<br>⚠️ ");
                         }
+
+                        showCoverage(data.coverage);
                     } else {
                         previewText.innerHTML = "Unable to compute duration.";
+                        showCoverage(null);
                     }
                 })
                 .catch(err => {
                     previewText.innerHTML = "Error calculating days.";
+                    showCoverage(null);
                 });
         } else {
             previewCard.style.display = "none";
+            showCoverage(null);
         }
+    }
+
+    // Cover over the requested dates. Nothing here blocks a submission - leave
+    // that cannot move must still be bookable - but nobody should have to wait
+    // for a manager to find out their whole team is already off that week.
+    const coverageCard = document.getElementById("coverageCard");
+    const coverageHeadline = document.getElementById("coverageHeadline");
+    const coverageDetail = document.getElementById("coverageDetail");
+    const coveragePeople = document.getElementById("coveragePeople");
+
+    function dayWord(n) {
+        return n === 1 ? "1 day" : n + " days";
+    }
+
+    function showCoverage(coverage) {
+        coveragePeople.innerHTML = "";
+        if (!coverage || !coverage.department) {
+            coverageCard.style.display = "none";
+            return;
+        }
+
+        const people = coverage.colleagues || [];
+        const tipsOver = (coverage.tips_over || []).length;
+        const alreadyOver = (coverage.already_over || []).length;
+
+        if (people.length === 0 && tipsOver === 0 && alreadyOver === 0) {
+            // Nobody else is off and cover is not in question: saying so would
+            // be noise on every ordinary request.
+            coverageCard.style.display = "none";
+            return;
+        }
+
+        let tone = "alert-info";
+        let headline = people.length === 1
+            ? "1 colleague in " + coverage.department + " is already away on these dates."
+            : people.length + " colleagues in " + coverage.department + " are already away on these dates.";
+        let detail = "";
+
+        if (tipsOver > 0) {
+            tone = "alert-danger";
+            headline = "This would leave " + coverage.department + " short of cover.";
+            detail = "On " + dayWord(tipsOver) + " of this request, more than " + coverage.limit
+                + " of " + coverage.headcount + " would be away. You can still submit it - "
+                + "your approver decides - but consider moving the dates if they can move.";
+        } else if (alreadyOver > 0) {
+            tone = "alert-warning";
+            headline = coverage.department + " is already over its cover limit on these dates.";
+            detail = "More than " + coverage.limit + " of " + coverage.headcount
+                + " are away on " + dayWord(alreadyOver) + " of this range, with or without your request.";
+        } else if ((coverage.at_limit || []).length > 0) {
+            tone = "alert-warning";
+            detail = "This takes the department to its limit of " + coverage.limit
+                + " away at a time. Allowed, but it leaves no cover spare.";
+        } else {
+            detail = "Cover still holds"
+                + (coverage.limit !== null ? " - the limit is " + coverage.limit + " away at a time." : ".");
+        }
+
+        coverageCard.className = "alert mb-4 " + tone;
+        coverageHeadline.textContent = headline;
+        coverageDetail.textContent = detail;
+
+        people.forEach(function (person) {
+            const li = document.createElement("li");
+            li.textContent = person.name + " - " + dayWord(person.days)
+                + (person.pending ? " (awaiting approval)" : "");
+            coveragePeople.appendChild(li);
+        });
+
+        coverageCard.style.display = "block";
     }
 
     startDateInput.addEventListener("change", checkDays);
