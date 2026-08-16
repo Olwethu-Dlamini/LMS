@@ -72,11 +72,12 @@ mv docs/manual.docx docs/08_USER_MANUAL.docx
 
 **Team calendar** (`modules/leave/team_calendar.php`) — a server-rendered month per
 department: who is off each working day and how many that leaves away out of the
-team. Approved leave and requests still awaiting a decision are drawn, counted and
-labelled apart — solid against the headcount for the first, dashed and counted as
-`+n` for the second — because a day reading "3 away" is unplannable when one of
-them is off and two have only asked. A legend names both. Your own entries read
-"You". Weekends and public holidays are never counted as absence.
+team. Approved leave and requests still awaiting a decision are drawn and labelled
+apart, each as a filled chip saying its state in words — *Approved*, or
+*Requested · not yet approved*. Only approved leave is counted against the
+headcount: a day reading "3 away" is unplannable when one of them is off and two
+have only asked. A legend names both. Your own entries read "You". Weekends and
+public holidays are never counted as absence.
 Employees see their own department without leave categories, since sick and
 maternity leave should not be disclosed to colleagues; managers see the
 departments they approve for; HR, executives and admins see any department.
