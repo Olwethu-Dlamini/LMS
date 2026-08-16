@@ -337,6 +337,11 @@ footer.end{
         <span class="tag">If IT resets your password</span>
         <p>An administrator can issue you a new password, but it always arrives as a temporary one. You will be asked to set your own the next time you sign in.</p>
       </div>
+
+      <div class="note">
+        <span class="tag">If you are locked out</span>
+        <p>After five failed attempts in a row the sign-in form stops answering for fifteen minutes. This protects your account from somebody guessing at it. Wait it out and try again, or ask IT to reset your password if you have genuinely forgotten it. Signing in successfully clears the count, so mistyping once or twice costs you nothing.</p>
+      </div>
     </section>
 
     <!-- ================= EVERYONE ================= -->
@@ -358,9 +363,10 @@ footer.end{
       <ol class="steps">
         <li>Select <strong>Apply</strong> in the top bar, or <strong>My Leave → Apply for Leave</strong>.</li>
         <li>Choose a <strong>leave category</strong>. A line of grey text appears underneath listing that category's rules — notice required, minimum and maximum length, and whether half-days are allowed.</li>
-        <li>Pick your <strong>start</strong> and <strong>end</strong> dates. If the category demands notice, the date picker will not let you choose anything sooner.</li>
-        <li>Choose a <strong>duration type</strong>: full days, or a half day (morning or afternoon). Half-day options are greyed out for categories that must be taken as whole days.</li>
+        <li>Pick your <strong>start</strong> and <strong>end</strong> dates. If the category demands notice, the date picker will not let you choose anything sooner. Categories that need no notice — sick leave — have no such floor, so you can enter dates that have already passed and record the leave after the fact.</li>
+        <li>Choose a <strong>duration type</strong>: full days, or a half day (morning or afternoon). Half-day options are greyed out for categories that must be taken as whole days. A half day applies to <strong>one</strong> day: if you want half a day off, set the start and end date to the same date.</li>
         <li>Watch the <strong>live summary</strong>. It counts the working days, tells you your remaining balance, and warns you about anything that would block the request — before you submit.</li>
+        <li>Check the <strong>cover panel</strong> underneath it. If anyone else in your department is already off on those dates it names them and says how many days each is out. Where your department has a cover limit set, it also tells you whether your request would take the team past it.</li>
         <li>Give a <strong>reason</strong>, attach a document if the category needs one, and select <strong>Submit Application</strong>.</li>
       </ol>
       <p>You are returned to your history with a confirmation and a reference number in the form <span class="mono">LV-2026-XXXXXX</span>. Quote it if you need to ask about the request.</p>
@@ -370,9 +376,23 @@ footer.end{
         <p>Only working days count. Saturdays, Sundays and every public holiday in the calendar are skipped automatically, so a Monday-to-Friday request over a week containing a holiday costs you four days, not five. A half day costs 0.5.</p>
       </div>
 
+      <h3>Who else is away</h3>
+      <p>The cover panel is advice, not a gate. Nothing it says will stop you submitting: sick leave cannot wait for a convenient rota, and your approver is the one who decides. What it does is put the staffing picture in front of the one person who can still move the dates cheaply — you, before the request is filed — instead of surfacing it days later as a rejection.</p>
+      <dl class="rows">
+        <div><dt>Names</dt><dd>Colleagues already off then. <em>Awaiting approval</em> marks a request that has not been decided yet, so it may still fall away.</dd></div>
+        <div><dt>Amber</dt><dd>The department is already at or over its cover limit on some of those days, with or without you.</dd></div>
+        <div><dt>Red</dt><dd>Your request is the one that would take the department past its limit. Move the dates if they can move; submit anyway if they cannot.</dd></div>
+      </dl>
+      <p>Leave categories are never shown for colleagues — only that they are away. The same rule applies on the team calendar, so nobody's sick or maternity leave is disclosed to the team.</p>
+
+      <h3>Supporting documents</h3>
+      <p>Documents you attach are private. Only you and the people who approve your request — your line manager, HR, the executive and system administrators — can open one. Colleagues who can see your absence on the team calendar cannot open the certificate behind it. PDF, JPG and PNG up to 5&nbsp;MB are accepted.</p>
+      <p>If a document fails to upload the whole request is refused rather than filed without it, so a certificate can never go missing quietly.</p>
+
       <h3>Tracking and cancelling</h3>
       <p><strong>My Leave → My Leave History</strong> lists everything you have ever submitted with its current status. Select <strong>View Details</strong> to see who has signed it off, when, and any remarks they left.</p>
-      <p><strong>Cancel</strong> withdraws a request. Cancel one that is still in approval and the held days return to your balance immediately. Cancel one that was already approved and the used days are given back.</p>
+      <p><strong>Cancel</strong> withdraws a request. Cancel one that is still in approval and the held days return to your balance immediately. Cancel approved leave before it starts and the days are given back to you.</p>
+      <p>Once leave has started you can no longer cancel it yourself and the button is gone: the days were taken, and handing them back afterwards would turn time off into credit. If the dates genuinely changed — you came back early, or never went — ask HR. They can correct it, and the correction is recorded in the audit log.</p>
     </section>
 
     <!-- ================= PIPELINE ================= -->
@@ -671,6 +691,14 @@ footer.end{
         <div>
           <dt>Missing document</dt>
           <dd>Sick leave over two days needs a certificate; maternity and paternity always do. Attach a PDF, JPG or PNG.</dd>
+        </div>
+        <div>
+          <dt>Half day across a range</dt>
+          <dd>A half day belongs to one day. Choose half a day with a start and end date days apart and the form refuses it — set both dates to the same day instead.</dd>
+        </div>
+        <div>
+          <dt>Cancelling leave you are already taking</dt>
+          <dd>Approved leave can be cancelled up to the day before it starts. From the first day onward only HR can correct it.</dd>
         </div>
         <div>
           <dt>Half day on the wrong category</dt>

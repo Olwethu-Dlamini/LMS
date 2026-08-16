@@ -2,6 +2,7 @@
 require_once __DIR__ . '/../../includes/functions.php';
 require_once __DIR__ . '/../../helpers/LeaveCalculator.php';
 require_once __DIR__ . '/../../helpers/ApprovalWorkflow.php';
+require_once __DIR__ . '/../../helpers/AttachmentStore.php';
 
 require_staff();
 
@@ -38,23 +39,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $validation = $calculator->validateEligibility($userId, $leaveTypeId, $startDate, $endDate, $file, $dayType);
 
         if (!$validation['valid']) {
-            $error = implode('<br>', $validation['errors']);
+            $error = implode('<br>', array_map('escape_html', $validation['errors']));
         } else {
             $attachmentPath = null;
-            if ($file && $file['error'] === UPLOAD_ERR_OK) {
-                $ext = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
-                $allowed = ['pdf', 'png', 'jpg', 'jpeg'];
-                if (!in_array($ext, $allowed)) {
-                    $error = 'Invalid file type. Only PDF, PNG, and JPG files are permitted.';
+            // A document that fails to store must fail the submission. Letting
+            // it through leaves a request sitting in an approver's queue looking
+            // complete while the certificate it depends on was never saved.
+            if ($file && ($file['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_NO_FILE) {
+                $reasons = AttachmentStore::rejectionReasons($file);
+                if (!empty($reasons)) {
+                    $error = implode('<br>', array_map('escape_html', $reasons));
                 } else {
-                    $uploadDir = UPLOAD_DIR;
-                    if (!is_dir($uploadDir)) {
-                        mkdir($uploadDir, 0777, true);
-                    }
-                    $filename = 'med_' . $userId . '_' . time() . '.' . $ext;
-                    $target = $uploadDir . $filename;
-                    if (move_uploaded_file($file['tmp_name'], $target)) {
-                        $attachmentPath = 'uploads/attachments/' . $filename;
+                    $attachmentPath = AttachmentStore::store($file);
+                    if ($attachmentPath === null) {
+                        $error = 'The supporting document could not be saved. Please try again.';
                     }
                 }
             }
@@ -67,7 +65,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     header('Location: ' . APP_URL . '/modules/leave/my_history.php');
                     exit;
                 } else {
-                    $error = 'Error submitting leave application: ' . $res['error'];
+                    $error = 'Error submitting leave application: ' . escape_html($res['error']);
                 }
             }
         }
@@ -126,11 +124,15 @@ ob_start();
                     <div class="row">
                         <div class="col-md-4 form-group mb-4">
                             <label class="font-weight-bold text-dark">Start Date <span class="text-danger">*</span></label>
-                            <input type="date" name="start_date" id="start_date" class="form-control form-control-lg" min="<?php echo date('Y-m-d'); ?>" required value="<?php echo htmlspecialchars($_POST['start_date'] ?? ''); ?>">
+                            <!-- No min here: how far back a date may go is a property of the
+                                 leave type, applied by describeType() below. A category with no
+                                 notice period may be backdated, which is what lets sick leave be
+                                 recorded after the fact. -->
+                            <input type="date" name="start_date" id="start_date" class="form-control form-control-lg" required value="<?php echo htmlspecialchars($_POST['start_date'] ?? ''); ?>">
                         </div>
                         <div class="col-md-4 form-group mb-4">
                             <label class="font-weight-bold text-dark">End Date <span class="text-danger">*</span></label>
-                            <input type="date" name="end_date" id="end_date" class="form-control form-control-lg" min="<?php echo date('Y-m-d'); ?>" required value="<?php echo htmlspecialchars($_POST['end_date'] ?? ''); ?>">
+                            <input type="date" name="end_date" id="end_date" class="form-control form-control-lg" required value="<?php echo htmlspecialchars($_POST['end_date'] ?? ''); ?>">
                         </div>
                         <div class="col-md-4 form-group mb-4">
                             <label class="font-weight-bold text-dark">Duration Type <span class="text-danger">*</span></label>
@@ -159,6 +161,16 @@ ob_start();
                         </div>
                     </div>
 
+                    <!-- Who else is already away over these dates. Filled by the same
+                         live lookup as the day count; hidden until there is something
+                         to say. This is the coverage notice approvers see, given to the
+                         person who can still move the dates. -->
+                    <div id="coverageCard" class="alert mb-4" style="display: none;">
+                        <div class="font-weight-bold" id="coverageHeadline"></div>
+                        <div class="small mt-1" id="coverageDetail"></div>
+                        <ul class="small mb-0 mt-2 pl-3" id="coveragePeople"></ul>
+                    </div>
+
                     <div class="form-group mb-4">
                         <label class="font-weight-bold text-dark">Reason for Leave <span class="text-danger">*</span></label>
                         <textarea name="reason" class="form-control" rows="4" placeholder="Provide clear justification for your leave request..." required><?php echo htmlspecialchars($_POST['reason'] ?? ''); ?></textarea>
@@ -166,8 +178,9 @@ ob_start();
 
                     <div class="form-group mb-4">
                         <label class="font-weight-bold text-dark">Supporting File Attachment (Medical Note / Document)</label>
-                        <input type="file" name="attachment" id="attachment" class="form-control-file">
+                        <input type="file" name="attachment" id="attachment" class="form-control-file" accept=".pdf,.png,.jpg,.jpeg">
                         <small class="form-text text-muted" id="attachHint">Attach a supporting document if the selected leave category requires one (PDF, JPG, PNG).</small>
+                        <small class="form-text text-muted">Documents are private: only you and the approvers on your request can open them. Maximum <?php echo AttachmentStore::maxSizeLabel(); ?>.</small>
                     </div>
 
                     <div class="d-flex justify-content-between align-items-center pt-3 border-top">
@@ -220,16 +233,91 @@ document.addEventListener("DOMContentLoaded", function () {
                             errorBox.style.display = "block";
                             errorBox.innerHTML = "⚠️ " + data.errors.join("<br>⚠️ ");
                         }
+
+                        showCoverage(data.coverage);
                     } else {
                         previewText.innerHTML = "Unable to compute duration.";
+                        showCoverage(null);
                     }
                 })
                 .catch(err => {
                     previewText.innerHTML = "Error calculating days.";
+                    showCoverage(null);
                 });
         } else {
             previewCard.style.display = "none";
+            showCoverage(null);
         }
+    }
+
+    // Cover over the requested dates. Nothing here blocks a submission - leave
+    // that cannot move must still be bookable - but nobody should have to wait
+    // for a manager to find out their whole team is already off that week.
+    const coverageCard = document.getElementById("coverageCard");
+    const coverageHeadline = document.getElementById("coverageHeadline");
+    const coverageDetail = document.getElementById("coverageDetail");
+    const coveragePeople = document.getElementById("coveragePeople");
+
+    function dayWord(n) {
+        return n === 1 ? "1 day" : n + " days";
+    }
+
+    function showCoverage(coverage) {
+        coveragePeople.innerHTML = "";
+        if (!coverage || !coverage.department) {
+            coverageCard.style.display = "none";
+            return;
+        }
+
+        const people = coverage.colleagues || [];
+        const tipsOver = (coverage.tips_over || []).length;
+        const alreadyOver = (coverage.already_over || []).length;
+
+        if (people.length === 0 && tipsOver === 0 && alreadyOver === 0) {
+            // Nobody else is off and cover is not in question: saying so would
+            // be noise on every ordinary request.
+            coverageCard.style.display = "none";
+            return;
+        }
+
+        let tone = "alert-info";
+        let headline = people.length === 1
+            ? "1 colleague in " + coverage.department + " is already away on these dates."
+            : people.length + " colleagues in " + coverage.department + " are already away on these dates.";
+        let detail = "";
+
+        if (tipsOver > 0) {
+            tone = "alert-danger";
+            headline = "This would leave " + coverage.department + " short of cover.";
+            detail = "On " + dayWord(tipsOver) + " of this request, more than " + coverage.limit
+                + " of " + coverage.headcount + " would be away. You can still submit it - "
+                + "your approver decides - but consider moving the dates if they can move.";
+        } else if (alreadyOver > 0) {
+            tone = "alert-warning";
+            headline = coverage.department + " is already over its cover limit on these dates.";
+            detail = "More than " + coverage.limit + " of " + coverage.headcount
+                + " are away on " + dayWord(alreadyOver) + " of this range, with or without your request.";
+        } else if ((coverage.at_limit || []).length > 0) {
+            tone = "alert-warning";
+            detail = "This takes the department to its limit of " + coverage.limit
+                + " away at a time. Allowed, but it leaves no cover spare.";
+        } else {
+            detail = "Cover still holds"
+                + (coverage.limit !== null ? " - the limit is " + coverage.limit + " away at a time." : ".");
+        }
+
+        coverageCard.className = "alert mb-4 " + tone;
+        coverageHeadline.textContent = headline;
+        coverageDetail.textContent = detail;
+
+        people.forEach(function (person) {
+            const li = document.createElement("li");
+            li.textContent = person.name + " - " + dayWord(person.days)
+                + (person.pending ? " (awaiting approval)" : "");
+            coveragePeople.appendChild(li);
+        });
+
+        coverageCard.style.display = "block";
     }
 
     startDateInput.addEventListener("change", checkDays);
@@ -261,8 +349,6 @@ document.addEventListener("DOMContentLoaded", function () {
         if (min > 0) bits.push("min " + min + " day(s) per request");
         if (max) bits.push("max " + max + " day(s) per request");
         bits.push(half ? "half-days allowed" : "whole days only");
-        typeRules.innerHTML = "<i class='ti-info-alt'></i> " + bits.join(" &middot; ");
-        typeRules.style.display = "block";
 
         Array.from(dayTypeSelect.options).forEach(function (o) {
             if (o.value.indexOf("half") === 0) o.disabled = !half;
@@ -271,6 +357,10 @@ document.addEventListener("DOMContentLoaded", function () {
             dayTypeSelect.value = "full";
         }
 
+        // The earliest bookable date is a property of the leave type. A type
+        // demanding notice pushes the floor forward; a type with no notice period
+        // has no floor at all, so sick leave can be recorded after the fact
+        // rather than being blocked by the date picker while the server allows it.
         if (notice > 0) {
             const d = new Date();
             d.setDate(d.getDate() + notice);
@@ -279,7 +369,14 @@ document.addEventListener("DOMContentLoaded", function () {
             endDateInput.min = earliest;
             if (startDateInput.value && startDateInput.value < earliest) startDateInput.value = "";
             if (endDateInput.value && endDateInput.value < earliest) endDateInput.value = "";
+        } else {
+            startDateInput.removeAttribute("min");
+            endDateInput.removeAttribute("min");
+            bits.push("may be backdated");
         }
+
+        typeRules.innerHTML = "<i class='ti-info-alt'></i> " + bits.join(" &middot; ");
+        typeRules.style.display = "block";
 
         attachHint.textContent = needsAtt
             ? (over > 0

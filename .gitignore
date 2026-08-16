@@ -6,9 +6,11 @@
 # Raw extracted theme source
 /reader-bootstrap-main/
 
-# Vendor & uploaded attachments
+# Vendor & uploaded attachments. The directory's own access rules are tracked;
+# the medical documents inside it never are.
 /uploads/attachments/*
 !/uploads/attachments/.gitkeep
+!/uploads/attachments/.htaccess
 
 # Credential material must never be committed. tools/seed_employees.php writes
 # temporary passwords to $HOME/.ri-leave-uat/ (outside the repo); these patterns

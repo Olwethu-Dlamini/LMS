@@ -22,15 +22,18 @@ ON DUPLICATE KEY UPDATE `name`=`name`;
 CREATE TABLE IF NOT EXISTS `departments` (
     `id` INT AUTO_INCREMENT PRIMARY KEY,
     `name` VARCHAR(100) NOT NULL,
-    `line_manager_id` INT NULL
+    `line_manager_id` INT NULL,
+    -- How many members may be away on the same working day before the team is
+    -- understaffed. NULL = no limit configured, so no coverage warning is shown.
+    `max_concurrent_absences` INT NULL DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- Seed Default Departments
-INSERT INTO `departments` (`id`, `name`) VALUES
-(1, 'Information Technology'),
-(2, 'Human Resources'),
-(3, 'Finance & Operations'),
-(4, 'Executive Management')
+INSERT INTO `departments` (`id`, `name`, `max_concurrent_absences`) VALUES
+(1, 'Information Technology', 2),
+(2, 'Human Resources', 1),
+(3, 'Finance & Operations', 2),
+(4, 'Executive Management', NULL)
 ON DUPLICATE KEY UPDATE `name`=`name`;
 
 -- 3. Users Table
@@ -174,4 +177,36 @@ CREATE TABLE IF NOT EXISTS `leave_approval_logs` (
     `action_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT `fk_logs_application` FOREIGN KEY (`leave_application_id`) REFERENCES `leave_applications`(`id`) ON DELETE CASCADE,
     CONSTRAINT `fk_logs_approver` FOREIGN KEY (`approver_id`) REFERENCES `users`(`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- 9. In-App Notifications Table
+-- One row per person per event. read_at stays NULL until the recipient opens it,
+-- which is what the unread badge in the navigation counts.
+CREATE TABLE IF NOT EXISTS `notifications` (
+    `id` INT AUTO_INCREMENT PRIMARY KEY,
+    `user_id` INT NOT NULL,
+    `type` VARCHAR(40) NOT NULL,
+    `title` VARCHAR(150) NOT NULL,
+    `body` TEXT NULL,
+    `link` VARCHAR(255) NULL,
+    `leave_application_id` INT NULL,
+    `read_at` DATETIME NULL,
+    `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT `fk_notifications_user` FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON DELETE CASCADE,
+    CONSTRAINT `fk_notifications_application` FOREIGN KEY (`leave_application_id`) REFERENCES `leave_applications`(`id`) ON DELETE CASCADE,
+    KEY `idx_notifications_unread` (`user_id`, `read_at`),
+    KEY `idx_notifications_recent` (`user_id`, `created_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- 10. Failed Sign-In Attempts
+-- Feeds the rate limit on the login form: too many failures for one email from
+-- one address inside the window and the door closes for a while. Successful
+-- sign-ins delete that caller's rows, and every write sweeps away expired ones,
+-- so this table stays small and is never a record of who signed in.
+CREATE TABLE IF NOT EXISTS `login_attempts` (
+    `id` INT AUTO_INCREMENT PRIMARY KEY,
+    `email` VARCHAR(150) NOT NULL,
+    `ip_address` VARCHAR(45) NOT NULL,
+    `attempted_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    INDEX `idx_login_attempts_lookup` (`email`, `ip_address`, `attempted_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

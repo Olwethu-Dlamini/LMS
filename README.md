@@ -68,6 +68,43 @@ mv docs/manual.docx docs/08_USER_MANUAL.docx
 
 ---
 
+## 📅 Coverage & Notifications
+
+**Team calendar** (`modules/leave/team_calendar.php`) — a server-rendered month per
+department: who is off each working day and how many that leaves away out of the
+team. Pending requests are shown in outline and counted, so a clash is visible
+before it is approved. Weekends and public holidays are never counted as absence.
+Employees see their own department without leave categories, since sick and
+maternity leave should not be disclosed to colleagues; managers see the
+departments they approve for; HR, executives and admins see any department.
+
+**Coverage limits** — `departments.max_concurrent_absences` sets how many members
+may be away at once, edited per department in the admin console. Calendar days turn
+amber on the limit and red past it, and every approval stage shows a notice saying
+whether *this* request is what tips the department over, or whether it was already
+short. Nothing is blocked: sick leave does not wait for a convenient rota.
+
+**Before you book** — the apply form answers the coverage question while the
+dates can still change. Once a category and a range are chosen it names who else
+in your department is already off then, for how many days, and whether the
+request would take the team past its limit. Same wording as the approval queues,
+given to the person who can still move the dates. Nothing is blocked.
+
+**In-app notifications** — a bell with an unread count in both navigation bars.
+Applicants hear about submission, each stage cleared, approval, rejection (with
+remarks) and cancellation; approvers hear when a request reaches their queue or is
+withdrawn from it. Recipients are derived from the workflow, so reassigning a
+department's head redirects future notices. Notices are raised after each commit
+and every write is guarded, so a notification problem can never roll back an
+approval. There is no email dependency.
+
+The shared engines are `helpers/LeaveCapacity.php` (who is away, and does that
+break cover), `helpers/Notifier.php` (who to tell, and what to say) and
+`helpers/DashboardInsights.php` (the dashboard figures). The day arithmetic and
+aggregation in each are pure functions, covered by the test suite.
+
+---
+
 ## 🛠️ Technology Stack
 
 - **Core**: PHP 8.0+ (PDO, Native Sessions, Clean Modular Component Architecture)
@@ -104,6 +141,33 @@ mv docs/manual.docx docs/08_USER_MANUAL.docx
 
 `APP_URL` in `config/constants.php` is `http://localhost:8000`; change it if you
 serve the app from a different host or port.
+
+### Upgrading an existing database
+
+`schema.sql` is the full current schema, applied only to a fresh install. An
+existing database is brought up to date with the numbered files in `migrations/`,
+applied in order:
+
+```bash
+mysql -u root -p lms_db < migrations/001-role-aware-routing.sql
+mysql -u root -p lms_db < migrations/002-calendar-and-notifications.sql
+mysql -u root -p lms_db < migrations/003-decode-double-escaped-text.sql
+mysql -u root -p lms_db < migrations/004-login-attempts.sql
+```
+
+Each is safe to re-run and ends with a check query you can read to confirm it took.
+
+| Migration | What it does |
+|---|---|
+| `001-role-aware-routing` | Moves in-flight applications onto role-aware routing. No schema change. |
+| `002-calendar-and-notifications` | Adds `departments.max_concurrent_absences` and the `notifications` table. |
+| `003-decode-double-escaped-text` | Repairs text stored HTML-escaped, so `Sales &amp; Marketing` reads as `Sales & Marketing` again. |
+| `004-login-attempts` | Adds the `login_attempts` table behind the sign-in rate limit. |
+
+The portal keeps working ahead of each of these rather than failing. Until `002`
+the notification bell stays hidden and the calendar shows no coverage limits;
+until `004` sign-in simply is not rate limited. An installation is never locked
+out of itself because a migration has not run yet.
 
 ### Local UAT environment
 
@@ -171,6 +235,11 @@ a manager, only an admin can clear Stage 1 for them.
   cannot reach the rest of the app until they set their own password.
 - An admin password reset (**User Management → Password**) is always treated as
   temporary and re-raises that flag.
+- Sign-in is rate limited: five failures for the same address and email inside
+  fifteen minutes stops answering until the window passes. A successful sign-in
+  clears the count, so mistyping once or twice is never felt. Counting per email
+  *and* caller together is deliberate — per email alone would let anyone lock a
+  colleague out on purpose.
 
 ---
 
@@ -217,8 +286,8 @@ Each leave type carries its own policy, enforced server-side in
 | `max_days_per_year` | Annual allocation used when seeding entitlements |
 | `min_days_per_request` | Smallest bookable request |
 | `max_days_per_request` | Largest single request; blank means no cap. A request is one contiguous range, so this also caps consecutive days within it |
-| `allow_half_day` | Whether half-day options are offered at all |
-| `min_notice_days` | Days of advance notice required. **0 also permits backdating**, which is what lets sick leave be recorded after the fact |
+| `allow_half_day` | Whether half-day options are offered at all. A half day applies to a single day: choosing one across a longer range is refused, not quietly counted as the range minus half a day |
+| `min_notice_days` | Days of advance notice required. **0 also permits backdating**, which is what lets sick leave be recorded after the fact — the apply form's date picker takes its earliest date from this rule, so a zero-notice category has no floor at all |
 | `requires_attachment` + `attachment_threshold_days` | Demand a document only once a request exceeds N working days. This replaces what was a hardcoded "sick leave over 2 days" rule |
 | `is_paid` | Paid or unpaid |
 | `is_active` | Retired types vanish from the apply form but stay in reports |
@@ -229,12 +298,40 @@ whole days only, Unpaid needing 14 days notice.
 
 ---
 
+## 🔐 Supporting documents
+
+Sick notes and other attachments are the most sensitive records here, so they are
+not served as files. The upload directory denies direct access (`.htaccess` for
+Apache; for nginx add `location ^~ /uploads/ { deny all; }` to the server block),
+and the only route to a document is
+[`modules/leave/attachment.php`](./modules/leave/attachment.php), which streams
+it only to the applicant, their line manager, HR, executives and administrators.
+A colleague who can see the absence on the team calendar cannot open the
+certificate behind it, and a refusal looks identical to a missing file so the
+route cannot be used to find out who has filed one.
+
+Stored names are random (`att_<32 hex>.pdf`). The previous scheme was built from
+the applicant's user id and the upload time, which made the directory walkable by
+anybody who could guess a timestamp. Documents already stored under the old names
+still open — the path is read from the application rather than rebuilt.
+
+Accepted: PDF, JPG, PNG, up to 5 MB. A document that fails to store fails the
+whole submission, rather than leaving a request in a queue looking complete
+without the certificate it depends on.
+
+---
+
 ## ✅ Before go-live
 
 - [ ] Delete the five `@lms.com` demo accounts and remove them from `schema.sql`.
 - [ ] Change `APP_URL` in `config/constants.php` to the production hostname.
 - [ ] Move the DB credentials to real environment variables (never commit them).
-- [ ] Serve over HTTPS and set `session.cookie_secure=1`, `session.cookie_httponly=1`.
+- [ ] Serve over HTTPS. The session cookie sets `HttpOnly`, `SameSite=Lax` and
+      strict session ids itself, and turns on `Secure` as soon as the request
+      arrives over HTTPS — no php.ini change needed.
+- [ ] Apply every migration in `migrations/`, in order.
+- [ ] Block `/uploads/` at the web server if you serve with nginx (Apache is
+      covered by the `.htaccess` already in the directory).
 - [ ] Turn `display_errors` **off** in production PHP config.
 - [ ] Assign every user a department, role and reporting manager.
 - [ ] Load the real public holiday calendar for the leave year.

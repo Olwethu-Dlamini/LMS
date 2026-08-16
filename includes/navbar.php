@@ -56,6 +56,12 @@ $showHr           = has_role(ROLE_HR, false);
                         </div>
                     </li>
 
+                    <li class="nav-item<?php echo ri_nav_active(['/leave/team_calendar.php']); ?>">
+                        <a class="nav-link" href="<?php echo APP_URL; ?>/modules/leave/team_calendar.php">
+                            <i class="ti-layout-grid3"></i>Team Calendar
+                        </a>
+                    </li>
+
                     <?php if ($showApprovals): ?>
                     <li class="nav-item dropdown<?php echo ri_nav_active(['/manager/approvals.php', '/hr/approvals.php', '/executive/approvals.php']); ?>">
                         <a class="nav-link dropdown-toggle" href="#" id="riNavApprovals" data-toggle="dropdown"
@@ -103,6 +109,7 @@ $showHr           = has_role(ROLE_HR, false);
                 </ul>
 
                 <ul class="navbar-nav">
+                    <?php require __DIR__ . '/notification_bell.php'; ?>
                     <li class="nav-item">
                         <a class="nav-link" href="<?php echo APP_URL; ?>/modules/leave/apply.php">
                             <i class="ti-plus"></i>Apply
