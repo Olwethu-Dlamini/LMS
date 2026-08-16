@@ -11,6 +11,7 @@ require_once __DIR__ . '/../helpers/ApprovalWorkflow.php';
 require_once __DIR__ . '/../helpers/LeaveCapacity.php';
 require_once __DIR__ . '/../helpers/Notifier.php';
 require_once __DIR__ . '/../helpers/DashboardInsights.php';
+require_once __DIR__ . '/../helpers/AttachmentStore.php';
 
 class LMS_TestCase {
     private int $passed = 0;
@@ -753,6 +754,123 @@ $tester->assert(
 $tester->assert(
     DashboardInsights::summarise([]) === [],
     "No staff in scope produces no rows rather than an error"
+);
+
+/* ============================================================
+ * 13. SUPPORTING DOCUMENT STORAGE & ACCESS
+ * ============================================================ */
+echo "\n--- 13. Testing Supporting Document Storage & Access ---\n";
+
+// Who may open a medical certificate. Applicant 5 reports to manager 4, and
+// sits in a department headed by manager 7.
+$sickNote = ['user_id' => 5, 'manager_id' => 4, 'line_manager_id' => 7];
+
+$tester->assert(
+    AttachmentStore::viewableBy($sickNote, 5, ROLE_EMPLOYEE) === true,
+    "An applicant can open their own supporting document"
+);
+$tester->assert(
+    AttachmentStore::viewableBy($sickNote, 4, ROLE_MANAGER) === true,
+    "The applicant's own line manager can open it"
+);
+$tester->assert(
+    AttachmentStore::viewableBy($sickNote, 7, ROLE_MANAGER) === true,
+    "The head of the applicant's department can open it"
+);
+$tester->assert(
+    AttachmentStore::viewableBy($sickNote, 9, ROLE_MANAGER) === false,
+    "A manager from elsewhere in the organisation cannot"
+);
+$tester->assert(
+    AttachmentStore::viewableBy($sickNote, 6, ROLE_EMPLOYEE) === false,
+    "A colleague who can see the absence on the calendar cannot open the certificate"
+);
+$tester->assert(
+    AttachmentStore::viewableBy($sickNote, 3, ROLE_HR) === true
+    && AttachmentStore::viewableBy($sickNote, 2, ROLE_EXECUTIVE) === true
+    && AttachmentStore::viewableBy($sickNote, 1, ROLE_ADMIN) === true,
+    "HR, executives and administrators can open it"
+);
+
+// Stored names must give nothing away and must not collide.
+$firstName  = AttachmentStore::storedName('pdf');
+$secondName = AttachmentStore::storedName('pdf');
+$tester->assert(
+    preg_match('/^att_[0-9a-f]{32}\.pdf$/', $firstName) === 1,
+    "A stored document is named from random bytes, not the applicant",
+    $firstName
+);
+$tester->assert(
+    $firstName !== $secondName,
+    "Two documents stored in the same second do not collide"
+);
+$tester->assert(
+    AttachmentStore::storedName('PDF', 'abc') === 'att_abc.pdf',
+    "The extension is normalised to lower case"
+);
+
+// Path handling: only files genuinely inside the upload directory resolve.
+$sandbox = sys_get_temp_dir() . '/lms-attachment-test-' . getmypid();
+@mkdir($sandbox, 0750, true);
+file_put_contents($sandbox . '/att_real.pdf', '%PDF-1.4 test');
+
+$tester->assert(
+    AttachmentStore::resolve('uploads/attachments/att_real.pdf', $sandbox) !== null,
+    "A document that exists resolves to a readable path"
+);
+$tester->assert(
+    AttachmentStore::resolve('../../../../etc/passwd', $sandbox) === null,
+    "A traversal path recorded against an application resolves to nothing"
+);
+$tester->assert(
+    AttachmentStore::resolve('att_missing.pdf', $sandbox) === null,
+    "A path pointing at a deleted file resolves to nothing"
+);
+$tester->assert(
+    AttachmentStore::resolve(null, $sandbox) === null
+    && AttachmentStore::resolve('', $sandbox) === null,
+    "An application with no attachment resolves to nothing"
+);
+
+@unlink($sandbox . '/att_real.pdf');
+@rmdir($sandbox);
+
+// Upload validation.
+$tester->assert(
+    AttachmentStore::rejectionReasons(
+        ['name' => 'note.pdf', 'size' => 1024, 'error' => UPLOAD_ERR_OK]
+    ) === [],
+    "A small PDF is accepted"
+);
+$tester->assert(
+    count(AttachmentStore::rejectionReasons(
+        ['name' => 'shell.php', 'size' => 1024, 'error' => UPLOAD_ERR_OK]
+    )) === 1,
+    "An executable extension is refused"
+);
+$tester->assert(
+    count(AttachmentStore::rejectionReasons(
+        ['name' => 'scan.pdf', 'size' => AttachmentStore::MAX_BYTES + 1, 'error' => UPLOAD_ERR_OK]
+    )) === 1,
+    "A document over the size limit is refused"
+);
+$tester->assert(
+    count(AttachmentStore::rejectionReasons(
+        ['name' => 'empty.pdf', 'size' => 0, 'error' => UPLOAD_ERR_OK]
+    )) === 1,
+    "An empty document is refused"
+);
+$tester->assert(
+    AttachmentStore::rejectionReasons(
+        ['name' => 'huge.pdf', 'size' => 0, 'error' => UPLOAD_ERR_INI_SIZE]
+    ) !== [],
+    "A document rejected by PHP's own size limit is reported, not ignored"
+);
+$tester->assert(
+    AttachmentStore::contentTypeFor('pdf') === 'application/pdf'
+    && AttachmentStore::contentTypeFor('JPG') === 'image/jpeg'
+    && AttachmentStore::contentTypeFor('svg') === 'application/octet-stream',
+    "Documents are served as what they are, and unknown types are never guessed at"
 );
 
 exit($tester->summary());

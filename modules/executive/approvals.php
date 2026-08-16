@@ -121,7 +121,7 @@ ob_start();
                                     <?php echo htmlspecialchars($app['reason']); ?>
                                 </div>
                                 <?php if ($app['attachment_path']): ?>
-                                    <a href="<?php echo APP_URL . '/' . htmlspecialchars($app['attachment_path']); ?>" target="_blank" class="badge badge-primary">File</a>
+                                    <a href="<?php echo APP_URL . '/modules/leave/attachment.php?app=' . (int)$app['id']; ?>" target="_blank" class="badge badge-primary">File</a>
                                 <?php endif; ?>
                             </td>
                             <td>

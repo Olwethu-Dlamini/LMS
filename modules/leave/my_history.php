@@ -179,7 +179,7 @@ ob_start();
             <div class="col-md-3">
                 <span class="text-muted small d-block">Attachment</span>
                 <?php if ($viewApp['attachment_path']): ?>
-                    <a href="<?php echo APP_URL . '/' . htmlspecialchars($viewApp['attachment_path']); ?>" target="_blank" class="btn btn-xs btn-outline-primary mt-1">View File</a>
+                    <a href="<?php echo APP_URL . '/modules/leave/attachment.php?app=' . (int)$viewApp['id']; ?>" target="_blank" class="btn btn-xs btn-outline-primary mt-1">View File</a>
                 <?php else: ?>
                     <span class="text-muted small">None</span>
                 <?php endif; ?>

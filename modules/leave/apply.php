@@ -2,6 +2,7 @@
 require_once __DIR__ . '/../../includes/functions.php';
 require_once __DIR__ . '/../../helpers/LeaveCalculator.php';
 require_once __DIR__ . '/../../helpers/ApprovalWorkflow.php';
+require_once __DIR__ . '/../../helpers/AttachmentStore.php';
 
 require_staff();
 
@@ -41,20 +42,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $error = implode('<br>', $validation['errors']);
         } else {
             $attachmentPath = null;
-            if ($file && $file['error'] === UPLOAD_ERR_OK) {
-                $ext = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
-                $allowed = ['pdf', 'png', 'jpg', 'jpeg'];
-                if (!in_array($ext, $allowed)) {
-                    $error = 'Invalid file type. Only PDF, PNG, and JPG files are permitted.';
+            // A document that fails to store must fail the submission. Letting
+            // it through leaves a request sitting in an approver's queue looking
+            // complete while the certificate it depends on was never saved.
+            if ($file && ($file['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_NO_FILE) {
+                $reasons = AttachmentStore::rejectionReasons($file);
+                if (!empty($reasons)) {
+                    $error = implode('<br>', array_map('htmlspecialchars', $reasons));
                 } else {
-                    $uploadDir = UPLOAD_DIR;
-                    if (!is_dir($uploadDir)) {
-                        mkdir($uploadDir, 0777, true);
-                    }
-                    $filename = 'med_' . $userId . '_' . time() . '.' . $ext;
-                    $target = $uploadDir . $filename;
-                    if (move_uploaded_file($file['tmp_name'], $target)) {
-                        $attachmentPath = 'uploads/attachments/' . $filename;
+                    $attachmentPath = AttachmentStore::store($file);
+                    if ($attachmentPath === null) {
+                        $error = 'The supporting document could not be saved. Please try again.';
                     }
                 }
             }
@@ -166,8 +164,9 @@ ob_start();
 
                     <div class="form-group mb-4">
                         <label class="font-weight-bold text-dark">Supporting File Attachment (Medical Note / Document)</label>
-                        <input type="file" name="attachment" id="attachment" class="form-control-file">
+                        <input type="file" name="attachment" id="attachment" class="form-control-file" accept=".pdf,.png,.jpg,.jpeg">
                         <small class="form-text text-muted" id="attachHint">Attach a supporting document if the selected leave category requires one (PDF, JPG, PNG).</small>
+                        <small class="form-text text-muted">Documents are private: only you and the approvers on your request can open them. Maximum <?php echo AttachmentStore::maxSizeLabel(); ?>.</small>
                     </div>
 
                     <div class="d-flex justify-content-between align-items-center pt-3 border-top">
