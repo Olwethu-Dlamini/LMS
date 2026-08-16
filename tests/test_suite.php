@@ -390,6 +390,24 @@ $appId = (int)$submitRes['id'];
 $ent1 = $mockDb->entitlements[$entKey]['pending_days'];
 $tester->assert((float)$ent1 === 5.0, "Pending Days Reserved in Entitlements", "Got {$ent1}");
 
+// A2. The balance is re-checked inside the transaction, not just before it.
+// Two submissions racing each other both pass the pre-check against the same
+// snapshot; only the one that reads the row first may reserve against it.
+$raceKey = '5_1_' . date('Y', strtotime($futStart2));
+$mockDb->entitlements[$raceKey] = ['total_days' => 5.0, 'used_days' => 0.0, 'pending_days' => 4.0];
+$raceRes = $workflow->submitApplication(5, 1, $futStart2, $futEnd2, 2.0, "Second half of a race", null);
+$tester->assert(
+    $raceRes['success'] === false && strpos($raceRes['error'], 'Insufficient balance') !== false,
+    "A submission whose balance was spent while it was in flight is refused",
+    $raceRes['error'] ?? 'succeeded'
+);
+$tester->assert(
+    (float)$mockDb->entitlements[$raceKey]['pending_days'] === 4.0,
+    "A refused submission reserves nothing",
+    (string)$mockDb->entitlements[$raceKey]['pending_days']
+);
+$mockDb->entitlements[$raceKey] = ['total_days' => 20.0, 'used_days' => 0.0, 'pending_days' => 0.0];
+
 // B. Self-Approval Block
 $selfApproveRes = $workflow->processAction($appId, 5, 'manager', 'approve', 'Self approve attempt');
 $tester->assert($selfApproveRes['success'] === false && strpos($selfApproveRes['error'], 'Self-approval') !== false, "Self Approval Restriction Blocked", "Got " . ($selfApproveRes['error'] ?? 'success'));

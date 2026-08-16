@@ -163,6 +163,53 @@ class ApprovalWorkflow {
             $appNo = 'LV-' . date('Y') . '-' . strtoupper(substr(uniqid(), -6));
             $year = (int)date('Y', strtotime($startDate));
 
+            // Re-check the two rules that depend on rows other requests can move,
+            // this time inside the transaction and holding the entitlement row.
+            //
+            // validateEligibility() runs before this against a snapshot nobody is
+            // holding, so two submissions racing each other - a double-clicked
+            // button is enough - both read the same balance, both find it
+            // sufficient, and both reserve against it. The result is a negative
+            // balance nobody can explain. Reading the row FOR UPDATE makes the
+            // second one queue behind the first and see what it did.
+            $stmtBalance = $this->db->prepare("
+                SELECT total_days, used_days, pending_days
+                FROM leave_entitlements
+                WHERE user_id = :user_id AND leave_type_id = :type_id AND year = :year
+                FOR UPDATE
+            ");
+            $stmtBalance->execute(['user_id' => $userId, 'type_id' => $leaveTypeId, 'year' => $year]);
+            $entitlement = $stmtBalance->fetch();
+
+            if (!$entitlement) {
+                throw new Exception("No leave balance allocation found for the year {$year}.");
+            }
+
+            $available = (float)$entitlement['total_days']
+                       - (float)$entitlement['used_days']
+                       - (float)$entitlement['pending_days'];
+            if ($totalDays > $available) {
+                throw new Exception(
+                    "Insufficient balance. Requested: {$totalDays} days, Available: {$available} days."
+                );
+            }
+
+            $stmtOverlap = $this->db->prepare("
+                SELECT COUNT(*) FROM leave_applications
+                WHERE user_id = :user_id
+                  AND status NOT IN ('rejected', 'cancelled')
+                  AND start_date <= :end_date
+                  AND end_date >= :start_date
+            ");
+            $stmtOverlap->execute([
+                'user_id'    => $userId,
+                'start_date' => $startDate,
+                'end_date'   => $endDate,
+            ]);
+            if ((int)$stmtOverlap->fetchColumn() > 0) {
+                throw new Exception("You already have an active leave request overlapping with this date range.");
+            }
+
             // Route the application by the applicant's own role, so senior staff
             // do not sit in a queue waiting for themselves.
             $applicantRole = $this->roleOf($userId);
