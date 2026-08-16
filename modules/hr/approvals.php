@@ -69,7 +69,7 @@ ob_start();
     <div class="alert alert-warning mb-4">
         <strong><i class="ti-alert"></i> Administrator override.</strong>
         You are acting outside the normal approval chain. Use this only when the
-        designated approver is unavailable &mdash; every action is recorded in the
+        designated approver is unavailable. Every action is recorded in the
         audit log against your account.
     </div>
 <?php endif; ?>

@@ -139,7 +139,7 @@ ob_start();
                             <?php echo htmlspecialchars($e['approver_name']); ?>
                             <small class="d-block text-muted"><?php echo htmlspecialchars($e['approver_emp'] . ' · ' . strtoupper($e['approver_role'])); ?></small>
                         </td>
-                        <td><small class="text-muted"><?php echo htmlspecialchars($e['comments'] ?? '—'); ?></small></td>
+                        <td><small class="text-muted"><?php echo htmlspecialchars($e['comments'] ?? 'No remarks'); ?></small></td>
                     </tr>
                 <?php endforeach; ?>
                 </tbody>

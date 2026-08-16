@@ -169,7 +169,7 @@ ob_start();
                                 <span class="badge badge-info"><?php echo (int)($d['max_concurrent_absences'] ?? 0); ?></span>
                                 <?php if ((int)($d['max_concurrent_absences'] ?? 0) >= (int)$d['member_count'] && (int)$d['member_count'] > 0): ?>
                                     <small class="d-block text-muted">
-                                        Cannot be exceeded &mdash; it is not below the headcount
+                                        Cannot be exceeded, and is not below the headcount
                                     </small>
                                 <?php endif; ?>
                             <?php endif; ?>

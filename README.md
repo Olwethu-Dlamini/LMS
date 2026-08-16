@@ -21,13 +21,13 @@ Before any code implementation begins, full architecture and system design bluep
 ## 📘 User Manual
 
 End-user documentation covering all five roles, the leave rules, the holiday
-calendar and troubleshooting. Same content in three formats — edit the Markdown,
+calendar and troubleshooting. Same content in three formats. Edit the Markdown,
 then regenerate the other two:
 
 | Format | File | Use it for |
 |---|---|---|
 | **Markdown** | [`docs/08_USER_MANUAL.md`](./docs/08_USER_MANUAL.md) | The source of truth. Renders on GitHub, diffs cleanly in review. |
-| **Web page** | [`docs/user-manual.html`](./docs/user-manual.html) | Self-contained — fonts and styles are inlined, so it works offline from a share drive and prints to a clean 15-page A4 document. |
+| **Web page** | [`docs/user-manual.html`](./docs/user-manual.html) | Self-contained: fonts and styles are inlined, so it works offline from a share drive and prints to a clean 15-page A4 document. |
 | **Word** | [`docs/08_USER_MANUAL.docx`](./docs/08_USER_MANUAL.docx) | Handing to HR for distribution or intranet upload. Real Word heading styles, so Word's navigation pane and table of contents work. |
 
 Regenerating the Word version after editing the Markdown:
@@ -70,10 +70,10 @@ mv docs/manual.docx docs/08_USER_MANUAL.docx
 
 ## 📅 Coverage & Notifications
 
-**Team calendar** (`modules/leave/team_calendar.php`) — a server-rendered month per
+**Team calendar** (`modules/leave/team_calendar.php`) is a server-rendered month per
 department: who is off each working day and how many that leaves away out of the
 team. Approved leave and requests still awaiting a decision are drawn and labelled
-apart, each as a filled chip saying its state in words — *Approved*, or
+apart, each as a filled chip saying its state in words: *Approved*, or
 *Requested · not yet approved*. Only approved leave is counted against the
 headcount: a day reading "3 away" is unplannable when one of them is off and two
 have only asked. A legend names both. Your own entries read "You". Weekends and
@@ -82,7 +82,7 @@ Employees see their own department without leave categories, since sick and
 maternity leave should not be disclosed to colleagues; managers see the
 departments they approve for; HR, executives and admins see any department.
 
-**Coverage limits** — `departments.max_concurrent_absences` sets how many members
+**Coverage limits.** `departments.max_concurrent_absences` sets how many members
 may be away at once, edited per department in the admin console. Every approval
 stage shows a notice saying whether *this* request is what tips the department
 over, or whether it was already short, and the same notice appears on the apply
@@ -91,13 +91,13 @@ shading competed with the entries inside the cell and coloured days by a thresho
 most departments never set. Nothing is blocked anywhere: sick leave does not wait
 for a convenient rota.
 
-**Before you book** — the apply form answers the coverage question while the
+**Before you book.** The apply form answers the coverage question while the
 dates can still change. Once a category and a range are chosen it names who else
 in your department is already off then, for how many days, and whether the
 request would take the team past its limit. Same wording as the approval queues,
 given to the person who can still move the dates. Nothing is blocked.
 
-**In-app notifications** — a bell with an unread count in both navigation bars.
+**In-app notifications.** A bell with an unread count in both navigation bars.
 Applicants hear about submission, each stage cleared, approval, rejection (with
 remarks) and cancellation; approvers hear when a request reaches their queue or is
 withdrawn from it. Recipients are derived from the workflow, so reassigning a
@@ -125,7 +125,7 @@ aggregation in each are pure functions, covered by the test suite.
 
 ### Standard install
 
-1. Import the schema (`schema.sql` is the executable one — `docs/03_…md` is
+1. Import the schema (`schema.sql` is the executable one; `docs/03_…md` is
    documentation, not a loadable file):
    ```bash
    mysql -u root -p < schema.sql
@@ -193,7 +193,7 @@ so it never touches a system MySQL already using 3306:
 Then open <http://localhost:8000>.
 
 **There are no accounts to sign in with yet.** `schema.sql` seeds reference data
-only — roles, departments, leave categories and holidays — so a fresh database
+only: roles, departments, leave categories and holidays. So a fresh database
 has no users at all. That is deliberate: the five `@lms.com` demo accounts that
 used to be seeded here all shared the password `password123`, which is published
 in this file, so every installation shipped with the same known way in.
@@ -220,7 +220,7 @@ php tools/create_admin.php --email you@realnet.co.sz --reset-password
 
 ### Loading the staff roster
 
-`tools/seed_employees.php` loads the Real Image roster. It is idempotent — it
+`tools/seed_employees.php` loads the Real Image roster. It is idempotent, so it
 skips anyone whose email already exists, so it is safe to re-run as the roster
 grows.
 
@@ -231,7 +231,7 @@ php tools/seed_employees.php --commit --reissue   # fresh temp password for ever
                                                   # still awaiting a first sign-in
 ```
 
-Use `--reissue` if the credential list is lost — stored passwords are bcrypt
+Use `--reissue` if the credential list is lost. Stored passwords are bcrypt
 hashes and cannot be recovered, only replaced. The CSV is **appended**, never
 overwritten, so previously issued passwords are never destroyed; where an email
 appears more than once, the newest row wins.
@@ -243,7 +243,7 @@ the repository** so they can never be committed). Distribute them securely,
 then delete the file.
 
 New starters are created as plain `employee` with no department and no reporting
-manager. Assign those in **Administration → User Management** — until a user has
+manager. Assign those in **Administration → User Management**. Until a user has
 a manager, only an admin can clear Stage 1 for them.
 
 ### Password rules
@@ -255,7 +255,7 @@ a manager, only an admin can clear Stage 1 for them.
 - An admin password reset (**User Management → Password**) is always treated as
   temporary and re-raises that flag.
 - Sign-in rate limiting exists but is **switched off** while the system is in
-  testing — see `LOGIN_THROTTLE_ENABLED` in `config/constants.php`. Switched on,
+  testing; see `LOGIN_THROTTLE_ENABLED` in `config/constants.php`. Switched on,
   five failures for the same address and email inside fifteen minutes stops
   answering until the window passes, and a successful sign-in clears the count.
   Counting per email *and* caller together is deliberate: per email alone would
@@ -270,8 +270,8 @@ a manager, only an admin can clear Stage 1 for them.
 
 Administrators get a separate console at `/modules/admin/index.php`, reachable
 from the **Admin Console** link in the staff nav. It carries its own dark
-navigation containing system administration only — no Apply, My Leave or
-Approvals — with a **Staff Portal** switcher back, so an admin can still book
+navigation containing system administration only, with no Apply, My Leave or
+Approvals, and a **Staff Portal** switcher back, so an admin can still book
 their own leave. Every `/modules/admin/*` route is gated by
 `require_role(ROLE_ADMIN)`.
 
@@ -280,7 +280,7 @@ their own leave. Every `/modules/admin/*` route is gated by
 | **Overview** | Counts plus a *Setup Attention* panel flagging users with no manager or department, accounts still on a temporary password, and a missing holiday calendar. |
 | **Users** | Create, edit, reset password, archive/restore, delete. |
 | **Departments** | Create, rename, reassign head, delete (blocked while members remain). |
-| **Leave Types** | Full rule configuration — see below. |
+| **Leave Types** | Full rule configuration. See below. |
 | **Holidays** | Add, edit, delete. Changes affect future calculations only. |
 | **Audit Log** | Every approval and rejection, filterable by action, role and date. |
 
@@ -290,14 +290,14 @@ their own leave. Every `/modules/admin/*` route is gated by
 a naive user delete would erase that person's leave history and the audit trail
 with them. Instead:
 
-- **Users** — Delete permanently removes the account *only* when it has zero
+- **Users.** Delete permanently removes the account *only* when it has zero
   applications and zero approval log entries. Anything with history is
   **archived** instead, and you are told why. You cannot remove your own account
   or the last active administrator.
-- **Leave types** — a category referenced by any application is **retired**
+- **Leave types.** A category referenced by any application is **retired**
   rather than deleted: history and reports stay intact and it disappears from
   the apply form.
-- **Departments** — cannot be deleted while they still have members.
+- **Departments.** Cannot be deleted while they still have members.
 
 ### Configurable leave rules
 
@@ -310,7 +310,7 @@ Each leave type carries its own policy, enforced server-side in
 | `min_days_per_request` | Smallest bookable request |
 | `max_days_per_request` | Largest single request; blank means no cap. A request is one contiguous range, so this also caps consecutive days within it |
 | `allow_half_day` | Whether half-day options are offered at all. A half day applies to a single day: choosing one across a longer range is refused, not quietly counted as the range minus half a day |
-| `min_notice_days` | Days of advance notice required. **0 also permits backdating**, which is what lets sick leave be recorded after the fact — the apply form's date picker takes its earliest date from this rule, so a zero-notice category has no floor at all |
+| `min_notice_days` | Days of advance notice required. **0 also permits backdating**, which is what lets sick leave be recorded after the fact. The apply form's date picker takes its earliest date from this rule, so a zero-notice category has no floor at all |
 | `requires_attachment` + `attachment_threshold_days` | Demand a document only once a request exceeds N working days. This replaces what was a hardcoded "sick leave over 2 days" rule |
 | `is_paid` | Paid or unpaid |
 | `is_active` | Retired types vanish from the apply form but stay in reports |
@@ -336,7 +336,7 @@ route cannot be used to find out who has filed one.
 Stored names are random (`att_<32 hex>.pdf`). The previous scheme was built from
 the applicant's user id and the upload time, which made the directory walkable by
 anybody who could guess a timestamp. Documents already stored under the old names
-still open — the path is read from the application rather than rebuilt.
+still open, because the path is read from the application rather than rebuilt.
 
 Accepted: PDF, JPG, PNG, up to 5 MB. A document that fails to store fails the
 whole submission, rather than leaving a request in a queue looking complete
@@ -347,12 +347,12 @@ without the certificate it depends on.
 ## ✅ Before go-live
 
 - [x] ~~Delete the five `@lms.com` demo accounts and remove them from `schema.sql`.~~
-      Done — no accounts are seeded at all. Bootstrap with `tools/create_admin.php`.
+      Done. No accounts are seeded at all. Bootstrap with `tools/create_admin.php`.
 - [ ] Change `APP_URL` in `config/constants.php` to the production hostname.
 - [ ] Move the DB credentials to real environment variables (never commit them).
 - [ ] Serve over HTTPS. The session cookie sets `HttpOnly`, `SameSite=Lax` and
       strict session ids itself, and turns on `Secure` as soon as the request
-      arrives over HTTPS — no php.ini change needed.
+      arrives over HTTPS, so no php.ini change is needed.
 - [ ] Apply every migration in `migrations/`, in order.
 - [ ] Block `/uploads/` at the web server if you serve with nginx (Apache is
       covered by the `.htaccess` already in the directory).

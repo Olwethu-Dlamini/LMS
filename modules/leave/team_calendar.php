@@ -176,8 +176,8 @@ ob_start();
              leave and a request nobody has decided yet unexplained - the one
              distinction people most need when reading a rota. -->
         <div class="ri-cal-legend">
-            <span><i class="ri-cal-key ri-cal-key-approved"></i> Approved &mdash; they will be off</span>
-            <span><i class="ri-cal-key ri-cal-key-pending"></i> Requested &mdash; asked for, not yet approved</span>
+            <span><i class="ri-cal-key ri-cal-key-approved"></i> Approved: they will be off</span>
+            <span><i class="ri-cal-key ri-cal-key-pending"></i> Requested: asked for, not yet approved</span>
             <span><i class="ri-cal-key ri-cal-key-holiday"></i> Public holiday</span>
         </div>
     </div>

@@ -10,7 +10,7 @@
  * sign-in. The temporary passwords are written to a CSV OUTSIDE the repository
  * ($HOME/.ri-leave-uat/initial-passwords.csv) so they can never be committed.
  *
- * Existing accounts are left completely untouched — the script is safe to
+ * Existing accounts are left completely untouched, so the script is safe to
  * re-run as the roster grows.
  *
  * Everyone is created as a plain 'employee' with no department and no reporting
