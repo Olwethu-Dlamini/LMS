@@ -1,24 +1,24 @@
 # Leave Management System (LMS)
 
-A robust, multi-role PHP Leave Management System built with a modular component architecture (Header, Navbar, Sidebar, Footer, Layout), automated working days calculation engine, and a 3-tier sequential approval workflow (**Line Manager** ➔ **HR** ➔ **Executive / Boss**).
+A robust, multi-role PHP Leave Management System built with a modular component architecture (Header, Navbar, Sidebar, Footer, Layout), automated working days calculation engine, and a 3-tier sequential approval workflow (**Line Manager**, then **HR**, then **Executive / Boss**).
 
 ---
 
-## 📚 Complete Pre-Implementation System Design Documentation
+## Complete Pre-Implementation System Design Documentation
 
 Before any code implementation begins, full architecture and system design blueprints have been established in the [`docs/`](./docs/) directory:
 
-1. 📄 [01_SOFTWARE_REQUIREMENTS_SPECIFICATION.md](./docs/01_SOFTWARE_REQUIREMENTS_SPECIFICATION.md) - Software Requirements Specification (SRS) & User Roles
-2. 🏛️ [02_SYSTEM_ARCHITECTURE_DESIGN.md](./docs/02_SYSTEM_ARCHITECTURE_DESIGN.md) - Modular PHP Architecture & System Component Design
-3. 🗄️ [03_DATABASE_DESIGN_AND_ERD.md](./docs/03_DATABASE_DESIGN_AND_ERD.md) - Database ERD, Data Dictionary & Full SQL Schema (`schema.sql`)
-4. 🔄 [04_APPROVAL_WORKFLOW_STATE_MACHINE.md](./docs/04_APPROVAL_WORKFLOW_STATE_MACHINE.md) - 3-Stage Approval Flow State Machine Specification
-5. ⚙️ [05_BUSINESS_RULES_ENGINE_SPECIFICATION.md](./docs/05_BUSINESS_RULES_ENGINE_SPECIFICATION.md) - Working Days Engine, Holiday Exclusions & Balance Rules
-6. 🛡️ [06_ROLE_BASED_ACCESS_CONTROL_MATRIX.md](./docs/06_ROLE_BASED_ACCESS_CONTROL_MATRIX.md) - RBAC Permission Matrix across 5 User Roles
-7. 🎨 [07_UI_UX_WIREFRAMES_AND_COMPONENT_MAP.md](./docs/07_UI_UX_WIREFRAMES_AND_COMPONENT_MAP.md) - Page Layout Wireframes & Bootstrap Theme Token Map
+1. [01_SOFTWARE_REQUIREMENTS_SPECIFICATION.md](./docs/01_SOFTWARE_REQUIREMENTS_SPECIFICATION.md) - Software Requirements Specification (SRS) & User Roles
+2. [02_SYSTEM_ARCHITECTURE_DESIGN.md](./docs/02_SYSTEM_ARCHITECTURE_DESIGN.md) - Modular PHP Architecture & System Component Design
+3. [03_DATABASE_DESIGN_AND_ERD.md](./docs/03_DATABASE_DESIGN_AND_ERD.md) - Database ERD, Data Dictionary & Full SQL Schema (`schema.sql`)
+4. [04_APPROVAL_WORKFLOW_STATE_MACHINE.md](./docs/04_APPROVAL_WORKFLOW_STATE_MACHINE.md) - 3-Stage Approval Flow State Machine Specification
+5. [05_BUSINESS_RULES_ENGINE_SPECIFICATION.md](./docs/05_BUSINESS_RULES_ENGINE_SPECIFICATION.md) - Working Days Engine, Holiday Exclusions & Balance Rules
+6. [06_ROLE_BASED_ACCESS_CONTROL_MATRIX.md](./docs/06_ROLE_BASED_ACCESS_CONTROL_MATRIX.md) - RBAC Permission Matrix across 5 User Roles
+7. [07_UI_UX_WIREFRAMES_AND_COMPONENT_MAP.md](./docs/07_UI_UX_WIREFRAMES_AND_COMPONENT_MAP.md) - Page Layout Wireframes & Bootstrap Theme Token Map
 
 ---
 
-## 📘 User Manual
+## User Manual
 
 End-user documentation covering all five roles, the leave rules, the holiday
 calendar and troubleshooting. Same content in three formats. Edit the Markdown,
@@ -40,7 +40,7 @@ mv docs/manual.docx docs/08_USER_MANUAL.docx
 
 ---
 
-## 👥 Supported Roles & Approval Pipeline
+## Supported Roles & Approval Pipeline
 
 ```
 [ Employee Applies ]
@@ -68,7 +68,7 @@ mv docs/manual.docx docs/08_USER_MANUAL.docx
 
 ---
 
-## 📅 Coverage & Notifications
+## Coverage & Notifications
 
 **Team calendar** (`modules/leave/team_calendar.php`) is a server-rendered month per
 department: who is off each working day and how many that leaves away out of the
@@ -112,7 +112,7 @@ aggregation in each are pure functions, covered by the test suite.
 
 ---
 
-## 🛠️ Technology Stack
+## Technology Stack
 
 - **Core**: PHP 8.0+ (PDO, Native Sessions, Clean Modular Component Architecture)
 - **Database**: MySQL 8.0 / MariaDB
@@ -121,7 +121,7 @@ aggregation in each are pure functions, covered by the test suite.
 
 ---
 
-## 🚀 Setup & Database Installation
+## Setup & Database Installation
 
 ### Standard install
 
@@ -216,7 +216,7 @@ php tools/create_admin.php --email you@realnet.co.sz --reset-password
 
 ---
 
-## 👤 Staff Accounts & Passwords
+## Staff Accounts & Passwords
 
 ### Loading the staff roster
 
@@ -266,7 +266,7 @@ a manager, only an admin can clear Stage 1 for them.
 
 ---
 
-## ⚙️ Admin Console
+## Admin Console
 
 Administrators get a separate console at `/modules/admin/index.php`, reachable
 from the **Admin Console** link in the staff nav. It carries its own dark
@@ -321,7 +321,7 @@ whole days only, Unpaid needing 14 days notice.
 
 ---
 
-## 🔐 Supporting documents
+## Supporting documents
 
 Sick notes and other attachments are the most sensitive records here, so they are
 not served as files. The upload directory denies direct access (`.htaccess` for
@@ -344,7 +344,7 @@ without the certificate it depends on.
 
 ---
 
-## ✅ Before go-live
+## Before go-live
 
 - [x] ~~Delete the five `@lms.com` demo accounts and remove them from `schema.sql`.~~
       Done. No accounts are seeded at all. Bootstrap with `tools/create_admin.php`.
