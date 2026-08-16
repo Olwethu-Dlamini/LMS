@@ -595,6 +595,41 @@ $tester->assert(
     "Excluding a request clears the days only it covered"
 );
 
+// Costing a request that does not exist yet: the applicant is added to every
+// working day they are asking for, then measured like any stored application.
+$prospective = LeaveCapacity::withExtraAbsence($byDay, [
+    'application_id' => 0, 'user_id' => 9, 'department_id' => 1, 'status' => STATUS_PENDING_MANAGER,
+]);
+$tester->assert(
+    count($prospective['2026-08-17']) === 2 && count($prospective['2026-08-18']) === 4,
+    "A prospective request adds one person to every day of its range",
+    "17th: " . count($prospective['2026-08-17']) . ", 18th: " . count($prospective['2026-08-18'])
+);
+$tester->assert(
+    count($byDay['2026-08-17']) === 1,
+    "Costing a prospective request does not disturb the day map it was given"
+);
+
+$projected = LeaveCapacity::capacityWarnings($prospective, 1, 1);
+$projectedDates = [];
+foreach ($projected as $w) {
+    $projectedDates[$w['date']] = $w['state'];
+}
+$tester->assert(
+    ($projectedDates['2026-08-17'] ?? null) === LeaveCapacity::OVER_LIMIT,
+    "A day that was exactly on the limit tips over once the applicant is added",
+    json_encode($projectedDates)
+);
+$tester->assert(
+    ($projectedDates['2026-08-20'] ?? null) === LeaveCapacity::OVER_LIMIT
+    && ($byDate['2026-08-20']['state'] ?? null) === LeaveCapacity::AT_LIMIT,
+    "The days this request is responsible for breaking are distinguishable from the ones already broken"
+);
+$tester->assert(
+    LeaveCapacity::withExtraAbsence([], ['department_id' => 1]) === [],
+    "A range with no working days has nothing to add an absence to"
+);
+
 echo "\n--- 11. Testing Notification Wording & Routing ---\n";
 
 $tester->assert(
