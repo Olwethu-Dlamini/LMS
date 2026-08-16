@@ -183,17 +183,29 @@ so it never touches a system MySQL already using 3306:
 ./uat.sh stop
 ```
 
-Then open <http://localhost:8000>. The demo accounts in `schema.sql` all use the
-password `password123` — **these are for testing only and must be removed before
-go-live** (see the checklist below):
+Then open <http://localhost:8000>.
 
-| Email | Role |
-|---|---|
-| `employee@lms.com` | Employee |
-| `manager@lms.com` | Line Manager |
-| `hr@lms.com` | HR Manager |
-| `boss@lms.com` | Executive / Boss |
-| `admin@lms.com` | System Admin |
+**There are no accounts to sign in with yet.** `schema.sql` seeds reference data
+only — roles, departments, leave categories and holidays — so a fresh database
+has no users at all. That is deliberate: the five `@lms.com` demo accounts that
+used to be seeded here all shared the password `password123`, which is published
+in this file, so every installation shipped with the same known way in.
+
+Create the first administrator, which prints a password once and forces it to be
+replaced on first sign-in:
+
+```bash
+php tools/create_admin.php --email you@realnet.co.sz --name "Your Name"
+```
+
+Then load the staff roster with `tools/seed_employees.php` (below) and set roles,
+departments and reporting managers in **Administration → User Management**.
+
+Locked out with no administrator left? The same tool is the way back:
+
+```bash
+php tools/create_admin.php --email you@realnet.co.sz --reset-password
+```
 
 ---
 
@@ -323,7 +335,8 @@ without the certificate it depends on.
 
 ## ✅ Before go-live
 
-- [ ] Delete the five `@lms.com` demo accounts and remove them from `schema.sql`.
+- [x] ~~Delete the five `@lms.com` demo accounts and remove them from `schema.sql`.~~
+      Done — no accounts are seeded at all. Bootstrap with `tools/create_admin.php`.
 - [ ] Change `APP_URL` in `config/constants.php` to the production hostname.
 - [ ] Move the DB credentials to real environment variables (never commit them).
 - [ ] Serve over HTTPS. The session cookie sets `HttpOnly`, `SameSite=Lax` and

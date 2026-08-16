@@ -5,10 +5,9 @@
 -- for itself first. Running it against a database that is already installed
 -- changes nothing - with one exception worth knowing before you do it.
 --
--- The demo accounts below are INSERTs. Re-running this file on an installation
--- where they were deleted PUTS THEM BACK, password123 and all. Delete the seed
--- block before go-live, as the checklist in the README says, and this stops
--- being a hazard.
+-- No user accounts are seeded, so re-running cannot resurrect a deleted account
+-- or reset anybody's password. The only seed data here is reference data:
+-- roles, departments, leave categories and public holidays.
 --
 -- This file selects its own database. Piping it into another one
 -- (`mysql -u root -p other_db < schema.sql`) does NOT install it there - the
@@ -92,24 +91,24 @@ PREPARE add_fk_stmt FROM @add_fk;
 EXECUTE add_fk_stmt;
 DEALLOCATE PREPARE add_fk_stmt;
 
--- Seed Default Accounts (Default password for all seed users: "password123")
--- Hash generated via password_hash('password123', PASSWORD_BCRYPT)
--- $2y$10$DpUB8FTRFAemkrgK47LZ8.g2WD1.AZxo3kIaZot8Zb7x/lfJLo4/K
-INSERT INTO `users` (`id`, `emp_id`, `first_name`, `last_name`, `email`, `password_hash`, `role_id`, `department_id`, `manager_id`, `status`) VALUES
-(1, 'EMP-1001', 'Admin', 'User', 'admin@lms.com', '$2y$10$DpUB8FTRFAemkrgK47LZ8.g2WD1.AZxo3kIaZot8Zb7x/lfJLo4/K', 5, 1, NULL, 'active'),
-(2, 'EMP-1002', 'Boss', 'Executive', 'boss@lms.com', '$2y$10$DpUB8FTRFAemkrgK47LZ8.g2WD1.AZxo3kIaZot8Zb7x/lfJLo4/K', 4, 4, NULL, 'active'),
-(3, 'EMP-1003', 'Sarah', 'HR Manager', 'hr@lms.com', '$2y$10$DpUB8FTRFAemkrgK47LZ8.g2WD1.AZxo3kIaZot8Zb7x/lfJLo4/K', 3, 2, 2, 'active'),
-(4, 'EMP-1004', 'David', 'Line Manager', 'manager@lms.com', '$2y$10$DpUB8FTRFAemkrgK47LZ8.g2WD1.AZxo3kIaZot8Zb7x/lfJLo4/K', 2, 1, 3, 'active'),
-(5, 'EMP-1005', 'John', 'Employee', 'employee@lms.com', '$2y$10$DpUB8FTRFAemkrgK47LZ8.g2WD1.AZxo3kIaZot8Zb7x/lfJLo4/K', 1, 1, 4, 'active')
-ON DUPLICATE KEY UPDATE `email`=`email`;
+-- No accounts are seeded.
+--
+-- Five demo accounts used to live here, all sharing the password "password123"
+-- - which is published in the README and in this file's history, so anybody who
+-- can read the repository could sign in to any installation that still had
+-- them. An account nobody created deliberately is an account nobody remembers
+-- to remove.
+--
+-- Create the first administrator instead, which prints a random password once:
+--
+--     php tools/create_admin.php --email you@realnet.co.sz --name "Your Name"
+--
+-- Then load the staff roster with tools/seed_employees.php and assign roles and
+-- departments in the admin console.
 
--- Point the two seeded departments at their seeded heads, but only while they
--- have none. These were unconditional, which made re-running this file
--- overwrite whoever actually heads those departments with the demo accounts -
--- silently reassigning approval authority on a live installation. Seeding is
--- for a database with nothing in it; it must never outrank a real assignment.
-UPDATE `departments` SET `line_manager_id` = 4 WHERE `id` = 1 AND `line_manager_id` IS NULL;
-UPDATE `departments` SET `line_manager_id` = 3 WHERE `id` = 2 AND `line_manager_id` IS NULL;
+-- Departments are seeded without heads. There are no accounts to appoint, and
+-- guessing at one would put approval authority somewhere nobody chose: assign
+-- each department's head in the admin console once the real people exist.
 
 -- 4. Leave Types Table
 CREATE TABLE IF NOT EXISTS `leave_types` (
@@ -159,13 +158,9 @@ CREATE TABLE IF NOT EXISTS `leave_entitlements` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- Seed entitlements for John Employee & David Manager
-INSERT INTO `leave_entitlements` (`user_id`, `leave_type_id`, `year`, `total_days`, `used_days`, `pending_days`) VALUES
-(5, 1, 2026, 20.00, 0.00, 0.00),
-(5, 2, 2026, 10.00, 0.00, 0.00),
-(5, 3, 2026, 5.00, 0.00, 0.00),
-(4, 1, 2026, 20.00, 0.00, 0.00),
-(4, 2, 2026, 10.00, 0.00, 0.00)
-ON DUPLICATE KEY UPDATE `year`=`year`;
+-- No entitlements are seeded either: they belonged to the demo accounts. HR
+-- allocates them per year from Leave Allocations, which is also what keeps the
+-- allocation an act somebody is accountable for.
 
 -- 6. Public Holidays Table
 CREATE TABLE IF NOT EXISTS `holidays` (
