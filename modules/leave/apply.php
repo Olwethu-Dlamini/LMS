@@ -39,7 +39,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $validation = $calculator->validateEligibility($userId, $leaveTypeId, $startDate, $endDate, $file, $dayType);
 
         if (!$validation['valid']) {
-            $error = implode('<br>', $validation['errors']);
+            $error = implode('<br>', array_map('escape_html', $validation['errors']));
         } else {
             $attachmentPath = null;
             // A document that fails to store must fail the submission. Letting
@@ -48,7 +48,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($file && ($file['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_NO_FILE) {
                 $reasons = AttachmentStore::rejectionReasons($file);
                 if (!empty($reasons)) {
-                    $error = implode('<br>', array_map('htmlspecialchars', $reasons));
+                    $error = implode('<br>', array_map('escape_html', $reasons));
                 } else {
                     $attachmentPath = AttachmentStore::store($file);
                     if ($attachmentPath === null) {
@@ -65,7 +65,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     header('Location: ' . APP_URL . '/modules/leave/my_history.php');
                     exit;
                 } else {
-                    $error = 'Error submitting leave application: ' . $res['error'];
+                    $error = 'Error submitting leave application: ' . escape_html($res['error']);
                 }
             }
         }

@@ -31,7 +31,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             header('Location: ' . APP_URL . '/modules/hr/approvals.php');
             exit;
         } else {
-            $error = 'Error processing request: ' . $res['error'];
+            $error = 'Error processing request: ' . escape_html($res['error']);
         }
     }
 }

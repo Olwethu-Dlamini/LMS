@@ -7,10 +7,36 @@ require_once __DIR__ . '/../config/constants.php';
 require_once __DIR__ . '/../config/database.php';
 
 /**
- * Sanitize User Input for XSS Prevention
+ * Normalise a submitted value before it is stored.
+ *
+ * This used to HTML-escape as well, which sounds safer and was not: every
+ * screen escapes again on the way out, so the escaping happened twice and the
+ * second pass was the one people saw. "Sales & Marketing" was stored as
+ * "Sales &amp; Marketing" and rendered as "Sales &amp;amp; Marketing" - the
+ * department reads its own name wrong on every page, and an apostrophe in a
+ * leave reason arrives at the approver as &#039;.
+ *
+ * Escaping belongs at the point of output, where the target format is known.
+ * This function's job is only to remove what should never be stored: the
+ * surrounding whitespace, and the control characters that corrupt a log line or
+ * split a header.
  */
 function sanitize(string $data): string {
-    return htmlspecialchars(trim($data), ENT_QUOTES, 'UTF-8');
+    // Strip C0 controls and DEL, keeping tab, newline and carriage return so a
+    // multi-line reason survives intact.
+    $cleaned = preg_replace('/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/u', '', $data);
+    return trim($cleaned ?? $data);
+}
+
+/**
+ * Escape a value for output inside HTML.
+ *
+ * Every screen already calls htmlspecialchars() directly; this exists for the
+ * places that assemble a fragment before echoing it, so the escaping is not
+ * quietly forgotten when a variable is interpolated into a message.
+ */
+function escape_html(?string $value): string {
+    return htmlspecialchars((string)$value, ENT_QUOTES, 'UTF-8');
 }
 
 /**

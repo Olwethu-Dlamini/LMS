@@ -85,7 +85,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 header('Location: ' . APP_URL . '/modules/admin/users.php');
                 exit;
             } catch (PDOException $e) {
-                $error = 'Error creating user: ' . $e->getMessage();
+                $error = 'Error creating user: ' . escape_html($e->getMessage());
             }
         }
     } elseif ($action === 'edit') {
@@ -123,7 +123,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 header('Location: ' . APP_URL . '/modules/admin/users.php');
                 exit;
             } catch (PDOException $e) {
-                $error = 'Error updating user: ' . $e->getMessage();
+                $error = 'Error updating user: ' . escape_html($e->getMessage());
             }
         }
     } elseif ($action === 'reset_password') {
@@ -147,7 +147,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 header('Location: ' . APP_URL . '/modules/admin/users.php');
                 exit;
             } catch (PDOException $e) {
-                $error = 'Error resetting password: ' . $e->getMessage();
+                $error = 'Error resetting password: ' . escape_html($e->getMessage());
             }
         }
     } elseif ($action === 'archive' || $action === 'delete') {
@@ -230,7 +230,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 header('Location: ' . APP_URL . '/modules/admin/users.php');
                 exit;
             } catch (PDOException $e) {
-                $error = 'Error deleting user: ' . $e->getMessage();
+                $error = 'Error deleting user: ' . escape_html($e->getMessage());
             }
         }
     }

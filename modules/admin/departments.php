@@ -66,7 +66,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 header('Location: ' . APP_URL . '/modules/admin/departments.php');
                 exit;
             } catch (PDOException $e) {
-                $error = 'Error deleting department: ' . $e->getMessage();
+                $error = 'Error deleting department: ' . escape_html($e->getMessage());
             }
         }
     }

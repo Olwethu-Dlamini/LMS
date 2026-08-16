@@ -42,7 +42,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 header('Location: ' . APP_URL . '/modules/hr/allocations.php');
                 exit;
             } catch (PDOException $e) {
-                $error = 'Error performing bulk initialization: ' . $e->getMessage();
+                $error = 'Error performing bulk initialization: ' . escape_html($e->getMessage());
             }
         }
     } else {
