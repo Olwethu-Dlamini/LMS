@@ -136,9 +136,13 @@ plannable if you can tell what is booked from what has merely been asked for:
 
 | On the calendar | What it means |
 |---|---|
-| Solid entry, marked *Away* | Approved. That person is off. Counted in the day's total, e.g. `2/8`. |
-| Dashed italic entry, marked *Applied* | Applied for and still awaiting a decision. Counted separately as `+1` beside the total, never inside it. |
+| Blue chip reading **Approved** | Signed off. That person will be off. Counted in the day's total, e.g. `2/8`. |
+| Amber chip reading **Requested · not yet approved** | Somebody has asked for this leave and nobody has decided yet. It might still be refused, so it is **never counted** in the day's total. |
 | Entry reading **You** | Your own leave, so you can find yourself in a busy month. |
+
+So if a colleague appears on a day in amber, they have put in a leave request that
+has not been approved — useful to know before you request the same days, and not
+something to plan cover around yet.
 
 A legend above the grid names both. The month header also totals them: how many
 people are approved off, and how many are still waiting on a decision.

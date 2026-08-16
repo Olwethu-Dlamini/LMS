@@ -176,8 +176,8 @@ ob_start();
              leave and a request nobody has decided yet unexplained - the one
              distinction people most need when reading a rota. -->
         <div class="ri-cal-legend">
-            <span><i class="ri-cal-key ri-cal-key-approved"></i> Approved &mdash; the person is off</span>
-            <span><i class="ri-cal-key ri-cal-key-pending"></i> Applied for &mdash; awaiting approval</span>
+            <span><i class="ri-cal-key ri-cal-key-approved"></i> Approved &mdash; they will be off</span>
+            <span><i class="ri-cal-key ri-cal-key-pending"></i> Requested &mdash; asked for, not yet approved</span>
             <span><i class="ri-cal-key ri-cal-key-holiday"></i> Public holiday</span>
         </div>
     </div>
@@ -249,18 +249,12 @@ ob_start();
                         <td class="<?php echo implode(' ', $classes); ?>">
                             <div class="ri-cal-daytop">
                                 <span class="ri-cal-daynum"><?php echo (int)$day->format('j'); ?></span>
-                                <?php if ($inMonth && $isWorkday && ($awayCount > 0 || $pendingCount > 0)): ?>
-                                    <span class="ri-cal-counts">
-                                        <?php if ($awayCount > 0): ?>
-                                            <span class="ri-cal-count" title="<?php echo $awayCount; ?> of <?php echo (int)$headcount; ?> approved off">
-                                                <?php echo $awayCount; ?>/<?php echo (int)$headcount; ?>
-                                            </span>
-                                        <?php endif; ?>
-                                        <?php if ($pendingCount > 0): ?>
-                                            <span class="ri-cal-count-pending" title="<?php echo $pendingCount; ?> more awaiting approval">
-                                                +<?php echo $pendingCount; ?>
-                                            </span>
-                                        <?php endif; ?>
+                                <?php // Only settled leave is counted. A request nobody has decided
+                                      // is not a number the rota can rely on, and it says so on its
+                                      // own entry below. ?>
+                                <?php if ($inMonth && $isWorkday && $awayCount > 0): ?>
+                                    <span class="ri-cal-count" title="<?php echo $awayCount; ?> of <?php echo (int)$headcount; ?> approved off">
+                                        <?php echo $awayCount; ?>/<?php echo (int)$headcount; ?>
                                     </span>
                                 <?php endif; ?>
                             </div>
@@ -287,14 +281,22 @@ ob_start();
                                          title="<?php echo htmlspecialchars(
                                              $absence['name']
                                              . ($showLeaveType ? ' - ' . $absence['leave_name'] : '')
-                                             . ($isPending ? ' - applied for, awaiting approval' : ' - approved')
+                                             . ($isPending
+                                                 ? ' - requested leave, not yet approved'
+                                                 : ' - approved, they are off')
                                          ); ?>">
-                                        <span class="ri-cal-person-name"><?php echo htmlspecialchars($label); ?></span>
-                                        <?php if ($showLeaveType): ?>
-                                            <span class="ri-cal-person-tag"><?php echo htmlspecialchars($absence['leave_code']); ?><?php echo $isHalf ? ' &frac12;' : ''; ?></span>
-                                        <?php else: ?>
-                                            <span class="ri-cal-person-tag"><?php echo $isPending ? 'Applied' : 'Away'; ?></span>
-                                        <?php endif; ?>
+                                        <span class="ri-cal-person-line">
+                                            <span class="ri-cal-person-name"><?php echo htmlspecialchars($label); ?></span>
+                                            <?php if ($showLeaveType): ?>
+                                                <span class="ri-cal-person-tag"><?php echo htmlspecialchars($absence['leave_code']); ?><?php echo $isHalf ? ' &frac12;' : ''; ?></span>
+                                            <?php endif; ?>
+                                        </span>
+                                        <?php // Said in words, not just in styling: somebody reading a
+                                              // colleague's name on a rota needs to know whether that
+                                              // person is actually off or has only asked to be. ?>
+                                        <span class="ri-cal-person-state">
+                                            <?php echo $isPending ? 'Requested &middot; not yet approved' : 'Approved'; ?>
+                                        </span>
                                     </div>
                                 <?php endforeach; ?>
                             <?php endif; ?>
@@ -311,9 +313,9 @@ ob_start();
             </div>
         </div>
         <div class="card-footer bg-white small text-muted">
-            The count on each day is how many are <strong>approved</strong> off out of the team;
-            a <span class="ri-cal-count-pending">+1</span> beside it is a request still awaiting a
-            decision, counted separately so a proposal is never read as a booking.
+            The count on each day is how many people are <strong>approved</strong> off out of the team.
+            Requests still waiting on a decision are listed and labelled but never counted,
+            because nothing about them is settled yet.
             Weekends and public holidays are never counted as absence.
             <?php if (!$showLeaveType): ?>
                 Leave categories are withheld from colleagues' entries.
