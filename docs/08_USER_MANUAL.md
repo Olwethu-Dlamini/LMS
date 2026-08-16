@@ -63,6 +63,12 @@ top of any page. You will need your current password to set a new one.
 but it always arrives as a temporary one. You will be asked to set your own the
 next time you sign in.
 
+**If you are locked out** — after five failed attempts in a row the sign-in form
+stops answering for fifteen minutes. This protects your account from somebody
+guessing at it. Wait it out and try again, or ask IT to reset your password if
+you have genuinely forgotten it. Signing in successfully clears the count, so
+mistyping once or twice costs you nothing.
+
 ---
 
 ## 2. What everyone can do
@@ -140,13 +146,21 @@ HR, executives and administrators can select any department.
    that category's rules — notice required, minimum and maximum length, and
    whether half-days are allowed.
 3. Pick your **start** and **end** dates. If the category demands notice, the
-   date picker will not let you choose anything sooner.
+   date picker will not let you choose anything sooner. Categories that need no
+   notice — sick leave — have no such floor, so you can enter dates that have
+   already passed and record the leave after the fact.
 4. Choose a **duration type**: full days, or a half day (morning or afternoon).
    Half-day options are greyed out for categories that must be taken as whole days.
+   A half day applies to **one** day: if you want half a day off, set the start
+   and end date to the same date.
 5. Watch the **live summary**. It counts the working days, tells you your
    remaining balance, and warns you about anything that would block the request —
    before you submit.
-6. Give a **reason**, attach a document if the category needs one, and select
+6. Check the **cover panel** underneath it. If anyone else in your department is
+   already off on those dates it names them and says how many days each is out.
+   Where your department has a cover limit set, it also tells you whether your
+   request would take the team past it. See *Who else is away* below.
+7. Give a **reason**, attach a document if the category needs one, and select
    **Submit Application**.
 
 You are returned to your history with a confirmation and a reference number in
@@ -157,6 +171,34 @@ the form `LV-2026-XXXXXX`. Quote it if you need to ask about the request.
 > request over a week containing a holiday costs you four days, not five. A half
 > day costs 0.5.
 
+#### Who else is away
+
+The cover panel is advice, not a gate. Nothing it says will stop you submitting:
+sick leave cannot wait for a convenient rota, and your approver is the one who
+decides. What it does is put the staffing picture in front of the one person who
+can still move the dates cheaply — you, before the request is filed — instead of
+surfacing it days later as a rejection.
+
+| What it says | What it means |
+|---|---|
+| Names, in blue | Colleagues already off then. *Awaiting approval* marks a request that has not been decided yet, so it may still fall away. |
+| Amber | The department is already at or over its cover limit on some of those days, with or without you. |
+| Red | Your request is the one that would take the department past its limit. Move the dates if they can move; submit anyway if they cannot. |
+
+Leave categories are never shown for colleagues — only that they are away. The
+same rule applies on the team calendar, so nobody's sick or maternity leave is
+disclosed to the team.
+
+#### Supporting documents
+
+Documents you attach are private. Only you and the people who approve your
+request — your line manager, HR, the executive and system administrators — can
+open one. Colleagues who can see your absence on the team calendar cannot open
+the certificate behind it. PDF, JPG and PNG up to 5 MB are accepted.
+
+If a document fails to upload the whole request is refused rather than filed
+without it, so a certificate can never go missing quietly.
+
 ### Tracking and cancelling
 
 **My Leave → My Leave History** lists everything you have ever submitted with its
@@ -164,8 +206,13 @@ current status. Select **View Details** to see who has signed it off, when, and
 any remarks they left.
 
 **Cancel** withdraws a request. Cancel one that is still in approval and the held
-days return to your balance immediately. Cancel one that was already approved and
-the used days are given back.
+days return to your balance immediately. Cancel approved leave before it starts
+and the days are given back to you.
+
+Once leave has started you can no longer cancel it yourself and the button is
+gone: the days were taken, and handing them back afterwards would turn time off
+into credit. If the dates genuinely changed — you came back early, or never went
+— ask HR. They can correct it, and the correction is recorded in the audit log.
 
 ---
 
@@ -508,6 +555,8 @@ the apply form warns you about all of them before you submit.
 | **Overlapping dates** | You cannot hold two live requests covering the same day, even in different categories. Cancel the first one, or change the dates. |
 | **Missing document** | Sick leave over two days needs a certificate; maternity and paternity always do. Attach a PDF, JPG or PNG. |
 | **Half day on the wrong category** | Maternity, paternity and unpaid leave must be whole days. The half-day options are greyed out for them. |
+| **Half day across a range** | A half day belongs to one day. Choose half a day with a start and end date days apart and the form refuses it — set both dates to the same day instead. |
+| **Cancelling leave you are already taking** | Approved leave can be cancelled up to the day before it starts. From the first day onward only HR can correct it. |
 | **No working days in range** | A range covering only a weekend or only public holidays costs nothing, so there is nothing to approve. |
 | **Not enough left** | Remember that pending requests are already holding days. Your available figure is total minus used *minus pending*. |
 
