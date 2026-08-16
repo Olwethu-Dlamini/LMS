@@ -111,7 +111,12 @@ ob_start();
                                 <a href="?view=<?php echo $app['id']; ?>" class="btn btn-sm btn-outline-info font-weight-bold mr-1">
                                     <i class="ti-eye"></i> View Details
                                 </a>
-                                <?php if (!in_array($app['status'], ['cancelled', 'rejected'])): ?>
+                                <?php
+                                // The same rule the workflow enforces, asked here so the
+                                // button is absent rather than present and rejected.
+                                $cancelRefusal = ApprovalWorkflow::cancellationRefusal($app, true, $userRole);
+                                ?>
+                                <?php if ($cancelRefusal === null): ?>
                                     <button type="button" class="btn btn-sm btn-outline-danger font-weight-bold" data-toggle="modal" data-target="#cancelModal<?php echo $app['id']; ?>">
                                         <i class="ti-close"></i> Cancel
                                     </button>
@@ -144,6 +149,10 @@ ob_start();
                                             </div>
                                         </div>
                                     </div>
+                                <?php elseif ($app['status'] === STATUS_APPROVED): ?>
+                                    <span class="small text-muted d-inline-block" style="max-width: 220px;">
+                                        Under way &mdash; ask HR to correct it.
+                                    </span>
                                 <?php endif; ?>
                             </td>
                         </tr>

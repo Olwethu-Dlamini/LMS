@@ -87,6 +87,56 @@ class ApprovalWorkflow {
     }
 
     /**
+     * Why a cancellation cannot go ahead, or null when it can.
+     *
+     * Pure, so the rule can be read and tested on its own.
+     *
+     * Anyone may withdraw a request that has not been decided, and may cancel
+     * approved leave they have not started taking - plans change, and that is
+     * the whole point of booking early. What nobody may do is cancel leave they
+     * have already begun: the days were taken, and handing them back to the
+     * balance afterwards turns time off into credit. HR and administrators can
+     * still do it, because a genuine correction has to be possible somewhere,
+     * and every one of those is written to the audit log.
+     *
+     * @param array $application status and start_date
+     * @param string|null $today injectable so the boundary can be tested
+     */
+    public static function cancellationRefusal(
+        array $application,
+        bool $isOwner,
+        string $userRole,
+        ?string $today = null
+    ): ?string {
+        $status = $application['status'] ?? '';
+
+        if (in_array($status, [STATUS_CANCELLED, STATUS_REJECTED], true)) {
+            return "Application is already {$status}.";
+        }
+
+        $isAuthorisedRole = in_array($userRole, [ROLE_HR, ROLE_ADMIN], true);
+        if (!$isOwner && !$isAuthorisedRole) {
+            return "Unauthorized: You do not have permission to cancel this application.";
+        }
+
+        if ($isAuthorisedRole) {
+            return null;
+        }
+
+        $startDate = $application['start_date'] ?? null;
+        if ($status === STATUS_APPROVED && $startDate !== null) {
+            $start = (new DateTime($startDate))->format('Y-m-d');
+            $now   = (new DateTime($today ?? 'today'))->format('Y-m-d');
+            if ($start <= $now) {
+                return "This leave has already started, so it can no longer be cancelled here. "
+                     . "Ask HR to correct it if the dates changed.";
+            }
+        }
+
+        return null;
+    }
+
+    /**
      * The applicant's role name, used to pick their routing.
      */
     private function roleOf(int $userId): string {
@@ -317,17 +367,14 @@ class ApprovalWorkflow {
                 throw new Exception("Leave application not found.");
             }
 
-            // Authorization check: Applicant, HR, or Admin
+            // Who may cancel what, and until when.
             $isOwner = ((int)$app['user_id'] === $userId);
-            $isAuthorizedRole = in_array($userRole, [ROLE_HR, ROLE_ADMIN]);
-            if (!$isOwner && !$isAuthorizedRole) {
-                throw new Exception("Unauthorized: You do not have permission to cancel this application.");
+            $refusal = self::cancellationRefusal($app, $isOwner, $userRole);
+            if ($refusal !== null) {
+                throw new Exception($refusal);
             }
 
             $currentStatus = $app['status'];
-            if (in_array($currentStatus, [STATUS_CANCELLED, STATUS_REJECTED])) {
-                throw new Exception("Application is already " . $currentStatus . ".");
-            }
 
             $totalDays = (float)$app['total_days'];
             $appUserId = (int)$app['user_id'];

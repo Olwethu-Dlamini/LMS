@@ -429,6 +429,46 @@ $tester->assert($cancelRes['success'] === true, "Cancel Pending Leave Applicatio
 $entPendingAfter = $mockDb->entitlements[$entKey2]['pending_days'];
 $tester->assert((float)$entPendingAfter === 0.0, "Pending Days Released Back to Entitlements upon Cancellation", "Got {$entPendingAfter}");
 
+// Who may cancel, and until when.
+$approvedFuture = ['status' => STATUS_APPROVED, 'start_date' => '2026-09-14'];
+$approvedStarted = ['status' => STATUS_APPROVED, 'start_date' => '2026-09-07'];
+$pendingStarted = ['status' => STATUS_PENDING_MANAGER, 'start_date' => '2026-09-07'];
+$today = '2026-09-09';
+
+$tester->assert(
+    ApprovalWorkflow::cancellationRefusal($approvedFuture, true, ROLE_EMPLOYEE, $today) === null,
+    "An applicant can cancel approved leave they have not started"
+);
+$tester->assert(
+    ApprovalWorkflow::cancellationRefusal($approvedStarted, true, ROLE_EMPLOYEE, $today) !== null,
+    "An applicant cannot hand back leave they are already taking"
+);
+$tester->assert(
+    ApprovalWorkflow::cancellationRefusal(
+        ['status' => STATUS_APPROVED, 'start_date' => $today], true, ROLE_EMPLOYEE, $today
+    ) !== null,
+    "Leave starting today counts as under way, not as still cancellable"
+);
+$tester->assert(
+    ApprovalWorkflow::cancellationRefusal($approvedStarted, false, ROLE_HR, $today) === null
+    && ApprovalWorkflow::cancellationRefusal($approvedStarted, false, ROLE_ADMIN, $today) === null,
+    "HR and administrators can still correct leave that has started"
+);
+$tester->assert(
+    ApprovalWorkflow::cancellationRefusal($pendingStarted, true, ROLE_EMPLOYEE, $today) === null,
+    "A request still awaiting a decision can always be withdrawn"
+);
+$tester->assert(
+    ApprovalWorkflow::cancellationRefusal($approvedFuture, false, ROLE_MANAGER, $today) !== null,
+    "A line manager cannot cancel somebody else's approved leave"
+);
+$tester->assert(
+    ApprovalWorkflow::cancellationRefusal(
+        ['status' => STATUS_CANCELLED, 'start_date' => '2026-09-14'], true, ROLE_HR, $today
+    ) !== null,
+    "An already cancelled application cannot be cancelled twice"
+);
+
 echo "\n--- 5. Testing Role-Aware Approval Routing ---\n";
 
 // Where each role's own application enters the chain. Pure functions, no DB.
