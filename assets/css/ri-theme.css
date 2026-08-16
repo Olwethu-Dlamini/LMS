@@ -576,11 +576,14 @@ hr { border-top: 1px solid var(--ri-grey-line); }
 .ri-cal-monthnav { display: flex; align-items: center; gap: 8px; }
 .ri-cal-monthlabel { color: var(--ri-navy); font-size: 15px; min-width: 150px; text-align: center; }
 .ri-cal-deptpick select { min-width: 190px; }
-.ri-cal-legend { display: flex; align-items: center; gap: 16px; font-size: 12px; color: var(--ri-muted); }
-.ri-cal-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 5px; }
-.ri-cal-dot-ok   { background: #dfe4ee; }
-.ri-cal-dot-at   { background: #e9b949; }
-.ri-cal-dot-over { background: var(--ri-danger); }
+.ri-cal-legend { display: flex; align-items: center; gap: 16px; font-size: 12px; color: var(--ri-muted); flex-wrap: wrap; }
+/* Legend keys mirror the entries in the grid exactly, so the legend is read
+   once and then recognised rather than translated. */
+.ri-cal-key { display: inline-block; width: 16px; height: 11px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }
+.ri-cal-key-approved { background: #eef2f8; border-left: 3px solid var(--ri-teal); }
+.ri-cal-key-pending  { background: transparent; border: 1px dashed var(--ri-muted-soft); border-left: 3px solid var(--ri-warning); }
+.ri-cal-key-holiday  { background: var(--ri-info-bg); border: 1px solid var(--ri-info); }
+.ri-cal-summary { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 
 .ri-cal { table-layout: fixed; }
 .ri-cal thead th {
@@ -595,18 +598,27 @@ hr { border-top: 1px solid var(--ri-grey-line); }
 .ri-cal .ri-cal-outside { background: #f4f5f9; color: var(--ri-muted-soft); }
 .ri-cal .ri-cal-holiday { background: var(--ri-info-bg); }
 .ri-cal .ri-cal-today { box-shadow: inset 0 0 0 2px var(--ri-teal); }
-.ri-cal .ri-cal-at   { background: var(--ri-warning-bg); }
-.ri-cal .ri-cal-over { background: var(--ri-danger-bg); }
+/* Cells are no longer washed amber or red for cover pressure. Shading whole
+   days competed with the entries inside them and coloured a day by a threshold
+   most departments never configure. The staffing question is answered by the
+   count in the corner, and in full on the approval screens where somebody is
+   actually deciding. */
 
-.ri-cal-daytop { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; }
+.ri-cal-daytop { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; gap: 4px; }
 .ri-cal-daynum { font-weight: 700; font-size: 13px; color: var(--ri-navy); }
 .ri-cal-outside .ri-cal-daynum { color: var(--ri-muted-soft); }
+.ri-cal-counts { display: inline-flex; align-items: center; gap: 3px; }
 .ri-cal-count {
   font-size: 10.5px; font-weight: 700; color: var(--ri-muted);
   background: var(--ri-grey); border-radius: var(--ri-pill); padding: 1px 7px;
 }
-.ri-cal-at .ri-cal-count   { background: #f6e3bb; color: var(--ri-warning); }
-.ri-cal-over .ri-cal-count { background: #f8d3d0; color: var(--ri-danger); }
+/* Requests nobody has decided yet are counted apart from booked leave, and
+   carry the same amber and the same dashed edge as their entries below. */
+.ri-cal-count-pending {
+  font-size: 10.5px; font-weight: 700; color: var(--ri-warning);
+  background: transparent; border: 1px dashed var(--ri-warning);
+  border-radius: var(--ri-pill); padding: 0 5px;
+}
 .ri-cal-note { font-size: 10.5px; color: var(--ri-info); margin-bottom: 3px; }
 
 .ri-cal-person {
@@ -617,10 +629,13 @@ hr { border-top: 1px solid var(--ri-grey-line); }
 .ri-cal-person-pending {
   background: transparent; border: 1px dashed var(--ri-muted-soft); border-left: 3px solid var(--ri-warning);
 }
+.ri-cal-person-pending .ri-cal-person-name { font-weight: 500; font-style: italic; }
+.ri-cal-person-pending .ri-cal-person-tag { color: var(--ri-warning); }
+/* Your own leave, so you can find yourself in a full month without reading names. */
+.ri-cal-person-you { box-shadow: inset 0 0 0 1px var(--ri-navy); }
+.ri-cal-person-you .ri-cal-person-name { font-weight: 700; }
 .ri-cal-person-name { font-weight: 600; color: var(--ri-navy); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ri-cal-person-tag { font-size: 9.5px; text-transform: uppercase; letter-spacing: .4px; color: var(--ri-muted); }
-.ri-cal-flag { font-size: 10px; font-weight: 700; color: var(--ri-danger); margin-top: 2px; }
-.ri-cal-flag-soft { color: var(--ri-warning); }
 
 /* coverage warning shown to an approver before they act */
 .ri-coverage { font-size: 12.5px; }

@@ -72,17 +72,23 @@ mv docs/manual.docx docs/08_USER_MANUAL.docx
 
 **Team calendar** (`modules/leave/team_calendar.php`) — a server-rendered month per
 department: who is off each working day and how many that leaves away out of the
-team. Pending requests are shown in outline and counted, so a clash is visible
-before it is approved. Weekends and public holidays are never counted as absence.
+team. Approved leave and requests still awaiting a decision are drawn, counted and
+labelled apart — solid against the headcount for the first, dashed and counted as
+`+n` for the second — because a day reading "3 away" is unplannable when one of
+them is off and two have only asked. A legend names both. Your own entries read
+"You". Weekends and public holidays are never counted as absence.
 Employees see their own department without leave categories, since sick and
 maternity leave should not be disclosed to colleagues; managers see the
 departments they approve for; HR, executives and admins see any department.
 
 **Coverage limits** — `departments.max_concurrent_absences` sets how many members
-may be away at once, edited per department in the admin console. Calendar days turn
-amber on the limit and red past it, and every approval stage shows a notice saying
-whether *this* request is what tips the department over, or whether it was already
-short. Nothing is blocked: sick leave does not wait for a convenient rota.
+may be away at once, edited per department in the admin console. Every approval
+stage shows a notice saying whether *this* request is what tips the department
+over, or whether it was already short, and the same notice appears on the apply
+form. The calendar itself no longer shades days amber and red for this: whole-day
+shading competed with the entries inside the cell and coloured days by a threshold
+most departments never set. Nothing is blocked anywhere: sick leave does not wait
+for a convenient rota.
 
 **Before you book** — the apply form answers the coverage question while the
 dates can still change. Once a category and a range are chosen it names who else

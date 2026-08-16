@@ -3,9 +3,14 @@
  * Team leave calendar.
  *
  * A month at a glance for one department, so a line manager can see a clash
- * before approving it rather than after. Every working day carries an "away of
- * headcount" count and is shaded once the department reaches the absence limit
- * configured against it in the admin console.
+ * before approving it rather than after.
+ *
+ * Approved leave and requests still waiting on a decision are drawn, counted and
+ * labelled apart. They used to sit together in one count, so a day reading
+ * "3 away" might have been one person off and two who had only asked - which is
+ * not something a rota can be planned from. Approved entries are solid and
+ * counted against the headcount; applied-for entries are dashed, italic, and
+ * counted separately as "+n".
  *
  * Who sees what:
  *   employee            own department, names only - the leave type is withheld
@@ -64,15 +69,43 @@ $deptName   = $selectedDept !== null ? $selectableDepts[$selectedDept]['name'] :
 $deptLimit  = $selectedDept !== null ? $selectableDepts[$selectedDept]['limit'] : null;
 $headcount  = 0;
 $byDay      = [];
-$dayState   = [];
 
 if ($selectedDept !== null) {
     $byDay     = $capacity->absencesInRange([$selectedDept], $monthStart, $monthEnd);
     $headcount = $capacity->headcounts([$selectedDept])[$selectedDept] ?? 0;
-    foreach ($capacity->capacityWarnings($byDay, $selectedDept, $deptLimit) as $warning) {
-        $dayState[$warning['date']] = $warning['state'];
-    }
 }
+
+/**
+ * Split a day's absences into settled and still-to-be-decided.
+ *
+ * The two were counted as one, so a day showing "3 away" might have been one
+ * person actually off and two who had merely asked. A rota cannot be read that
+ * way: what is booked and what is proposed have to be told apart at a glance.
+ */
+function split_by_status(array $absences): array {
+    $approved = [];
+    $pending  = [];
+    foreach ($absences as $absence) {
+        if (($absence['status'] ?? '') === STATUS_APPROVED) {
+            $approved[] = $absence;
+        } else {
+            $pending[] = $absence;
+        }
+    }
+    return [$approved, $pending];
+}
+
+// Month totals for the summary strip, counting people rather than requests -
+// somebody off twice in a month is still one person short from the rota.
+$peopleApproved = [];
+$peoplePending  = [];
+foreach ($byDay as $absences) {
+    [$approved, $pending] = split_by_status($absences);
+    foreach ($approved as $a) { $peopleApproved[(int)$a['user_id']] = true; }
+    foreach ($pending as $p)  { $peoplePending[(int)$p['user_id']]  = true; }
+}
+$monthApproved = count($peopleApproved);
+$monthPending  = count($peoplePending);
 
 // Public holidays are labelled in their cell so an empty day reads as a closure
 // rather than as available cover.
@@ -138,10 +171,14 @@ ob_start();
         </form>
         <?php endif; ?>
 
+        <!-- The legend describes what is actually drawn in the grid. It used to
+             describe cover states, which left the difference between booked
+             leave and a request nobody has decided yet unexplained - the one
+             distinction people most need when reading a rota. -->
         <div class="ri-cal-legend">
-            <span><i class="ri-cal-dot ri-cal-dot-ok"></i> Cover in hand</span>
-            <span><i class="ri-cal-dot ri-cal-dot-at"></i> At limit</span>
-            <span><i class="ri-cal-dot ri-cal-dot-over"></i> Understaffed</span>
+            <span><i class="ri-cal-key ri-cal-key-approved"></i> Approved &mdash; the person is off</span>
+            <span><i class="ri-cal-key ri-cal-key-pending"></i> Applied for &mdash; awaiting approval</span>
+            <span><i class="ri-cal-key ri-cal-key-holiday"></i> Public holiday</span>
         </div>
     </div>
 </div>
@@ -160,11 +197,19 @@ ob_start();
                 <?php echo htmlspecialchars($deptName); ?>
                 <span class="text-muted font-weight-normal">&middot; <?php echo (int)$headcount; ?> active member(s)</span>
             </span>
-            <span class="small">
-                <?php if ($deptLimit === null): ?>
-                    <span class="badge badge-light">No absence limit configured</span>
+            <span class="small ri-cal-summary">
+                <?php if ($monthApproved === 0 && $monthPending === 0): ?>
+                    <span class="badge badge-light">Nobody away this month</span>
                 <?php else: ?>
-                    <span class="badge badge-info">Limit: <?php echo (int)$deptLimit; ?> away at a time</span>
+                    <?php if ($monthApproved > 0): ?>
+                        <span class="badge badge-success"><?php echo $monthApproved; ?> approved off</span>
+                    <?php endif; ?>
+                    <?php if ($monthPending > 0): ?>
+                        <span class="badge badge-warning text-dark"><?php echo $monthPending; ?> awaiting approval</span>
+                    <?php endif; ?>
+                <?php endif; ?>
+                <?php if ($deptLimit !== null): ?>
+                    <span class="badge badge-light border">Cover limit <?php echo (int)$deptLimit; ?> at a time</span>
                 <?php endif; ?>
             </span>
         </div>
@@ -191,23 +236,31 @@ ob_start();
                         $isHoliday  = isset($holidays[$date]);
                         $isWorkday  = !$isWeekend && !$isHoliday;
                         $absences   = $byDay[$date] ?? [];
-                        $away       = count($absences);
-                        $state      = $dayState[$date] ?? null;
+                        [$dayApproved, $dayPending] = split_by_status($absences);
+                        $awayCount    = count($dayApproved);
+                        $pendingCount = count($dayPending);
 
                         $classes = ['ri-cal-cell'];
                         if (!$inMonth)  { $classes[] = 'ri-cal-outside'; }
                         if ($isWeekend) { $classes[] = 'ri-cal-weekend'; }
                         if ($isHoliday) { $classes[] = 'ri-cal-holiday'; }
                         if ($date === $today) { $classes[] = 'ri-cal-today'; }
-                        if ($state === LeaveCapacity::AT_LIMIT)   { $classes[] = 'ri-cal-at'; }
-                        if ($state === LeaveCapacity::OVER_LIMIT) { $classes[] = 'ri-cal-over'; }
                     ?>
                         <td class="<?php echo implode(' ', $classes); ?>">
                             <div class="ri-cal-daytop">
                                 <span class="ri-cal-daynum"><?php echo (int)$day->format('j'); ?></span>
-                                <?php if ($inMonth && $isWorkday && $away > 0): ?>
-                                    <span class="ri-cal-count" title="<?php echo $away; ?> of <?php echo (int)$headcount; ?> away">
-                                        <?php echo $away; ?>/<?php echo (int)$headcount; ?>
+                                <?php if ($inMonth && $isWorkday && ($awayCount > 0 || $pendingCount > 0)): ?>
+                                    <span class="ri-cal-counts">
+                                        <?php if ($awayCount > 0): ?>
+                                            <span class="ri-cal-count" title="<?php echo $awayCount; ?> of <?php echo (int)$headcount; ?> approved off">
+                                                <?php echo $awayCount; ?>/<?php echo (int)$headcount; ?>
+                                            </span>
+                                        <?php endif; ?>
+                                        <?php if ($pendingCount > 0): ?>
+                                            <span class="ri-cal-count-pending" title="<?php echo $pendingCount; ?> more awaiting approval">
+                                                +<?php echo $pendingCount; ?>
+                                            </span>
+                                        <?php endif; ?>
                                     </span>
                                 <?php endif; ?>
                             </div>
@@ -217,31 +270,33 @@ ob_start();
                             <?php endif; ?>
 
                             <?php if ($inMonth && $isWorkday): ?>
-                                <?php foreach ($absences as $absence): ?>
-                                    <?php
+                                <?php
+                                // Approved first, then the requests still waiting: what is
+                                // settled reads top-down before what is only proposed.
+                                foreach (array_merge($dayApproved, $dayPending) as $absence):
                                     $isPending = $absence['status'] !== STATUS_APPROVED;
                                     $isHalf    = (float)$absence['total_days'] === 0.5;
-                                    ?>
-                                    <div class="ri-cal-person<?php echo $isPending ? ' ri-cal-person-pending' : ''; ?>"
+                                    $isSelf    = (int)$absence['user_id'] === $userId;
+                                    $label     = $isSelf ? 'You' : $absence['name'];
+
+                                    $personClasses = ['ri-cal-person'];
+                                    if ($isPending) { $personClasses[] = 'ri-cal-person-pending'; }
+                                    if ($isSelf)    { $personClasses[] = 'ri-cal-person-you'; }
+                                ?>
+                                    <div class="<?php echo implode(' ', $personClasses); ?>"
                                          title="<?php echo htmlspecialchars(
                                              $absence['name']
                                              . ($showLeaveType ? ' - ' . $absence['leave_name'] : '')
-                                             . ($isPending ? ' (awaiting approval)' : '')
+                                             . ($isPending ? ' - applied for, awaiting approval' : ' - approved')
                                          ); ?>">
-                                        <span class="ri-cal-person-name"><?php echo htmlspecialchars($absence['name']); ?></span>
+                                        <span class="ri-cal-person-name"><?php echo htmlspecialchars($label); ?></span>
                                         <?php if ($showLeaveType): ?>
                                             <span class="ri-cal-person-tag"><?php echo htmlspecialchars($absence['leave_code']); ?><?php echo $isHalf ? ' &frac12;' : ''; ?></span>
                                         <?php else: ?>
-                                            <span class="ri-cal-person-tag">Away</span>
+                                            <span class="ri-cal-person-tag"><?php echo $isPending ? 'Applied' : 'Away'; ?></span>
                                         <?php endif; ?>
                                     </div>
                                 <?php endforeach; ?>
-
-                                <?php if ($state === LeaveCapacity::OVER_LIMIT): ?>
-                                    <div class="ri-cal-flag"><i class="ti-alert"></i> Over limit</div>
-                                <?php elseif ($state === LeaveCapacity::AT_LIMIT): ?>
-                                    <div class="ri-cal-flag ri-cal-flag-soft"><i class="ti-info-alt"></i> At limit</div>
-                                <?php endif; ?>
                             <?php endif; ?>
                         </td>
                     <?php
@@ -256,7 +311,9 @@ ob_start();
             </div>
         </div>
         <div class="card-footer bg-white small text-muted">
-            Pending requests are shown in outline and counted, so a clash is visible before it is approved.
+            The count on each day is how many are <strong>approved</strong> off out of the team;
+            a <span class="ri-cal-count-pending">+1</span> beside it is a request still awaiting a
+            decision, counted separately so a proposal is never read as a booking.
             Weekends and public holidays are never counted as absence.
             <?php if (!$showLeaveType): ?>
                 Leave categories are withheld from colleagues' entries.

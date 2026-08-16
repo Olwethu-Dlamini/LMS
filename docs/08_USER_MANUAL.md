@@ -131,8 +131,17 @@ working day, and how many that leaves away out of the team. Weekends and public
 holidays are never counted as absence, and holidays are labelled so an empty day
 reads as a closure rather than as available cover.
 
-Requests still awaiting approval appear in outline and are counted, so a clash is
-visible before somebody signs it off.
+**Approved leave and requests are shown differently**, because a day is only
+plannable if you can tell what is booked from what has merely been asked for:
+
+| On the calendar | What it means |
+|---|---|
+| Solid entry, marked *Away* | Approved. That person is off. Counted in the day's total, e.g. `2/8`. |
+| Dashed italic entry, marked *Applied* | Applied for and still awaiting a decision. Counted separately as `+1` beside the total, never inside it. |
+| Entry reading **You** | Your own leave, so you can find yourself in a busy month. |
+
+A legend above the grid names both. The month header also totals them: how many
+people are approved off, and how many are still waiting on a decision.
 
 What you see depends on your role. Employees see their own department with names
 only — leave categories are withheld, because sick and maternity leave are nobody
