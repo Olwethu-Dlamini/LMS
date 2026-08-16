@@ -1,4 +1,19 @@
 -- Leave Management System (LMS) Database Schema & Seed Data
+--
+-- Safe to re-run: every table is CREATE TABLE IF NOT EXISTS, every seed ends in
+-- ON DUPLICATE KEY UPDATE, and the one foreign key added after the fact checks
+-- for itself first. Running it against a database that is already installed
+-- changes nothing - with one exception worth knowing before you do it.
+--
+-- The demo accounts below are INSERTs. Re-running this file on an installation
+-- where they were deleted PUTS THEM BACK, password123 and all. Delete the seed
+-- block before go-live, as the checklist in the README says, and this stops
+-- being a hazard.
+--
+-- This file selects its own database. Piping it into another one
+-- (`mysql -u root -p other_db < schema.sql`) does NOT install it there - the
+-- USE below wins and lms_db is written instead. To install under a different
+-- name, change both lines.
 CREATE DATABASE IF NOT EXISTS `lms_db` DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 USE `lms_db`;
 
@@ -56,8 +71,26 @@ CREATE TABLE IF NOT EXISTS `users` (
     CONSTRAINT `fk_users_manager` FOREIGN KEY (`manager_id`) REFERENCES `users`(`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
-ALTER TABLE `departments` 
-ADD CONSTRAINT `fk_departments_manager` FOREIGN KEY (`line_manager_id`) REFERENCES `users`(`id`) ON DELETE SET NULL;
+-- departments.line_manager_id points at users, and users points back at
+-- departments, so one of the two constraints has to be added after both tables
+-- exist. Added conditionally: a bare ADD CONSTRAINT fails with errno 121 on a
+-- second run, which aborted the whole import halfway through and left the
+-- install looking complete when it was not. MySQL 8 has no
+-- ADD CONSTRAINT IF NOT EXISTS, hence the lookup.
+SET @fk_exists := (
+    SELECT COUNT(*)
+    FROM information_schema.TABLE_CONSTRAINTS
+    WHERE CONSTRAINT_SCHEMA = DATABASE()
+      AND TABLE_NAME       = 'departments'
+      AND CONSTRAINT_NAME  = 'fk_departments_manager'
+);
+SET @add_fk := IF(@fk_exists = 0,
+    'ALTER TABLE `departments` ADD CONSTRAINT `fk_departments_manager` FOREIGN KEY (`line_manager_id`) REFERENCES `users`(`id`) ON DELETE SET NULL',
+    'DO 0'
+);
+PREPARE add_fk_stmt FROM @add_fk;
+EXECUTE add_fk_stmt;
+DEALLOCATE PREPARE add_fk_stmt;
 
 -- Seed Default Accounts (Default password for all seed users: "password123")
 -- Hash generated via password_hash('password123', PASSWORD_BCRYPT)
@@ -70,8 +103,13 @@ INSERT INTO `users` (`id`, `emp_id`, `first_name`, `last_name`, `email`, `passwo
 (5, 'EMP-1005', 'John', 'Employee', 'employee@lms.com', '$2y$10$DpUB8FTRFAemkrgK47LZ8.g2WD1.AZxo3kIaZot8Zb7x/lfJLo4/K', 1, 1, 4, 'active')
 ON DUPLICATE KEY UPDATE `email`=`email`;
 
-UPDATE `departments` SET `line_manager_id` = 4 WHERE `id` = 1;
-UPDATE `departments` SET `line_manager_id` = 3 WHERE `id` = 2;
+-- Point the two seeded departments at their seeded heads, but only while they
+-- have none. These were unconditional, which made re-running this file
+-- overwrite whoever actually heads those departments with the demo accounts -
+-- silently reassigning approval authority on a live installation. Seeding is
+-- for a database with nothing in it; it must never outrank a real assignment.
+UPDATE `departments` SET `line_manager_id` = 4 WHERE `id` = 1 AND `line_manager_id` IS NULL;
+UPDATE `departments` SET `line_manager_id` = 3 WHERE `id` = 2 AND `line_manager_id` IS NULL;
 
 -- 4. Leave Types Table
 CREATE TABLE IF NOT EXISTS `leave_types` (
