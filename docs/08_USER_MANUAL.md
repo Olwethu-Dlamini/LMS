@@ -1,4 +1,4 @@
-# 📘 User Manual: Leave Management System
+# User Manual: Leave Management System
 
 **Real Image Internet · Staff Leave Portal**
 

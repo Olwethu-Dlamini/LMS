@@ -231,7 +231,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
                         if (!data.valid && data.errors.length > 0) {
                             errorBox.style.display = "block";
-                            errorBox.innerHTML = "⚠️ " + data.errors.join("<br>⚠️ ");
+                            errorBox.innerHTML = data.errors.join("<br>");
                         }
 
                         showCoverage(data.coverage);
