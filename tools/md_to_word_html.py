@@ -3,6 +3,26 @@
 Convert the user manual Markdown into clean, semantic HTML that LibreOffice maps
 onto proper Word heading/table styles. Handles only the markdown subset the
 manual actually uses, deliberately - no general-purpose parser needed.
+
+Step one of two. To rebuild docs/08_USER_MANUAL.docx after editing the markdown:
+
+    python3 tools/md_to_word_html.py docs/08_USER_MANUAL.md /tmp/manual.html
+    libreoffice --headless --convert-to 'docx:MS Word 2007 XML' \
+        --infilter='HTML (StarWriter)' --outdir /tmp /tmp/manual.html
+    cp /tmp/manual.docx docs/08_USER_MANUAL.docx
+
+Both LibreOffice flags are load-bearing. Without --infilter the HTML is opened in
+Calc, because it is mostly tables, and Calc cannot export .docx - the error is
+"no export filter found", which reads like a missing installation rather than the
+wrong application. Naming the output filter avoids the same guesswork on the way
+out.
+
+Blockquotes become single-cell tables on purpose: that is how a callout box
+survives into Word. So the table count this script prints is tables plus
+callouts, not tables alone.
+
+docs/user-manual.html is NOT produced here. It is a separately authored web
+manual with its own structure, and editing it is a manual job.
 """
 import html
 import re

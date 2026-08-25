@@ -130,20 +130,23 @@ Everything the bell tells you is also sent to your work email address, so you do
 not have to be signed in to hear about it. Messages come from
 **lms@realnet.co.sz**.
 
-A few things worth knowing:
+The message carries the outcome, the dates and any remarks the approver left. The
+link in it is there if you want the full record, not because you need it to find
+out what happened.
 
-- **Do not reply to that address.** Nobody reads it. Replies are directed to
-  info@realnet.co.sz instead, and anything about a specific request is better
-  raised with your line manager or HR.
-- **The email tells you the whole story.** The outcome, the dates and any remarks
-  from the approver are in the message itself. The link is there if you want the
-  full record, not because you need it to find out what happened.
-- **Check your junk folder** if notices are not arriving. A new sending address is
-  sometimes filtered the first few times. Marking one message as not junk usually
-  settles it; if it does not, call IT.
-- **Email can lag by a minute or so.** The bell is immediate; email is sent in
-  batches shortly afterwards. Nothing is lost if the mail server is briefly
-  unavailable - it is delivered once the server is back.
+Email can trail the bell by a minute or so. The bell is immediate; mail is sent
+in batches shortly after. Nothing is lost if the mail server is briefly
+unavailable, it is delivered once the server is back.
+
+> **Do not reply to that address.** Nobody reads `lms@realnet.co.sz`. Replies are
+> directed to info@realnet.co.sz instead, and anything about a specific request is
+> better raised with your line manager or HR.
+
+If notices are not arriving, check your junk folder first: a new sending address
+is often filtered the first few times, and marking one message as not junk
+usually settles it. If they show in the **Alerts** bell but never arrive by mail,
+that is a server problem rather than anything you can fix, so report it to IT.
+Nothing is lost either way, the bell carries the same news.
 
 ### The team calendar
 
