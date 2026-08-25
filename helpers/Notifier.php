@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../config/constants.php';
+require_once __DIR__ . '/EmailQueue.php';
 
 /**
  * In-app notifications.
@@ -20,6 +21,13 @@ require_once __DIR__ . '/../config/constants.php';
  *   Recipients are derived from the workflow, not stored alongside it. Who
  *   approves Stage 1 can change when an administrator reassigns a department, and
  *   a notification aimed at whoever held the role last week would be wrong.
+ *
+ * Every notification is also queued as an email, in push() - the one place all
+ * of them pass through, so the two can never drift apart and start telling
+ * different stories. The bell reaches whoever is signed in; the email reaches
+ * everybody else, which is the point. Queueing follows the first rule above: it
+ * happens after the notification row is safely written, and it cannot fail
+ * loudly enough to matter.
  */
 class Notifier {
     const TYPE_SUBMITTED  = 'leave_submitted';
@@ -30,9 +38,16 @@ class Notifier {
     const TYPE_CANCELLED  = 'leave_cancelled';
 
     private PDO $db;
+    private EmailQueue $emails;
 
-    public function __construct(?PDO $db = null) {
-        $this->db = $db ?? getDBConnection();
+    /**
+     * @param EmailQueue|null $emails injected by the tests, which check that a
+     *                                notification is mirrored to email without
+     *                                needing a mail server to exist
+     */
+    public function __construct(?PDO $db = null, ?EmailQueue $emails = null) {
+        $this->db     = $db ?? getDBConnection();
+        $this->emails = $emails ?? new EmailQueue($this->db);
     }
 
     /* ------------------------------------------------------------------ *
@@ -103,8 +118,14 @@ class Notifier {
      * ------------------------------------------------------------------ */
 
     /**
-     * Record one notification. Returns false when it could not be stored;
-     * callers treat that as unremarkable rather than as a failure to handle.
+     * Record one notification, and queue the email that says the same thing.
+     *
+     * Returns false when the notification could not be stored; callers treat
+     * that as unremarkable rather than as a failure to handle. The return value
+     * describes the notification only - a stored notification whose email could
+     * not be queued is still a success, because the bell will show it and the
+     * queue failure has been logged. Reporting it as a failure would tell the
+     * caller to do something about a problem it has no way to fix.
      */
     public function push(int $userId, string $type, string $title, ?string $body = null, ?string $link = null, ?int $applicationId = null): bool {
         try {
@@ -112,7 +133,7 @@ class Notifier {
                 INSERT INTO notifications (user_id, type, title, body, link, leave_application_id)
                 VALUES (:user_id, :type, :title, :body, :link, :app_id)
             ");
-            return $stmt->execute([
+            $stored = $stmt->execute([
                 'user_id' => $userId,
                 'type'    => $type,
                 'title'   => $title,
@@ -124,6 +145,26 @@ class Notifier {
             error_log('Notifier: could not store notification - ' . $e->getMessage());
             return false;
         }
+
+        if ($stored) {
+            // Separate try/catch, deliberately. The notification is already
+            // written and this method has already succeeded; a mail problem from
+            // here on must not turn that into a false return.
+            try {
+                $this->emails->enqueueNotification(
+                    $userId,
+                    (int)$this->db->lastInsertId() ?: null,
+                    $type,
+                    $title,
+                    $body,
+                    $link
+                );
+            } catch (Throwable $e) {
+                error_log('Notifier: could not queue notification email - ' . $e->getMessage());
+            }
+        }
+
+        return $stored;
     }
 
     /**
