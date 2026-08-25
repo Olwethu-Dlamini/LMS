@@ -41,18 +41,36 @@ define('LOGIN_THROTTLE_ENABLED', false);
 // mailbox password in a committed file is a mailbox password on GitHub. It comes
 // from the environment only - see the Dockerfile's PassEnv line, and the email
 // section of the README for setting it under Apache or on the command line.
+// Nothing needs it as things stand; see the note on MAIL_USERNAME below.
 define('MAIL_ENABLED', filter_var(getenv('MAIL_ENABLED') ?: 'false', FILTER_VALIDATE_BOOLEAN));
 
 define('MAIL_HOST', getenv('MAIL_HOST') ?: 'mail.realnet.co.sz');
 define('MAIL_PORT', (int)(getenv('MAIL_PORT') ?: 25));
 
 // '' none, 'tls' STARTTLS on a plain port, 'ssl' TLS from the first byte.
-// Port 25 is usually plain or STARTTLS; 587 is STARTTLS; 465 is 'ssl'.
+//
+// Empty, because the server does not offer encryption. mail.realnet.co.sz is an
+// IMail 8.22 server and answers EHLO on port 25 with SIZE, 8BITMIME, DSN, ETRN
+// and EXPN - no STARTTLS - while 587 and 465 both refuse the connection
+// outright. Asking for encryption it does not advertise would fail every send.
 define('MAIL_ENCRYPTION', getenv('MAIL_ENCRYPTION') !== false ? getenv('MAIL_ENCRYPTION') : '');
 
-// Empty username means send without authenticating, which only works when the
-// mail server trusts this host by address.
-define('MAIL_USERNAME', getenv('MAIL_USERNAME') !== false ? getenv('MAIL_USERNAME') : 'lms@realnet.co.sz');
+// Empty username means send without authenticating.
+//
+// That is not a shortcut, it is what this server supports: its EHLO response
+// advertises no AUTH at all, so there is nothing to authenticate against. It
+// decides what to relay by the address the connection comes from, and it accepts
+// mail from this host. The consequence worth remembering is that the
+// application must keep running from an address the mail server trusts - moving
+// it to a host outside Realnet's own ranges will have mail refused, and the
+// symptom will be a relay error in the outbox rather than anything obvious.
+//
+// The lms@realnet.co.sz password is therefore not used for sending. It is the
+// password for reading that mailbox over POP3, which is a different job that
+// this application does not do. If AUTH is ever enabled on the server, set
+// MAIL_USERNAME and MAIL_PASSWORD and the client starts authenticating with no
+// other change.
+define('MAIL_USERNAME', getenv('MAIL_USERNAME') !== false ? getenv('MAIL_USERNAME') : '');
 define('MAIL_PASSWORD', getenv('MAIL_PASSWORD') !== false ? getenv('MAIL_PASSWORD') : '');
 
 // The envelope sender must be a mailbox the server will send as, because the
