@@ -24,7 +24,8 @@
 --
 -- next_attempt_at is when the row becomes eligible. It is set on failure to
 -- back off, so a server that is down is retried at widening intervals rather
--- than hammered every minute.
+-- than hammered every minute. claimed_at is when a worker last took the row,
+-- which is how an abandoned message is told apart from one in flight.
 --
 -- Rows are kept after sending. The table doubles as the delivery log, and
 -- tools/send_queued_email.php --prune is what eventually clears it.
@@ -58,6 +59,12 @@ CREATE TABLE IF NOT EXISTS `email_outbox` (
 
     `queued_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     `next_attempt_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    -- When a worker took the row. Needed to tell a message being sent right now
+    -- from one abandoned by a worker that died: staleness has to be measured
+    -- from the claim, not from queued_at, or a message queued last week and
+    -- claimed a second ago looks abandoned and gets sent twice.
+    `claimed_at` DATETIME NULL,
     `sent_at` DATETIME NULL,
 
     CONSTRAINT `fk_email_outbox_user` FOREIGN KEY (`user_id`)
