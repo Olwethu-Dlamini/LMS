@@ -13,6 +13,9 @@ require_once __DIR__ . '/../helpers/Notifier.php';
 require_once __DIR__ . '/../helpers/DashboardInsights.php';
 require_once __DIR__ . '/../helpers/AttachmentStore.php';
 require_once __DIR__ . '/../helpers/LoginThrottle.php';
+require_once __DIR__ . '/../helpers/Mailer.php';
+require_once __DIR__ . '/../helpers/EmailTemplate.php';
+require_once __DIR__ . '/../helpers/EmailQueue.php';
 
 class LMS_TestCase {
     private int $passed = 0;
@@ -1084,6 +1087,150 @@ $tester->assert(
     && AttachmentStore::contentTypeFor('JPG') === 'image/jpeg'
     && AttachmentStore::contentTypeFor('svg') === 'application/octet-stream',
     "Documents are served as what they are, and unknown types are never guessed at"
+);
+
+/* ============================================================
+   Outgoing email
+   ------------------------------------------------------------
+   The wording, the addressing rules and the retry schedule, all
+   of which are pure. The queue's own mechanics need a database
+   and live in tests/test_email_queue.php.
+   ============================================================ */
+echo "\n--- Outgoing Email ---\n";
+
+$tester->assert(
+    Mailer::isSendableAddress('thandi@realnet.co.sz') === true
+    && Mailer::isSendableAddress('not-an-address') === false
+    && Mailer::isSendableAddress('') === false
+    && Mailer::isSendableAddress(null) === false,
+    "Only an address worth attempting is treated as sendable"
+);
+
+$tester->assert(
+    Mailer::singleLine("Approved\r\nBcc: somebody@example.com") === 'Approved Bcc: somebody@example.com',
+    "A newline in a subject cannot open a second header"
+);
+
+$tester->assert(
+    Mailer::singleLine("  Leave approved  \t ") === 'Leave approved',
+    "Subjects are trimmed and internal tabs collapsed"
+);
+
+// The transport is injected, so this asserts what would go on the wire without
+// needing a mail server, an inbox, or credentials.
+$captured = [];
+$testMailer = new Mailer(function (array $message) use (&$captured) { $captured[] = $message; });
+$testMailer->send('thandi@realnet.co.sz', 'Thandi Mndzebele', 'Subject line', '<p>html</p>', 'text');
+$tester->assert(
+    count($captured) === 1
+    && $captured[0]['to_email'] === 'thandi@realnet.co.sz'
+    && $captured[0]['to_name'] === 'Thandi Mndzebele'
+    && $captured[0]['body_html'] === '<p>html</p>'
+    && $captured[0]['body_text'] === 'text',
+    "A message reaches the transport with its recipient and both bodies intact"
+);
+
+$refused = false;
+try {
+    $testMailer->send('nonsense', null, 's', 'h', 't');
+} catch (RuntimeException $e) {
+    $refused = true;
+}
+$tester->assert($refused, "Sending to an unusable address raises rather than failing quietly");
+
+$tester->assert(
+    EmailQueue::backoffMinutes(1) === 1
+    && EmailQueue::backoffMinutes(2) === 5
+    && EmailQueue::backoffMinutes(3) === 15
+    && EmailQueue::backoffMinutes(4) === 60,
+    "Retries widen instead of hammering a mail server that is down"
+);
+
+$tester->assert(
+    EmailQueue::backoffMinutes(9) === EmailQueue::backoffMinutes(4),
+    "Past the end of the schedule the longest wait repeats"
+);
+
+$tester->assert(
+    EmailQueue::shouldRetry(MAIL_MAX_ATTEMPTS - 1) === true
+    && EmailQueue::shouldRetry(MAIL_MAX_ATTEMPTS) === false,
+    "A message is abandoned once it has had all its attempts"
+);
+
+$tester->assert(
+    strpos(EmailTemplate::subject(Notifier::TYPE_AWAITING, Notifier::awaitingTitle(STATUS_PENDING_HR)), APP_SHORT_NAME) === 0
+    && strpos(EmailTemplate::subject(Notifier::TYPE_AWAITING, Notifier::awaitingTitle(STATUS_PENDING_HR)), 'Stage 2 HR review') !== false,
+    "A subject says which system it came from, then what happened"
+);
+
+$tester->assert(
+    EmailTemplate::accent(Notifier::TYPE_APPROVED) !== EmailTemplate::accent(Notifier::TYPE_REJECTED),
+    "An approval does not look like a rejection"
+);
+
+$tester->assert(
+    EmailTemplate::callToAction(Notifier::TYPE_AWAITING) === 'Review the request'
+    && EmailTemplate::callToAction(Notifier::TYPE_APPROVED) === 'View in the portal',
+    "An approver is asked to act; everybody else is offered the detail"
+);
+
+$tester->assert(
+    EmailTemplate::greeting('Thandi') === 'Hello Thandi,'
+    && EmailTemplate::greeting(null) === 'Hello,'
+    && EmailTemplate::greeting('   ') === 'Hello,',
+    "The greeting works whether or not a first name is known"
+);
+
+// The message has to stand on its own: somebody reading it on a phone at the
+// weekend should learn the outcome without signing in.
+$plain = EmailTemplate::renderText(
+    Notifier::TYPE_REJECTED,
+    'Your leave request was declined',
+    'LR-2026-0041 - Annual Leave, 3 working day(s). Remarks: cover is thin.',
+    'http://localhost:8000/modules/leave/my_history.php',
+    'Thandi'
+);
+$tester->assert(
+    strpos($plain, 'Hello Thandi,') !== false
+    && strpos($plain, 'Your leave request was declined') !== false
+    && strpos($plain, 'Remarks: cover is thin.') !== false
+    && strpos($plain, 'http://localhost:8000/modules/leave/my_history.php') !== false,
+    "The plain-text message carries the outcome, the detail and the link"
+);
+
+$tester->assert(
+    strpos(EmailTemplate::renderText(Notifier::TYPE_SUBMITTED, 'Submitted', null, null, 'Ali'), 'http') === false,
+    "A notification with no link produces no empty link section"
+);
+
+$hostile = EmailTemplate::renderHtml(
+    Notifier::TYPE_REJECTED,
+    'Declined <script>alert(1)</script>',
+    "Remarks: <img src=x onerror=alert(1)>\nsecond line",
+    'http://localhost:8000/x.php?a=1&b=2',
+    'Thandi'
+);
+$tester->assert(
+    strpos($hostile, '<script>alert(1)</script>') === false
+    && strpos($hostile, '&lt;script&gt;') !== false,
+    "A title is escaped before it reaches the HTML body"
+);
+$tester->assert(
+    strpos($hostile, '<img src=x') === false,
+    "Approver remarks cannot introduce elements"
+);
+$tester->assert(
+    strpos($hostile, 'second line') !== false && strpos($hostile, '<br') !== false,
+    "Newlines in remarks survive as line breaks"
+);
+$tester->assert(
+    strpos($hostile, 'a=1&amp;b=2') !== false,
+    "An ampersand in a link is escaped rather than left to be guessed at"
+);
+$tester->assert(
+    substr($hostile, 0, 15) === '<!DOCTYPE html>'
+    && strpos($hostile, 'charset="utf-8"') !== false,
+    "The HTML part is a complete document mail clients can render"
 );
 
 exit($tester->summary());
