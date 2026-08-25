@@ -121,8 +121,29 @@ Selecting a notification takes you to the request or queue it refers to and mark
 it read. **View all notifications** lists everything, newest first, with **Mark all
 as read**.
 
-> Notifications are in-app only. The system does not send email, so nothing
-> depends on a mail server being reachable.
+The bell updates itself while you work, so a request arriving in your queue
+appears without reloading the page.
+
+### Email
+
+Everything the bell tells you is also sent to your work email address, so you do
+not have to be signed in to hear about it. Messages come from
+**lms@realnet.co.sz**.
+
+A few things worth knowing:
+
+- **Do not reply to that address.** Nobody reads it. Replies are directed to
+  info@realnet.co.sz instead, and anything about a specific request is better
+  raised with your line manager or HR.
+- **The email tells you the whole story.** The outcome, the dates and any remarks
+  from the approver are in the message itself. The link is there if you want the
+  full record, not because you need it to find out what happened.
+- **Check your junk folder** if notices are not arriving. A new sending address is
+  sometimes filtered the first few times. Marking one message as not junk usually
+  settles it; if it does not, call IT.
+- **Email can lag by a minute or so.** The bell is immediate; email is sent in
+  batches shortly afterwards. Nothing is lost if the mail server is briefly
+  unavailable - it is delivered once the server is back.
 
 ### The team calendar
 

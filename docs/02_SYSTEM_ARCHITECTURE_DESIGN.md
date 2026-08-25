@@ -94,7 +94,10 @@ The system uses a **Modular Component Architecture** in native PHP 8+. It follow
 ├── helpers/                     # Business Logic Engine & Service Classes
 │   ├── LeaveCalculator.php      # Working days calculation & balance validation
 │   ├── ApprovalWorkflow.php     # 3-tier approval state machine & logger
-│   └── NotificationEngine.php   # Email / System notification dispatcher
+│   ├── Notifier.php             # Who is told what, and in what words
+│   ├── EmailQueue.php           # The email_outbox: queue, claim, retry, log
+│   ├── EmailTemplate.php        # A notification rendered as HTML and plain text
+│   └── Mailer.php               # SMTP delivery (wraps PHPMailer in lib/)
 │
 ├── modules/                     # Role-Based Feature Modules
 │   ├── auth/                    # Login, Logout, Password Reset, Profile
