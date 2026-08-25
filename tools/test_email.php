@@ -50,6 +50,16 @@ echo "  password       : " . (MAIL_PASSWORD === '' ? 'not set' : 'set') . PHP_EO
 echo "  sending as     : " . MAIL_FROM_NAME . ' <' . MAIL_FROM_ADDRESS . '>' . PHP_EOL;
 echo "  replies to     : " . MAIL_REPLY_TO . PHP_EOL;
 
+echo "  links point to : " . APP_URL . PHP_EOL;
+
+if (Mailer::hasLocalAppUrl()) {
+    echo PHP_EOL;
+    echo "  *** APP_URL IS A LOCAL ADDRESS ***" . PHP_EOL;
+    echo "      Links in the test message will point at your own machine." . PHP_EOL;
+    echo "      Harmless here; on a live server it means every staff member is" . PHP_EOL;
+    echo "      mailed a link that cannot work. Set APP_URL in config/local.php." . PHP_EOL;
+}
+
 if (Mailer::isRedirecting()) {
     echo PHP_EOL;
     echo "  *** REDIRECTING: every message goes to " . MAIL_REDIRECT_TO . " ***" . PHP_EOL;

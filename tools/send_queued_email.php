@@ -71,6 +71,16 @@ if (mail_has($argv, '--status')) {
         . (MAIL_USERNAME === '' ? ' (no authentication)' : ' (as ' . MAIL_USERNAME . ')'));
     say('  password set    : ' . (MAIL_PASSWORD === '' ? 'NO - set MAIL_PASSWORD in the environment' : 'yes'));
 
+    say('  links point to  : ' . APP_URL);
+
+    if (Mailer::hasLocalAppUrl()) {
+        say('');
+        say('  *** APP_URL IS A LOCAL ADDRESS ***');
+        say('      Every link in every notification points at the recipient\'s own');
+        say('      machine, not at the portal. Mail will send and appear to work.');
+        say('      Set APP_URL in config/local.php to the address staff use.');
+    }
+
     if (Mailer::isRedirecting()) {
         say('');
         say('  *** REDIRECTING: every message goes to ' . MAIL_REDIRECT_TO . ' ***');

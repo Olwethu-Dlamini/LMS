@@ -12,6 +12,11 @@
 !/uploads/attachments/.gitkeep
 !/uploads/attachments/.htaccess
 
+# Per-server settings, including a mail password if the server ever needs one.
+# config/local.php.example is the tracked template; the real file never is, so a
+# pull can neither conflict with a production setting nor silently revert it.
+/config/local.php
+
 # Credential material must never be committed. tools/seed_employees.php writes
 # temporary passwords to $HOME/.ri-leave-uat/ (outside the repo); these patterns
 # are a second line of defence in case a copy is ever made in the tree.

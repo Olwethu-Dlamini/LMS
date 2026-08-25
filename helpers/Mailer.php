@@ -55,6 +55,19 @@ class Mailer {
             && filter_var($email, FILTER_VALIDATE_EMAIL) !== false;
     }
 
+    /**
+     * Whether APP_URL still points at a development machine.
+     *
+     * Worth a loud warning rather than a silent success, because it produces the
+     * one failure that looks like everything working: mail is accepted, marked
+     * sent and delivered, and every link in it points the recipient at their own
+     * computer. Nobody reports that as a mail problem.
+     */
+    public static function hasLocalAppUrl(): bool {
+        $host = parse_url(APP_URL, PHP_URL_HOST) ?? '';
+        return in_array(strtolower($host), ['localhost', '127.0.0.1', '::1', ''], true);
+    }
+
     /** Whether every message is being diverted to a single mailbox. */
     public static function isRedirecting(): bool {
         return MAIL_REDIRECT_TO !== '';

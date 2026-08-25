@@ -1,0 +1,70 @@
+<?php
+/**
+ * Per-server settings. Copy to config/local.php and edit.
+ *
+ *     cp config/local.php.example config/local.php
+ *
+ * config/local.php is in .gitignore, so it is never committed and never touched
+ * by a pull. That is the whole point: deploying becomes `git pull` with nothing
+ * else to remember, and no production setting can be reverted by an update.
+ *
+ * Only define what differs from the defaults in config/constants.php. Anything
+ * left out falls through to an environment variable, then to the default.
+ */
+
+// ---------------------------------------------------------------------------
+// The address staff reach the portal on. No trailing slash.
+//
+// Set this first, and get it right. It is the base of every link in every
+// notification email, and those are rendered by a cron worker with no HTTP
+// request to infer a hostname from, so it cannot be worked out automatically.
+// Left as localhost, every recipient is mailed a link to their own machine.
+// ---------------------------------------------------------------------------
+define('APP_URL', 'https://leave.example.co.sz');
+
+// ---------------------------------------------------------------------------
+// Outgoing email.
+// ---------------------------------------------------------------------------
+
+// Nothing is queued and nothing is sent while this is false.
+define('MAIL_ENABLED', true);
+
+// mail.realnet.co.sz is an IMail server: port 25 only, no AUTH, no STARTTLS,
+// and it relays on the address the connection comes from. That is why there is
+// no username or password here. Prove it from this machine before turning
+// MAIL_ENABLED on:
+//
+//     php tools/test_email.php
+//
+define('MAIL_HOST', 'mail.realnet.co.sz');
+define('MAIL_PORT', 25);
+define('MAIL_ENCRYPTION', '');   // '', 'tls' or 'ssl'
+define('MAIL_USERNAME', '');     // empty = relay without authenticating
+define('MAIL_PASSWORD', '');
+
+define('MAIL_FROM_ADDRESS', 'lms@realnet.co.sz');
+define('MAIL_REPLY_TO', 'info@realnet.co.sz');
+
+// Divert every message to one mailbox instead of the real recipients.
+//
+// MUST stay empty in production: set, nobody except this address is notified,
+// and the system will look like it is working. It exists for staging and UAT,
+// where the database is seeded from the real staff roster.
+define('MAIL_REDIRECT_TO', '');
+
+// ---------------------------------------------------------------------------
+// Security. Both should be on for a live server.
+// ---------------------------------------------------------------------------
+
+// Stops answering after five failed sign-ins for the same address in fifteen
+// minutes. Off in development because shared test accounts trip it.
+define('LOGIN_THROTTLE_ENABLED', true);
+
+// ---------------------------------------------------------------------------
+// Database. Only needed if the DB_* environment variables are not being set;
+// config/database.php reads those directly and does not go through this file.
+// ---------------------------------------------------------------------------
+// putenv('DB_HOST=127.0.0.1');
+// putenv('DB_NAME=lms_db');
+// putenv('DB_USER=lms');
+// putenv('DB_PASS=...');

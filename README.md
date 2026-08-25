@@ -232,6 +232,45 @@ php tools/create_admin.php --email you@realnet.co.sz --reset-password
 
 ---
 
+### Per-server settings, so deploying is only `git pull`
+
+Anything that differs between a laptop and a live server lives outside the
+repository, in `config/local.php`:
+
+```bash
+cp config/local.php.example config/local.php
+# edit it once, on the server
+```
+
+That file is in `.gitignore`. It is never committed, so a pull cannot conflict
+with a production setting and cannot silently revert one. `config/constants.php`
+reads three layers in order, and the first to define a constant wins:
+
+1. `config/local.php`, if it exists.
+2. Environment variables, for anything it did not set.
+3. The defaults in `constants.php`, which are development values.
+
+**`APP_URL` is the one to get right.** It is the base of every link in every
+notification email, and those are rendered by a cron worker that has no HTTP
+request to infer a hostname from, so it cannot be detected automatically. Left
+as `http://localhost:8000` on a live server, the portal loads its stylesheets
+from an address that does not exist and every staff member is mailed a link to
+their own machine. Nothing errors: mail sends, is marked delivered, and the
+links are simply dead. `tools/test_email.php` and
+`php tools/send_queued_email.php --status` both warn in capitals when `APP_URL`
+still looks local.
+
+A minimal live `config/local.php`:
+
+```php
+<?php
+define('APP_URL', 'https://leave.example.co.sz');
+define('MAIL_ENABLED', true);
+define('LOGIN_THROTTLE_ENABLED', true);
+```
+
+---
+
 ## Outgoing email
 
 Every notification is also emailed to the recipient's work address, from the
@@ -567,7 +606,9 @@ without the certificate it depends on.
 
 - [x] ~~Delete the five `@lms.com` demo accounts and remove them from `schema.sql`.~~
       Done. No accounts are seeded at all. Bootstrap with `tools/create_admin.php`.
-- [ ] Change `APP_URL` in `config/constants.php` to the production hostname.
+- [ ] Create `config/local.php` from the example, and set `APP_URL` to the
+      production hostname. Do not edit `config/constants.php` on a server: it is
+      tracked, so the next pull will fight you for it.
 - [ ] Move the DB credentials to real environment variables (never commit them).
 - [ ] Serve over HTTPS. The session cookie sets `HttpOnly`, `SameSite=Lax` and
       strict session ids itself, and turns on `Secure` as soon as the request
@@ -575,7 +616,7 @@ without the certificate it depends on.
 - [ ] Apply every migration in `migrations/`, in order.
 - [ ] Block `/uploads/` at the web server if you serve with nginx (Apache is
       covered by the `.htaccess` already in the directory).
-- [ ] Set `LOGIN_THROTTLE_ENABLED` to `true` in `config/constants.php`.
+- [ ] Set `LOGIN_THROTTLE_ENABLED` to `true` in `config/local.php`.
 - [ ] Prove email from the production host with `php tools/test_email.php`, send
       one real message with `--to`, then set `MAIL_ENABLED=true`.
 - [ ] Add the `tools/send_queued_email.php` cron entry. Without it nothing is

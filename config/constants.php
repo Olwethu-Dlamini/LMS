@@ -1,30 +1,82 @@
 <?php
 /**
  * Application Global Constants
+ *
+ * Three layers, in order of precedence:
+ *
+ *   1. config/local.php, if it exists. Untracked, created once per server, and
+ *      never touched by a pull. This is the file to edit on a live host.
+ *   2. Environment variables, for anything local.php has not already set.
+ *   3. The defaults below, which are development values.
+ *
+ * Every define() is guarded with defined(), so whatever an earlier layer set
+ * wins. The point is that deploying is `git pull` and nothing else: the settings
+ * that differ per host live outside the repository, so no tracked file has to be
+ * edited on a server and no pull can ever conflict with, or quietly revert, a
+ * production setting.
+ *
+ * Copy config/local.php.example to config/local.php to start one.
  */
-define('APP_NAME', 'RI Leave Management System');
-define('APP_SHORT_NAME', 'Leave Management System');
-define('APP_URL', 'http://localhost:8000');
+
+// Layer 1. Loaded first so its values take precedence over everything below.
+if (is_file(__DIR__ . '/local.php')) {
+    require_once __DIR__ . '/local.php';
+}
+
+/**
+ * Define a constant from the environment, unless something already has.
+ *
+ * Exists so the three layers do not have to be spelled out thirty times. A
+ * variable set to an empty string counts as set, because "" is a meaningful
+ * value for MAIL_USERNAME and MAIL_REDIRECT_TO.
+ */
+function config_default(string $name, $default): void {
+    if (defined($name)) {
+        return;
+    }
+    $fromEnv = getenv($name);
+    if ($fromEnv === false) {
+        define($name, $default);
+        return;
+    }
+    if (is_bool($default)) {
+        define($name, filter_var($fromEnv, FILTER_VALIDATE_BOOLEAN));
+    } elseif (is_int($default)) {
+        define($name, (int)$fromEnv);
+    } else {
+        define($name, $fromEnv);
+    }
+}
+
+config_default('APP_NAME', 'RI Leave Management System');
+config_default('APP_SHORT_NAME', 'Leave Management System');
+
+// The address staff reach the portal on. This is not decoration: it is the base
+// of every link in every notification email, and those are rendered by a cron
+// worker that has no HTTP request to infer a hostname from. Left as localhost on
+// a live server, every recipient gets a link to their own machine.
+config_default('APP_URL', 'http://localhost:8000');
+
 define('UPLOAD_DIR', __DIR__ . '/../uploads/attachments/');
 
 // Organisation identity (shown in the header strip and footer)
-define('ORG_NAME', 'Real Image Internet');
-define('ORG_PHONE', '[+268] 2409 1000');
-define('ORG_EMAIL', 'info@realnet.co.sz');
-define('ORG_ADDRESS', 'Plot 168, Tsekwane Street, Mbabane');
-define('ORG_WEBSITE', 'https://realimageservices.com/');
+config_default('ORG_NAME', 'Real Image Internet');
+config_default('ORG_PHONE', '[+268] 2409 1000');
+config_default('ORG_EMAIL', 'info@realnet.co.sz');
+config_default('ORG_ADDRESS', 'Plot 168, Tsekwane Street, Mbabane');
+config_default('ORG_WEBSITE', 'https://realimageservices.com/');
 
 // Sign-in rate limiting.
 //
-// OFF. It counts failed sign-ins and stops answering after five in fifteen
-// minutes, which is protection against somebody working through a password list
-// against staff addresses that follow a predictable pattern. During testing,
-// where accounts are shared and passwords are guessed at on purpose, it mostly
-// locks out the person doing the testing.
+// OFF by default. It counts failed sign-ins and stops answering after five in
+// fifteen minutes, which is protection against somebody working through a
+// password list against staff addresses that follow a predictable pattern.
+// During testing, where accounts are shared and passwords are guessed at on
+// purpose, it mostly locks out the person doing the testing.
 //
-// Set this to true before go-live. Nothing else needs changing - the table and
-// the logic stay in place either way.
-define('LOGIN_THROTTLE_ENABLED', false);
+// Turn it on for a live server in config/local.php. Nothing else needs changing,
+// the table and the logic stay in place either way.
+config_default('LOGIN_THROTTLE_ENABLED', false);
 
 // Outgoing email.
 //
@@ -42,10 +94,10 @@ define('LOGIN_THROTTLE_ENABLED', false);
 // from the environment only - see the Dockerfile's PassEnv line, and the email
 // section of the README for setting it under Apache or on the command line.
 // Nothing needs it as things stand; see the note on MAIL_USERNAME below.
-define('MAIL_ENABLED', filter_var(getenv('MAIL_ENABLED') ?: 'false', FILTER_VALIDATE_BOOLEAN));
+config_default('MAIL_ENABLED', false);
 
-define('MAIL_HOST', getenv('MAIL_HOST') ?: 'mail.realnet.co.sz');
-define('MAIL_PORT', (int)(getenv('MAIL_PORT') ?: 25));
+config_default('MAIL_HOST', 'mail.realnet.co.sz');
+config_default('MAIL_PORT', 25);
 
 // '' none, 'tls' STARTTLS on a plain port, 'ssl' TLS from the first byte.
 //
@@ -53,7 +105,7 @@ define('MAIL_PORT', (int)(getenv('MAIL_PORT') ?: 25));
 // IMail 8.22 server and answers EHLO on port 25 with SIZE, 8BITMIME, DSN, ETRN
 // and EXPN - no STARTTLS - while 587 and 465 both refuse the connection
 // outright. Asking for encryption it does not advertise would fail every send.
-define('MAIL_ENCRYPTION', getenv('MAIL_ENCRYPTION') !== false ? getenv('MAIL_ENCRYPTION') : '');
+config_default('MAIL_ENCRYPTION', '');
 
 // Empty username means send without authenticating.
 //
@@ -70,17 +122,17 @@ define('MAIL_ENCRYPTION', getenv('MAIL_ENCRYPTION') !== false ? getenv('MAIL_ENC
 // this application does not do. If AUTH is ever enabled on the server, set
 // MAIL_USERNAME and MAIL_PASSWORD and the client starts authenticating with no
 // other change.
-define('MAIL_USERNAME', getenv('MAIL_USERNAME') !== false ? getenv('MAIL_USERNAME') : '');
-define('MAIL_PASSWORD', getenv('MAIL_PASSWORD') !== false ? getenv('MAIL_PASSWORD') : '');
+config_default('MAIL_USERNAME', '');
+config_default('MAIL_PASSWORD', '');
 
 // The envelope sender must be a mailbox the server will send as, because the
 // realnet.co.sz SPF record ends in -all: mail leaving from anywhere it does not
 // list is rejected outright rather than sent to a junk folder.
-define('MAIL_FROM_ADDRESS', getenv('MAIL_FROM_ADDRESS') ?: 'lms@realnet.co.sz');
-define('MAIL_FROM_NAME', getenv('MAIL_FROM_NAME') ?: APP_SHORT_NAME);
+config_default('MAIL_FROM_ADDRESS', 'lms@realnet.co.sz');
+config_default('MAIL_FROM_NAME', APP_SHORT_NAME);
 
 // Replies go to a mailbox people read. lms@ is not one.
-define('MAIL_REPLY_TO', getenv('MAIL_REPLY_TO') ?: ORG_EMAIL);
+config_default('MAIL_REPLY_TO', ORG_EMAIL);
 
 // Send everything to one address instead of to the real recipients.
 //
@@ -98,20 +150,20 @@ define('MAIL_REPLY_TO', getenv('MAIL_REPLY_TO') ?: ORG_EMAIL);
 // Empty in production. Anything else there would silently stop staff being
 // notified, so tools/send_queued_email.php --status and tools/test_email.php
 // both say loudly when it is set.
-define('MAIL_REDIRECT_TO', getenv('MAIL_REDIRECT_TO') !== false ? getenv('MAIL_REDIRECT_TO') : '');
+config_default('MAIL_REDIRECT_TO', '');
 
 // Seconds to wait on the mail server before giving up and requeueing. Short on
 // purpose: the worker has a whole queue to get through.
-define('MAIL_TIMEOUT', (int)(getenv('MAIL_TIMEOUT') ?: 15));
+config_default('MAIL_TIMEOUT', 15);
 
 // How many messages one worker run sends, and how many times a single message
 // is retried before it is marked failed and left alone.
-define('MAIL_BATCH_SIZE', (int)(getenv('MAIL_BATCH_SIZE') ?: 20));
-define('MAIL_MAX_ATTEMPTS', (int)(getenv('MAIL_MAX_ATTEMPTS') ?: 5));
+config_default('MAIL_BATCH_SIZE', 20);
+config_default('MAIL_MAX_ATTEMPTS', 5);
 
 // Minutes to wait before retrying, indexed by attempts already made. Past the
 // end of the list the last value repeats until MAIL_MAX_ATTEMPTS is reached.
-define('MAIL_RETRY_BACKOFF', '1,5,15,60');
+config_default('MAIL_RETRY_BACKOFF', '1,5,15,60');
 
 // Role Codes
 define('ROLE_EMPLOYEE', 'employee');
