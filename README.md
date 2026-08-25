@@ -15,6 +15,10 @@ Before any code implementation begins, full architecture and system design bluep
 5. [05_BUSINESS_RULES_ENGINE_SPECIFICATION.md](./docs/05_BUSINESS_RULES_ENGINE_SPECIFICATION.md) - Working Days Engine, Holiday Exclusions & Balance Rules
 6. [06_ROLE_BASED_ACCESS_CONTROL_MATRIX.md](./docs/06_ROLE_BASED_ACCESS_CONTROL_MATRIX.md) - RBAC Permission Matrix across 5 User Roles
 7. [07_UI_UX_WIREFRAMES_AND_COMPONENT_MAP.md](./docs/07_UI_UX_WIREFRAMES_AND_COMPONENT_MAP.md) - Page Layout Wireframes & Bootstrap Theme Token Map
+8. [09_EMAIL_AND_SMTP.md](./docs/09_EMAIL_AND_SMTP.md) - How SMTP works, the mail server this installation talks to, the queue design, every setting, and troubleshooting by symptom
+
+(`08_USER_MANUAL.md` is the end-user manual rather than a design document; see
+[User Manual](#user-manual) below.)
 
 ---
 
@@ -277,6 +281,12 @@ Every notification is also emailed to the recipient's work address, from the
 `lms@realnet.co.sz` mailbox. Off until switched on, so an installation without a
 reachable mail server queues nothing rather than building a backlog it cannot
 send.
+
+> **Full reference:** [`docs/09_EMAIL_AND_SMTP.md`](./docs/09_EMAIL_AND_SMTP.md)
+> explains the SMTP protocol itself, what this particular mail server does and
+> why the defaults look the way they do, the queue design, every setting, how to
+> change any of it, and a symptom-to-cause troubleshooting table. What follows
+> here is the short operational version.
 
 ### How it is put together
 
