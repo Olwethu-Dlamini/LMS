@@ -113,6 +113,43 @@ class Notifier {
         );
     }
 
+    /**
+     * The same facts as describe(), but as labelled fields for the email.
+     *
+     * describe() stays as it is because the bell needs one short line: the
+     * dropdown gives it two rows of small text and a table would not fit. Email
+     * has room, and an approver working through eleven notices wants to find the
+     * dates without reading a sentence, so the two formats are built separately
+     * rather than one being derived from the other.
+     *
+     * Insertion order is display order.
+     *
+     * @return array<string,string> label => value
+     */
+    public static function detailsFor(array $app, ?string $requestedBy = null): array {
+        $details = [];
+
+        if ($requestedBy !== null && $requestedBy !== '') {
+            // Only for approvers. Telling applicants their own name back would
+            // be padding, and the first row is the most valuable one.
+            $details['Requested by'] = $requestedBy;
+        }
+
+        $details['Reference']  = (string)$app['application_no'];
+        $details['Leave type'] = (string)($app['leave_name'] ?? 'Leave');
+
+        $start = strtotime($app['start_date']);
+        $end   = strtotime($app['end_date']);
+        $details['Dates'] = $app['start_date'] === $app['end_date']
+            ? date('D j M Y', $start)
+            : date('D j M Y', $start) . ' to ' . date('D j M Y', $end);
+
+        $days = rtrim(rtrim(number_format((float)$app['total_days'], 1), '0'), '.');
+        $details['Working days'] = $days . ($days === '1' ? ' day' : ' days');
+
+        return $details;
+    }
+
     /* ------------------------------------------------------------------ *
      * Writing
      * ------------------------------------------------------------------ */
@@ -127,7 +164,15 @@ class Notifier {
      * queue failure has been logged. Reporting it as a failure would tell the
      * caller to do something about a problem it has no way to fix.
      */
-    public function push(int $userId, string $type, string $title, ?string $body = null, ?string $link = null, ?int $applicationId = null): bool {
+    public function push(
+        int $userId,
+        string $type,
+        string $title,
+        ?string $body = null,
+        ?string $link = null,
+        ?int $applicationId = null,
+        array $emailExtras = []
+    ): bool {
         try {
             $stmt = $this->db->prepare("
                 INSERT INTO notifications (user_id, type, title, body, link, leave_application_id)
@@ -157,7 +202,12 @@ class Notifier {
                     $type,
                     $title,
                     $body,
-                    $link
+                    $link,
+                    // The bell gets the one-line body; the email gets the same
+                    // facts as a table, plus the approver's remarks quoted on
+                    // their own. Both fall back gracefully when absent.
+                    $emailExtras['details'] ?? [],
+                    $emailExtras['remarks'] ?? null
                 );
             } catch (Throwable $e) {
                 error_log('Notifier: could not queue notification email - ' . $e->getMessage());
@@ -170,10 +220,18 @@ class Notifier {
     /**
      * The same notification to several people, skipping duplicates and zeros.
      */
-    public function pushMany(array $userIds, string $type, string $title, ?string $body = null, ?string $link = null, ?int $applicationId = null): int {
+    public function pushMany(
+        array $userIds,
+        string $type,
+        string $title,
+        ?string $body = null,
+        ?string $link = null,
+        ?int $applicationId = null,
+        array $emailExtras = []
+    ): int {
         $sent = 0;
         foreach (array_unique(array_filter(array_map('intval', $userIds))) as $userId) {
-            if ($this->push($userId, $type, $title, $body, $link, $applicationId)) {
+            if ($this->push($userId, $type, $title, $body, $link, $applicationId, $emailExtras)) {
                 $sent++;
             }
         }
@@ -359,7 +417,8 @@ class Notifier {
                 'Leave request submitted for approval',
                 $summary . '. You will be notified as it moves through the approval chain.',
                 self::historyLink(),
-                $applicationId
+                $applicationId,
+                ['details' => self::detailsFor($app)]
             );
 
             $this->pushMany(
@@ -368,7 +427,8 @@ class Notifier {
                 self::awaitingTitle($app['status']),
                 $who . ' - ' . $summary,
                 self::queueLink($app['status']),
-                $applicationId
+                $applicationId,
+                ['details' => self::detailsFor($app, $who)]
             );
         } catch (Throwable $e) {
             error_log('Notifier: submission notice failed - ' . $e->getMessage());
@@ -393,18 +453,31 @@ class Notifier {
                 $body .= '. Remarks: ' . $comments;
             }
 
-            $this->push((int)$app['user_id'], $type, $title, $body, self::historyLink(), $applicationId);
+            $this->push(
+                (int)$app['user_id'],
+                $type,
+                $title,
+                $body,
+                self::historyLink(),
+                $applicationId,
+                // The remarks go through as their own field rather than glued to
+                // the summary. This is the sentence a declined applicant most
+                // wants to read, and in the email it gets its own quoted block.
+                ['details' => self::detailsFor($app), 'remarks' => $comments]
+            );
 
             if (in_array($newStatus, [STATUS_PENDING_HR, STATUS_PENDING_EXECUTIVE], true)) {
                 // applicationContext() read the row after the status was written,
                 // so approversFor() resolves the stage it has just reached.
+                $who = $app['first_name'] . ' ' . $app['last_name'];
                 $this->pushMany(
                     $this->approversFor($app),
                     self::TYPE_AWAITING,
                     self::awaitingTitle($newStatus),
-                    $app['first_name'] . ' ' . $app['last_name'] . ' - ' . $summary,
+                    $who . ' - ' . $summary,
                     self::queueLink($newStatus),
-                    $applicationId
+                    $applicationId,
+                    ['details' => self::detailsFor($app, $who), 'remarks' => $comments]
                 );
             }
         } catch (Throwable $e) {
@@ -440,7 +513,8 @@ class Notifier {
                     'Your leave request was cancelled',
                     $body . '. Any reserved days have been returned to your balance.',
                     self::historyLink(),
-                    $applicationId
+                    $applicationId,
+                    ['details' => self::detailsFor($app), 'remarks' => $reason]
                 );
                 return;
             }
@@ -453,13 +527,15 @@ class Notifier {
             if ($wasPending) {
                 $waiting = $app;
                 $waiting['status'] = $previousStatus;
+                $who = $app['first_name'] . ' ' . $app['last_name'];
                 $this->pushMany(
                     $this->approversFor($waiting),
                     self::TYPE_CANCELLED,
                     'A leave request in your queue was withdrawn',
-                    $app['first_name'] . ' ' . $app['last_name'] . ' - ' . $body,
+                    $who . ' - ' . $body,
                     self::queueLink($previousStatus),
-                    $applicationId
+                    $applicationId,
+                    ['details' => self::detailsFor($app, $who), 'remarks' => $reason]
                 );
             }
         } catch (Throwable $e) {

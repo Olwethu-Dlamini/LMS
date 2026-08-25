@@ -1236,9 +1236,148 @@ $tester->assert(
     "An ampersand in a link is escaped rather than left to be guessed at"
 );
 $tester->assert(
-    substr($hostile, 0, 15) === '<!DOCTYPE html>'
-    && strpos($hostile, 'charset="utf-8"') !== false,
+    strpos($hostile, '<!DOCTYPE html PUBLIC') === 0
+    && strpos($hostile, 'charset=utf-8') !== false
+    && strpos($hostile, '</html>') !== false,
     "The HTML part is a complete document mail clients can render"
+);
+
+// The XHTML transitional doctype is deliberate rather than dated: Outlook renders
+// through Word, which treats an HTML5 doctype as a reason to fall back to its own
+// defaults for table and cell spacing.
+$tester->assert(
+    strpos($hostile, 'PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"') !== false,
+    "The doctype is the one Word needs, not the one a browser would prefer"
+);
+
+/* --- the detail table, which is what replaced a comma-separated sentence --- */
+
+$app = [
+    'application_no' => 'LV-2026-6E9B25',
+    'leave_name'     => 'Annual Leave',
+    'start_date'     => '2026-10-04',
+    'end_date'       => '2026-10-06',
+    'total_days'     => '3.0',
+];
+
+$details = Notifier::detailsFor($app);
+$tester->assert(
+    array_keys($details) === ['Reference', 'Leave type', 'Dates', 'Working days'],
+    "An applicant's email lists the facts in reading order, without their own name",
+    implode(',', array_keys($details))
+);
+
+$tester->assert(
+    array_keys(Notifier::detailsFor($app, 'Vamile Sikhondze'))[0] === 'Requested by',
+    "An approver's email leads with whose leave it is, because that is what they are deciding"
+);
+
+$tester->assert(
+    $details['Dates'] === 'Sun 4 Oct 2026 to Tue 6 Oct 2026'
+    && $details['Working days'] === '3 days',
+    "Dates are spelled out with weekdays, since cover is a question about which days",
+    $details['Dates'] . ' / ' . $details['Working days']
+);
+
+$tester->assert(
+    Notifier::detailsFor(['application_no' => 'X', 'leave_name' => 'Sick Leave',
+        'start_date' => '2026-10-04', 'end_date' => '2026-10-04', 'total_days' => '1.0'])['Dates']
+        === 'Sun 4 Oct 2026',
+    "A single-day request is not written as a range from itself to itself"
+);
+
+$tester->assert(
+    Notifier::detailsFor(['application_no' => 'X', 'leave_name' => 'Annual',
+        'start_date' => '2026-10-04', 'end_date' => '2026-10-04', 'total_days' => '1.0'])['Working days']
+        === '1 day'
+    && Notifier::detailsFor(['application_no' => 'X', 'leave_name' => 'Annual',
+        'start_date' => '2026-10-04', 'end_date' => '2026-10-04', 'total_days' => '0.5'])['Working days']
+        === '0.5 days',
+    "Day counts read as English rather than as \"1 day(s)\""
+);
+
+$withTable = EmailTemplate::renderHtml(Notifier::TYPE_AWAITING, 'Awaiting you', null,
+    'https://leave.example.co.sz/x.php', 'Celiwe', Notifier::detailsFor($app, 'Vamile Sikhondze'));
+
+$tester->assert(
+    strpos($withTable, 'LV-2026-6E9B25') !== false
+    && strpos($withTable, 'Annual Leave') !== false
+    && strpos($withTable, 'Sun 4 Oct 2026 to Tue 6 Oct 2026') !== false
+    && strpos($withTable, 'Vamile Sikhondze') !== false,
+    "Every detail reaches the rendered table"
+);
+
+$tester->assert(
+    substr_count($withTable, 'REFERENCE') === 0
+    && strpos($withTable, '>Reference<') !== false,
+    "Labels are cased in the markup and uppercased by CSS, so they survive a client that strips it"
+);
+
+$tester->assert(
+    strpos(EmailTemplate::renderHtml(Notifier::TYPE_APPROVED, 'T', 'a prose body', null, 'A'), 'a prose body') !== false,
+    "A notification with no detail list still renders its prose body rather than an empty frame"
+);
+
+/* --- remarks, quoted separately --- */
+
+$withRemarks = EmailTemplate::renderHtml(Notifier::TYPE_REJECTED, 'Declined', null, null, 'Vamile',
+    $details, "Month-end cover is thin.\nTry January.");
+
+$tester->assert(
+    strpos($withRemarks, 'Remarks from the approver') !== false
+    && strpos($withRemarks, 'Month-end cover is thin.<br') !== false,
+    "Approver remarks get their own block, with their line breaks intact"
+);
+
+$tester->assert(
+    strpos(EmailTemplate::renderHtml(Notifier::TYPE_APPROVED, 'T', null, null, 'A', $details, '   '), 'Remarks from') === false,
+    "Whitespace-only remarks produce no empty remarks block"
+);
+
+$tester->assert(
+    strpos(EmailTemplate::renderText(Notifier::TYPE_REJECTED, 'Declined', null, null, 'Vamile', $details, 'Cover is thin.'),
+        'Remarks from the approver:') !== false,
+    "The plain-text part carries the remarks too"
+);
+
+$tester->assert(
+    strpos(EmailTemplate::renderText(Notifier::TYPE_AWAITING, 'Awaiting', null, null, 'C', $details), 'Reference    ') !== false,
+    "Plain-text labels are padded so values line up in a fixed-width client"
+);
+
+/* --- the status pill and the Outlook button --- */
+
+$tester->assert(
+    EmailTemplate::statusLabel(Notifier::TYPE_APPROVED) === 'Approved'
+    && EmailTemplate::statusLabel(Notifier::TYPE_REJECTED) === 'Declined'
+    && EmailTemplate::statusLabel(Notifier::TYPE_AWAITING) === 'Action needed',
+    "The pill says the outcome in one or two words, before anything is read"
+);
+
+$tester->assert(
+    strpos($withTable, 'v:roundrect') !== false
+    && strpos($withTable, '<!--[if mso]>') !== false
+    && strpos($withTable, '<!--[if !mso]><!-->') !== false,
+    "The button has a VML fallback, because Outlook ignores border-radius entirely"
+);
+
+$tester->assert(
+    strpos(EmailTemplate::renderHtml(Notifier::TYPE_APPROVED, 'T', 'b', null, 'A'), 'v:roundrect') === false,
+    "A notification with no link renders no button and no dead VML"
+);
+
+/* --- the preheader, the only preview a recipient gets --- */
+
+$tester->assert(
+    strpos(EmailTemplate::preheader('Awaiting you', null, $details), 'LV-2026-6E9B25') !== false
+    && strpos(EmailTemplate::preheader('Awaiting you', null, $details), 'Awaiting you') === false,
+    "The preheader carries the detail, not a second copy of the subject line"
+);
+
+$tester->assert(
+    EmailTemplate::preheader('A title', 'a body', []) === 'a body'
+    && EmailTemplate::preheader('A title', null, []) === 'A title',
+    "With no details it falls back to the body, then to the title"
 );
 
 exit($tester->summary());

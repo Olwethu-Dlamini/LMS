@@ -95,7 +95,9 @@ class EmailQueue {
         string $type,
         string $title,
         ?string $body = null,
-        ?string $link = null
+        ?string $link = null,
+        array $details = [],
+        ?string $remarks = null
     ): bool {
         if (!Mailer::isConfigured()) {
             return false;
@@ -123,8 +125,8 @@ class EmailQueue {
                 'to_email'        => $person['email'],
                 'to_name'         => trim($person['first_name'] . ' ' . $person['last_name']),
                 'subject'         => Mailer::singleLine(EmailTemplate::subject($type, $title)),
-                'body_html'       => EmailTemplate::renderHtml($type, $title, $body, $link, $person['first_name']),
-                'body_text'       => EmailTemplate::renderText($type, $title, $body, $link, $person['first_name']),
+                'body_html'       => EmailTemplate::renderHtml($type, $title, $body, $link, $person['first_name'], $details, $remarks),
+                'body_text'       => EmailTemplate::renderText($type, $title, $body, $link, $person['first_name'], $details, $remarks),
             ]);
         } catch (Throwable $e) {
             error_log('EmailQueue: could not queue email - ' . $e->getMessage());
