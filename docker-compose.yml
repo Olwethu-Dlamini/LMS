@@ -34,6 +34,20 @@ services:
       DB_NAME: lms_db
       DB_USER: root
       DB_PASS: lms_root_pw
+
+      # Outgoing email. Off here on purpose: a development container that can
+      # send mail will send it to real staff addresses the first time somebody
+      # tests an approval. Turn it on where it is meant to be sending from.
+      MAIL_ENABLED: "false"
+      MAIL_HOST: mail.realnet.co.sz
+      MAIL_PORT: "25"
+      # mail.realnet.co.sz offers neither STARTTLS nor AUTH and relays on the
+      # calling address, so both of these stay empty. See config/constants.php.
+      MAIL_ENCRYPTION: ""
+      MAIL_USERNAME: ""
+      # Never written here. Passed through from the host when the server has one:
+      #   MAIL_PASSWORD=... docker compose up -d
+      MAIL_PASSWORD: "${MAIL_PASSWORD:-}"
     depends_on:
       db:
         condition: service_healthy
