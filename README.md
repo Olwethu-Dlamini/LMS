@@ -68,7 +68,7 @@ mv docs/manual.docx docs/08_USER_MANUAL.docx
 
 ---
 
-## Coverage & Notifications
+## Coverage, Notifications & Email
 
 **Team calendar** (`modules/leave/team_calendar.php`) is a server-rendered month per
 department: who is off each working day and how many that leaves away out of the
@@ -97,16 +97,29 @@ in your department is already off then, for how many days, and whether the
 request would take the team past its limit. Same wording as the approval queues,
 given to the person who can still move the dates. Nothing is blocked.
 
-**In-app notifications.** A bell with an unread count in both navigation bars.
+**Notifications.** A bell with an unread count in both navigation bars.
 Applicants hear about submission, each stage cleared, approval, rejection (with
 remarks) and cancellation; approvers hear when a request reaches their queue or is
 withdrawn from it. Recipients are derived from the workflow, so reassigning a
 department's head redirects future notices. Notices are raised after each commit
 and every write is guarded, so a notification problem can never roll back an
-approval. There is no email dependency.
+approval.
+
+The bell keeps itself current, polling `api/notifications_poll.php` once a minute
+so an approver sitting on their queue sees a request arrive without reloading. It
+stops while the tab is in the background, and never rearranges the list while the
+dropdown is open.
+
+**Email.** Every one of those notifications is also sent to the recipient's work
+address, which is the half that reaches people who are not signed in. Mail is
+queued rather than sent during the request: an approver pressing **Approve**
+should not wait on a mail server, and must not wait out a socket timeout when it
+cannot be reached. A worker drains the queue on a cron. See
+[Outgoing email](#outgoing-email) for setting it up; it is off until configured.
 
 The shared engines are `helpers/LeaveCapacity.php` (who is away, and does that
-break cover), `helpers/Notifier.php` (who to tell, and what to say) and
+break cover), `helpers/Notifier.php` (who to tell, and what to say),
+`helpers/EmailQueue.php` (the outbox), `helpers/Mailer.php` (SMTP) and
 `helpers/DashboardInsights.php` (the dashboard figures). The day arithmetic and
 aggregation in each are pure functions, covered by the test suite.
 
@@ -160,6 +173,7 @@ mysql -u root -p lms_db < migrations/001-role-aware-routing.sql
 mysql -u root -p lms_db < migrations/002-calendar-and-notifications.sql
 mysql -u root -p lms_db < migrations/003-decode-double-escaped-text.sql
 mysql -u root -p lms_db < migrations/004-login-attempts.sql
+mysql -u root -p lms_db < migrations/005-email-outbox.sql
 ```
 
 Each is safe to re-run and ends with a check query you can read to confirm it took.
@@ -170,11 +184,13 @@ Each is safe to re-run and ends with a check query you can read to confirm it to
 | `002-calendar-and-notifications` | Adds `departments.max_concurrent_absences` and the `notifications` table. |
 | `003-decode-double-escaped-text` | Repairs text stored HTML-escaped, so `Sales &amp; Marketing` reads as `Sales & Marketing` again. |
 | `004-login-attempts` | Adds the `login_attempts` table behind the sign-in rate limit. |
+| `005-email-outbox` | Adds the `email_outbox` table that outgoing notification email is queued in. |
 
 The portal keeps working ahead of each of these rather than failing. Until `002`
 the notification bell stays hidden and the calendar shows no coverage limits;
-until `004` sign-in simply is not rate limited. An installation is never locked
-out of itself because a migration has not run yet.
+until `004` sign-in simply is not rate limited; until `005` notifications appear
+in the bell and no email is queued. An installation is never locked out of itself
+because a migration has not run yet.
 
 ### Local UAT environment
 
@@ -212,6 +228,153 @@ Locked out with no administrator left? The same tool is the way back:
 
 ```bash
 php tools/create_admin.php --email you@realnet.co.sz --reset-password
+```
+
+---
+
+## Outgoing email
+
+Every notification is also emailed to the recipient's work address, from the
+`lms@realnet.co.sz` mailbox. Off until switched on, so an installation without a
+reachable mail server queues nothing rather than building a backlog it cannot
+send.
+
+### How it is put together
+
+Four pieces, each of which can be read without the others:
+
+| File | What it does |
+|---|---|
+| `helpers/Notifier.php` | Decides who is told what. Queues the email as it writes the bell row. |
+| `helpers/EmailTemplate.php` | Turns a notification into a subject and both bodies. Pure functions. |
+| `helpers/EmailQueue.php` | The `email_outbox` table: queue it, claim it, retry it, record what happened. |
+| `helpers/Mailer.php` | The only file that knows SMTP exists. Wraps the vendored PHPMailer in `lib/`. |
+
+Mail is queued rather than sent inside the request. An approver pressing
+**Approve** should not wait on an SMTP round trip, and should certainly not wait
+out a socket timeout when the mail server is unreachable. A queued message also
+survives an outage, and the table doubles as the delivery log: *was Thandi told?*
+is a question it can answer, including the reason when the answer is no.
+
+Nothing about email can disturb an approval. Queueing happens after the
+transaction commits, inside its own guard, and a notification whose email could
+not be queued is still a success - the bell will show it and the failure is
+logged.
+
+### The mail server, as found
+
+`mail.realnet.co.sz` is an IMail 8.22 server. Its `EHLO` on port 25 answers with
+`SIZE`, `8BITMIME`, `DSN`, `ETRN` and `EXPN`, and ports 587 and 465 refuse
+connections outright. Two consequences, both already reflected in the defaults:
+
+- **No authentication.** No `AUTH` is advertised, so there is nothing to log in
+  to. `MAIL_USERNAME` is empty and the client relays without authenticating. The
+  `lms@realnet.co.sz` password is for reading that mailbox over POP3 - a
+  different job, and not one this application does.
+- **No encryption.** No `STARTTLS`, so leave notices cross the network in the
+  clear. That is the server's configuration rather than a choice made here, and
+  worth raising with whoever runs it.
+
+The server decides what to relay by the address the connection comes from, and it
+accepts mail from inside Realnet's own ranges. **The application has to keep
+running from an address the mail server trusts.** Moved to a host outside those
+ranges, sending will be refused, and the symptom is a relay error in the outbox
+rather than anything obvious. The `realnet.co.sz` SPF record ends in `-all`, so
+mail leaving from anywhere unlisted is rejected outright rather than junked.
+
+### Switching it on
+
+**Ask the server first**, from the machine that will be sending. This sends
+nothing - it opens the port, reads the greeting, asks `EHLO` what the server
+supports, offers an envelope, and hangs up before the message body:
+
+```bash
+php tools/test_email.php
+```
+
+It reports what the server offers and whether it would relay, and names the two
+mismatches that otherwise produce a baffling error: a username set against a
+server with no `AUTH` (which fails as *"Could not authenticate"* and explains
+nothing), and encryption asked of a server with no `STARTTLS`.
+
+Then send one real message to yourself:
+
+```bash
+php tools/test_email.php --to you@realnet.co.sz
+```
+
+Only once that arrives, turn it on. Everything is an environment variable, the
+same as the `DB_*` settings, with defaults in `config/constants.php`:
+
+```bash
+export MAIL_ENABLED=true
+```
+
+| Variable | Default | Notes |
+|---|---|---|
+| `MAIL_ENABLED` | `false` | Off means nothing is queued at all. |
+| `MAIL_HOST` | `mail.realnet.co.sz` | |
+| `MAIL_PORT` | `25` | The only port this server answers on. |
+| `MAIL_ENCRYPTION` | empty | `tls`, `ssl`, or empty for none. |
+| `MAIL_USERNAME` | empty | Empty means relay without authenticating. |
+| `MAIL_PASSWORD` | empty | Never put this in a tracked file. Unused as things stand. |
+| `MAIL_FROM_ADDRESS` | `lms@realnet.co.sz` | Must be a mailbox the server will send as. |
+| `MAIL_REPLY_TO` | `info@realnet.co.sz` | Replies reach a person; `lms@` is not read. |
+| `MAIL_BATCH_SIZE` | `20` | Messages per worker run. |
+| `MAIL_MAX_ATTEMPTS` | `5` | Then the message is marked failed and left alone. |
+
+Under Apache, `PassEnv` has to name each one or `getenv()` returns nothing and the
+constants quietly fall back to their defaults - which looks exactly like
+configuration being ignored. The `Dockerfile` already does this.
+
+### The worker
+
+Nothing is sent until the worker runs. One cron entry:
+
+```cron
+* * * * * cd /var/www/html && php tools/send_queued_email.php >> /var/log/ri-leave-mail.log 2>&1
+```
+
+Under Docker, run it on the host against the container:
+
+```cron
+* * * * * docker compose -f /path/to/docker-compose.yml exec -T web php tools/send_queued_email.php
+```
+
+A minute is right because the queue exists to keep SMTP off the critical path,
+not to delay mail. It is quiet on success, so an entry with no redirection will
+not mail root every minute about nothing; failures always print, and the exit
+code says which happened (`0` fine, `1` something could not be sent, `2` could
+not run at all). Only one copy runs at a time - a mail server that has started
+timing out holds each run open, and a minutely cron would otherwise pile up
+stalled workers.
+
+Failures are retried after 1, 5, 15 and 60 minutes, then marked `failed` and left
+alone. Failed rows are never deleted automatically: they are the ones somebody
+still has to read.
+
+### When mail is not arriving
+
+Start here. It reports the configuration and the queue together, with the most
+recent errors and what the mail server actually said:
+
+```bash
+php tools/send_queued_email.php --status
+```
+
+| What it says | What it means |
+|---|---|
+| `sending enabled: no` | `MAIL_ENABLED` is false. Nothing is being queued. |
+| `queued` climbing, `sent` at 0 | Nothing is running the worker. Check the cron entry. |
+| `Could not connect to SMTP host` | Port blocked, wrong host, or this machine is off the network the server trusts. |
+| `Could not authenticate` | `MAIL_USERNAME` is set against a server offering no `AUTH`. Clear it. |
+| `relay` or `550` in an error | The server will not relay from this address. See the note above. |
+| Everything `sent`, nothing received | Delivered but filtered. Check the junk folder; then it is a question for whoever runs the mail server. |
+
+Old delivery records can be let go of, without touching failed ones:
+
+```bash
+php tools/send_queued_email.php --prune 90
 ```
 
 ---
@@ -357,6 +520,12 @@ without the certificate it depends on.
 - [ ] Block `/uploads/` at the web server if you serve with nginx (Apache is
       covered by the `.htaccess` already in the directory).
 - [ ] Set `LOGIN_THROTTLE_ENABLED` to `true` in `config/constants.php`.
+- [ ] Prove email from the production host with `php tools/test_email.php`, send
+      one real message with `--to`, then set `MAIL_ENABLED=true`.
+- [ ] Add the `tools/send_queued_email.php` cron entry. Without it nothing is
+      ever sent, and the outbox grows quietly.
+- [ ] Check the mail server still relays from the production host's address - it
+      decides by address, not by password.
 - [ ] Re-issue everyone's password: `php tools/seed_employees.php --commit --reissue`.
       UAT sets every account to `password123` for testing; that must not survive.
 - [ ] Turn `display_errors` **off** in production PHP config.
@@ -376,5 +545,10 @@ docker compose up -d --build
 ### Tests
 
 ```bash
-php tests/test_suite.php     # honours the DB_* environment variables above
+php tests/test_suite.php        # honours the DB_* environment variables above
+php tests/test_email_queue.php # the outbox, against a real database
 ```
+
+The second needs a database and the `email_outbox` table, and skips with a
+reason when it has neither. It refuses to run if real mail is waiting to be
+sent rather than deleting a queue it did not create.
