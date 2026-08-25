@@ -70,6 +70,14 @@ if (mail_has($argv, '--status')) {
     say('  sending as      : ' . MAIL_FROM_ADDRESS
         . (MAIL_USERNAME === '' ? ' (no authentication)' : ' (as ' . MAIL_USERNAME . ')'));
     say('  password set    : ' . (MAIL_PASSWORD === '' ? 'NO - set MAIL_PASSWORD in the environment' : 'yes'));
+
+    if (Mailer::isRedirecting()) {
+        say('');
+        say('  *** REDIRECTING: every message goes to ' . MAIL_REDIRECT_TO . ' ***');
+        say('      Nobody else is being notified. Correct for UAT, wrong in production.');
+        say('      Clear MAIL_REDIRECT_TO to notify the real recipients.');
+    }
+
     say('');
     say('  queued  : ' . $counts[EmailQueue::STATUS_QUEUED]);
     say('  sending : ' . $counts[EmailQueue::STATUS_SENDING]);

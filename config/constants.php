@@ -82,6 +82,24 @@ define('MAIL_FROM_NAME', getenv('MAIL_FROM_NAME') ?: APP_SHORT_NAME);
 // Replies go to a mailbox people read. lms@ is not one.
 define('MAIL_REPLY_TO', getenv('MAIL_REPLY_TO') ?: ORG_EMAIL);
 
+// Send everything to one address instead of to the real recipients.
+//
+// This exists for UAT. The test database is seeded from the real staff roster,
+// so almost every account carries a colleague's actual address, and the UAT
+// machine can reach the mail server - which means a single test approval is
+// enough to send thirty people a leave notice about a request that does not
+// exist. Setting this redirects every message to one mailbox instead.
+//
+// The redirect happens at the moment of sending, not when the message is
+// queued, so email_outbox still records who the mail was really for. The
+// delivery log stays truthful and the subject line says who each one would have
+// gone to.
+//
+// Empty in production. Anything else there would silently stop staff being
+// notified, so tools/send_queued_email.php --status and tools/test_email.php
+// both say loudly when it is set.
+define('MAIL_REDIRECT_TO', getenv('MAIL_REDIRECT_TO') !== false ? getenv('MAIL_REDIRECT_TO') : '');
+
 // Seconds to wait on the mail server before giving up and requeueing. Short on
 // purpose: the worker has a whole queue to get through.
 define('MAIL_TIMEOUT', (int)(getenv('MAIL_TIMEOUT') ?: 15));

@@ -48,6 +48,11 @@ services:
       # Never written here. Passed through from the host when the server has one:
       #   MAIL_PASSWORD=... docker compose up -d
       MAIL_PASSWORD: "${MAIL_PASSWORD:-}"
+
+      # Set this to your own address before turning MAIL_ENABLED on anywhere
+      # that is not production. The database is seeded from the real staff
+      # roster, so without it one test approval mails thirty colleagues.
+      MAIL_REDIRECT_TO: "${MAIL_REDIRECT_TO:-}"
     depends_on:
       db:
         condition: service_healthy

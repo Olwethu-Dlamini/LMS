@@ -320,6 +320,7 @@ export MAIL_ENABLED=true
 | `MAIL_PASSWORD` | empty | Never put this in a tracked file. Unused as things stand. |
 | `MAIL_FROM_ADDRESS` | `lms@realnet.co.sz` | Must be a mailbox the server will send as. |
 | `MAIL_REPLY_TO` | `info@realnet.co.sz` | Replies reach a person; `lms@` is not read. |
+| `MAIL_REDIRECT_TO` | empty | Sends everything to one address instead of the real recipients. For UAT. Must be empty in production. |
 | `MAIL_BATCH_SIZE` | `20` | Messages per worker run. |
 | `MAIL_MAX_ATTEMPTS` | `5` | Then the message is marked failed and left alone. |
 
@@ -352,6 +353,61 @@ stalled workers.
 Failures are retried after 1, 5, 15 and 60 minutes, then marked `failed` and left
 alone. Failed rows are never deleted automatically: they are the ones somebody
 still has to read.
+
+### Testing it without mailing the whole company
+
+The UAT database is seeded from the real staff roster, so almost every account
+carries a colleague's actual address, and the UAT machine can reach the mail
+server. Turning `MAIL_ENABLED` on there and running the worker will send real
+leave notices to real people about requests that do not exist.
+
+Two switches keep that from happening, and it is worth knowing they are separate:
+
+- **`MAIL_ENABLED`** controls whether anything is *queued*.
+- **The worker** controls whether anything is *sent*. Nothing leaves until it runs.
+
+So there are three sensible levels of UAT:
+
+**1. Content only, nothing sent.** Turn queueing on and never run the worker.
+Every notice piles up in `email_outbox`, where you can read exactly what would
+have gone out, to whom:
+
+```bash
+export MAIL_ENABLED=true
+# exercise the app: apply, approve, reject, cancel
+mysql -u root -p lms_db -e "SELECT id, to_email, subject, status FROM email_outbox ORDER BY id;"
+mysql -u root -p lms_db -e "SELECT body_text FROM email_outbox ORDER BY id DESC LIMIT 1\G"
+```
+
+**2. Real delivery, all of it to you.** Set `MAIL_REDIRECT_TO` and every message
+goes to that one mailbox instead, whoever it was addressed to:
+
+```bash
+export MAIL_ENABLED=true
+export MAIL_REDIRECT_TO=you@realnet.co.sz
+php tools/send_queued_email.php --verbose
+```
+
+Each message keeps its real recipient in the subject line, as
+`[to thandi@realnet.co.sz] ...`, and opens with a banner saying it was
+redirected. This is the level to use for judging whether the mail actually
+*reads* well, since it exercises the whole path including the mail server.
+
+The redirect happens when the message is sent, not when it is queued, so
+`email_outbox` still records who each one was really for and the delivery log
+stays truthful. A `MAIL_REDIRECT_TO` that is not a valid address makes sending
+fail rather than falling back to the real recipient: honouring a typo by mailing
+the actual staff is the one outcome anybody setting it was trying to avoid.
+
+**3. Genuine end-to-end.** Clear `MAIL_REDIRECT_TO` and point a test account at
+an address you control:
+
+```bash
+mysql -u root -p lms_db -e \
+  "UPDATE users SET email = 'you+uat@realnet.co.sz' WHERE id = <a test account>;"
+```
+
+Do that rather than clearing the redirect with the seeded roster in place.
 
 ### When mail is not arriving
 
@@ -526,6 +582,9 @@ without the certificate it depends on.
       ever sent, and the outbox grows quietly.
 - [ ] Check the mail server still relays from the production host's address - it
       decides by address, not by password.
+- [ ] Confirm `MAIL_REDIRECT_TO` is **empty** in production. Set, it silently
+      diverts every notice to one mailbox and nobody else is told. Both
+      `tools/test_email.php` and `--status` say so in capitals when it is on.
 - [ ] Re-issue everyone's password: `php tools/seed_employees.php --commit --reissue`.
       UAT sets every account to `password123` for testing; that must not survive.
 - [ ] Turn `display_errors` **off** in production PHP config.

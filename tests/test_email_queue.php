@@ -26,6 +26,12 @@
 // instead of the one it names.
 putenv('MAIL_ENABLED=true');
 
+// Set here for the same reason as MAIL_ENABLED: constants are frozen at include
+// time. This also means the whole file runs with the redirect on, which is
+// deliberate - it is the configuration UAT uses, so it is the one worth testing.
+const REDIRECT_TO = 'outbox-redirect@example.invalid';
+putenv('MAIL_REDIRECT_TO=' . REDIRECT_TO);
+
 require_once __DIR__ . '/../helpers/EmailQueue.php';
 
 const TEST_TAG = 'outbox-test@example.invalid';
@@ -115,11 +121,18 @@ if ($waiting > 0) {
     );
 }
 
-/** Remove only what this file created. */
-$cleanup = function () use ($db, $userId) {
+/**
+ * Remove only what this file created.
+ *
+ * Matched on the subject marker rather than the recipient or the user id. Every
+ * message this file queues carries "[outbox test]", whereas the recipient varies
+ * and enqueueRaw() leaves user_id null - an earlier version keyed on those two
+ * and leaked the redirect test's row into the outbox, where it then showed up in
+ * --status as real waiting mail.
+ */
+$cleanup = function () use ($db) {
+    $db->exec("DELETE FROM email_outbox WHERE subject LIKE '%[outbox test]%'");
     $db->prepare("DELETE FROM email_outbox WHERE to_email = :tag")->execute(['tag' => TEST_TAG]);
-    $db->prepare("DELETE FROM email_outbox WHERE user_id = :id AND subject LIKE '%[outbox test]%'")
-       ->execute(['id' => $userId]);
 };
 $cleanup();
 
@@ -280,6 +293,43 @@ try {
     $queue->enqueueRaw(TEST_TAG, null, '[outbox test] broken', '<p>x</p>', 'x');
     $db->exec("UPDATE email_outbox SET status = 'failed', sent_at = NULL, queued_at = DATE_SUB(NOW(), INTERVAL 200 DAY) WHERE to_email = '" . TEST_TAG . "'");
     check($queue->prune(90) === 0, 'Failed mail is never pruned - it is what somebody still has to read');
+
+    /* ---------------------------------------------------------------- *
+     * Redirecting everything to one mailbox, which is how UAT is run
+     * safely against a database seeded from the real staff roster.
+     * ---------------------------------------------------------------- */
+
+    check(Mailer::isRedirecting() === true, 'The redirect is active for this run');
+
+    $cleanup();
+    $queue->enqueueRaw('someone.real@realnet.co.sz', 'Someone Real', '[outbox test] redirected', '<!DOCTYPE html><html><body><p>body</p></body></html>', 'body');
+
+    $delivered = [];
+    $recorder = new Mailer(function (array $message) use (&$delivered) { $delivered[] = $message; });
+    $queue->run($recorder, 5);
+
+    check(count($delivered) === 1, 'The message was sent');
+    check(
+        $delivered[0]['to_email'] === REDIRECT_TO,
+        'It went to the redirect mailbox, not the real recipient',
+        'went to ' . ($delivered[0]['to_email'] ?? '?')
+    );
+    check(
+        strpos($delivered[0]['subject'], 'someone.real@realnet.co.sz') !== false,
+        'The subject says who it was meant for, so thirty test messages stay distinguishable'
+    );
+    check(
+        strpos($delivered[0]['body_text'], 'Redirected') === 0,
+        'The plain-text body opens with the redirect notice'
+    );
+    check(
+        (bool)preg_match('/<body[^>]*><div style="background:#fdf3e0/', $delivered[0]['body_html']),
+        'The HTML banner sits inside <body>, where a mail client will render it'
+    );
+    check(
+        (int)$db->query("SELECT COUNT(*) FROM email_outbox WHERE to_email = 'someone.real@realnet.co.sz' AND status = 'sent'")->fetchColumn() === 1,
+        'The outbox still records the real recipient, so the delivery log stays truthful'
+    );
 
     /* ---------------------------------------------------------------- *
      * Mail switched off

@@ -49,6 +49,13 @@ echo "  authentication : " . (MAIL_USERNAME === '' ? 'none (relay by address)' :
 echo "  password       : " . (MAIL_PASSWORD === '' ? 'not set' : 'set') . PHP_EOL;
 echo "  sending as     : " . MAIL_FROM_NAME . ' <' . MAIL_FROM_ADDRESS . '>' . PHP_EOL;
 echo "  replies to     : " . MAIL_REPLY_TO . PHP_EOL;
+
+if (Mailer::isRedirecting()) {
+    echo PHP_EOL;
+    echo "  *** REDIRECTING: every message goes to " . MAIL_REDIRECT_TO . " ***" . PHP_EOL;
+    echo "      Real recipients are not mailed. Correct for UAT, wrong in production." . PHP_EOL;
+}
+
 echo PHP_EOL;
 
 /* ---------------------------------------------------------------------- *

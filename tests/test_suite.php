@@ -1138,6 +1138,14 @@ try {
 }
 $tester->assert($refused, "Sending to an unusable address raises rather than failing quietly");
 
+// MAIL_REDIRECT_TO is empty in the test environment, which is the production
+// shape. The redirect itself is exercised in tests/test_email_queue.php, where
+// the constant can be set before config/constants.php is included.
+$tester->assert(
+    Mailer::isRedirecting() === false,
+    "Mail is not being diverted by default, so production notifies real people"
+);
+
 $tester->assert(
     EmailQueue::backoffMinutes(1) === 1
     && EmailQueue::backoffMinutes(2) === 5

@@ -7,7 +7,7 @@ RUN docker-php-ext-install pdo_mysql \
 # Make DB_* and MAIL_* container env vars visible to getenv() inside mod_php.
 # MAIL_PASSWORD is listed but has no value baked in anywhere: it is passed at run
 # time so the mailbox password never enters an image or a tracked file.
-RUN printf 'PassEnv DB_HOST DB_PORT DB_NAME DB_USER DB_PASS\nPassEnv MAIL_ENABLED MAIL_HOST MAIL_PORT MAIL_ENCRYPTION MAIL_USERNAME MAIL_PASSWORD MAIL_FROM_ADDRESS MAIL_FROM_NAME MAIL_REPLY_TO\n' \
+RUN printf 'PassEnv DB_HOST DB_PORT DB_NAME DB_USER DB_PASS\nPassEnv MAIL_ENABLED MAIL_HOST MAIL_PORT MAIL_ENCRYPTION MAIL_USERNAME MAIL_PASSWORD MAIL_FROM_ADDRESS MAIL_FROM_NAME MAIL_REPLY_TO MAIL_REDIRECT_TO\n' \
     > /etc/apache2/conf-available/lms-env.conf \
     && a2enconf lms-env
 

@@ -55,10 +55,20 @@ class Mailer {
             && filter_var($email, FILTER_VALIDATE_EMAIL) !== false;
     }
 
+    /** Whether every message is being diverted to a single mailbox. */
+    public static function isRedirecting(): bool {
+        return MAIL_REDIRECT_TO !== '';
+    }
+
     /**
      * Send one message.
      *
-     * @param string $toEmail
+     * The recipient is checked before MAIL_REDIRECT_TO is applied, so a bad
+     * address is still reported as a bad address during UAT rather than being
+     * hidden by the redirect. Diverting a message that would have failed would
+     * make UAT prove something untrue.
+     *
+     * @param string $toEmail the real recipient, as recorded in the outbox
      * @param string|null $toName
      * @param string $subject
      * @param string $bodyHtml
@@ -76,13 +86,64 @@ class Mailer {
         // header, so it is collapsed here rather than trusted downstream.
         $subject = self::singleLine($subject);
 
+        $envelopeTo   = $toEmail;
+        $envelopeName = (string)$toName;
+
+        if (self::isRedirecting() && !self::isSendableAddress(MAIL_REDIRECT_TO)) {
+            // Fail rather than fall back to the real recipient. Somebody who set
+            // this meant "do not mail the actual staff", and honouring a typo by
+            // delivering to them anyway is the one outcome they were trying to
+            // prevent. The message stays queued and the reason is recorded.
+            throw new RuntimeException(
+                'MAIL_REDIRECT_TO is set to "' . MAIL_REDIRECT_TO . '", which is not a valid '
+                . 'address. Refusing to send to the real recipient instead.'
+            );
+        }
+
+        if (self::isRedirecting()) {
+            // Say who it was for in the subject. During UAT the interesting
+            // question about thirty near-identical messages is which one is
+            // which, and the subject is the only part visible in a list.
+            $subject      = '[to ' . $toEmail . '] ' . $subject;
+            $envelopeTo   = MAIL_REDIRECT_TO;
+            $envelopeName = 'Redirected from ' . $toEmail;
+
+            $notice = 'Redirected: this message was addressed to ' . $toEmail
+                . ' and was sent here instead because MAIL_REDIRECT_TO is set.';
+
+            $bodyText = $notice . "\n\n" . $bodyText;
+            $bodyHtml = self::prependNotice($bodyHtml, $notice);
+        }
+
         call_user_func($this->transport, [
-            'to_email'  => $toEmail,
-            'to_name'   => (string)$toName,
+            'to_email'  => $envelopeTo,
+            'to_name'   => $envelopeName,
             'subject'   => $subject,
             'body_html' => $bodyHtml,
             'body_text' => $bodyText,
         ]);
+    }
+
+    /**
+     * Put the redirect notice where it will actually be seen.
+     *
+     * Inserted after <body> when there is one, so it lands above the rendered
+     * message rather than before the doctype where most clients would drop it.
+     */
+    private static function prependNotice(string $html, string $notice): string {
+        $banner = '<div style="background:#fdf3e0;border:1px solid #9a6200;color:#9a6200;'
+            . 'padding:10px 14px;margin:0 0 12px;font:bold 12px Arial,Helvetica,sans-serif;">'
+            . htmlspecialchars($notice, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8')
+            . '</div>';
+
+        $position = stripos($html, '<body');
+        if ($position !== false) {
+            $close = strpos($html, '>', $position);
+            if ($close !== false) {
+                return substr($html, 0, $close + 1) . $banner . substr($html, $close + 1);
+            }
+        }
+        return $banner . $html;
     }
 
     /**
