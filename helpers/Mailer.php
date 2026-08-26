@@ -74,6 +74,42 @@ class Mailer {
     }
 
     /**
+     * The address to blind-copy this message to, or null for no copy.
+     *
+     * Pure, and takes its inputs explicitly, so the decision can be tested
+     * without a mail server and without constants that are frozen at include
+     * time.
+     *
+     * Four reasons to send no copy, and each is a real case:
+     *   - archiving is switched off;
+     *   - a redirect is active, so this is UAT and the trail should not be
+     *     filled with notices about leave nobody applied for;
+     *   - the address is unusable, which is logged by the caller and never
+     *     allowed to fail the send;
+     *   - the archive mailbox is already the recipient, which would otherwise
+     *     deliver the same message to it twice.
+     */
+    public static function archiveRecipientFor(
+        string $envelopeTo,
+        ?string $archiveTo = null,
+        ?bool $redirecting = null
+    ): ?string {
+        $archiveTo   = $archiveTo ?? MAIL_ARCHIVE_TO;
+        $redirecting = $redirecting ?? self::isRedirecting();
+
+        if ($archiveTo === '' || $redirecting) {
+            return null;
+        }
+        if (!self::isSendableAddress($archiveTo)) {
+            return null;
+        }
+        if (strcasecmp($archiveTo, $envelopeTo) === 0) {
+            return null;
+        }
+        return $archiveTo;
+    }
+
+    /**
      * Send one message.
      *
      * The recipient is checked before MAIL_REDIRECT_TO is applied, so a bad
@@ -128,12 +164,23 @@ class Mailer {
             $bodyHtml = self::prependNotice($bodyHtml, $notice);
         }
 
+        $archiveTo = self::archiveRecipientFor($envelopeTo);
+        if ($archiveTo === null && MAIL_ARCHIVE_TO !== '' && !self::isRedirecting()
+            && !self::isSendableAddress(MAIL_ARCHIVE_TO)) {
+            // Logged, not thrown. See the note on MAIL_ARCHIVE_TO in
+            // config/constants.php: losing the copy is better than not telling
+            // somebody about their own leave.
+            error_log('Mailer: MAIL_ARCHIVE_TO is not a usable address ('
+                . MAIL_ARCHIVE_TO . '); the message was sent with no copy kept.');
+        }
+
         call_user_func($this->transport, [
-            'to_email'  => $envelopeTo,
-            'to_name'   => $envelopeName,
-            'subject'   => $subject,
-            'body_html' => $bodyHtml,
-            'body_text' => $bodyText,
+            'to_email'   => $envelopeTo,
+            'to_name'    => $envelopeName,
+            'subject'    => $subject,
+            'body_html'  => $bodyHtml,
+            'body_text'  => $bodyText,
+            'archive_to' => $archiveTo,
         ]);
     }
 
@@ -219,6 +266,13 @@ class Mailer {
                 $mail->addReplyTo(MAIL_REPLY_TO, ORG_NAME);
             }
             $mail->addAddress($message['to_email'], $message['to_name']);
+
+            // Bcc rather than a second send: one transaction, one message, so
+            // the copy is the message the recipient got rather than a rebuild
+            // of it. The To: header still names the real person.
+            if (!empty($message['archive_to'])) {
+                $mail->addBCC($message['archive_to']);
+            }
 
             $mail->Subject = $message['subject'];
             $mail->isHTML(true);

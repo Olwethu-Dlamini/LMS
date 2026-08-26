@@ -52,6 +52,16 @@ define('MAIL_REPLY_TO', 'info@realnet.co.sz');
 // where the database is seeded from the real staff roster.
 define('MAIL_REDIRECT_TO', '');
 
+// Blind-copy every message to one mailbox, as a delivery trail. The copy rides
+// the same send as a Bcc, so it is byte-identical to what the recipient got,
+// and the To: header still names them. Ignored while MAIL_REDIRECT_TO is set,
+// so UAT cannot file invented leave notices into the record.
+//
+// email_outbox already stores every message in full. Set this when somebody
+// wants the trail in a mailbox they can search, and remember it doubles what
+// the mail server carries.
+define('MAIL_ARCHIVE_TO', '');
+
 // ---------------------------------------------------------------------------
 // Security. Both should be on for a live server.
 // ---------------------------------------------------------------------------
