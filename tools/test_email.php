@@ -48,7 +48,9 @@ echo "  encryption     : " . (MAIL_ENCRYPTION === '' ? 'none configured' : MAIL_
 echo "  authentication : " . (MAIL_USERNAME === '' ? 'none (relay by address)' : 'as ' . MAIL_USERNAME) . PHP_EOL;
 echo "  password       : " . (MAIL_PASSWORD === '' ? 'not set' : 'set') . PHP_EOL;
 echo "  sending as     : " . MAIL_FROM_NAME . ' <' . MAIL_FROM_ADDRESS . '>' . PHP_EOL;
-echo "  replies to     : " . MAIL_REPLY_TO . PHP_EOL;
+echo "  replies to     : " . MAIL_REPLY_TO
+    . (MAIL_REPLY_TO === MAIL_FROM_ADDRESS ? '  (no Reply-To header; replies follow From)' : '') . PHP_EOL;
+echo "  copies to      : " . (MAIL_ARCHIVE_TO === '' ? 'nobody (MAIL_ARCHIVE_TO not set)' : MAIL_ARCHIVE_TO) . PHP_EOL;
 
 echo "  links point to : " . APP_URL . PHP_EOL;
 
@@ -64,6 +66,18 @@ if (Mailer::isRedirecting()) {
     echo PHP_EOL;
     echo "  *** REDIRECTING: every message goes to " . MAIL_REDIRECT_TO . " ***" . PHP_EOL;
     echo "      Real recipients are not mailed. Correct for UAT, wrong in production." . PHP_EOL;
+
+    if (MAIL_ARCHIVE_TO !== '') {
+        echo "      No copies are being filed while this is set, so the trail is not" . PHP_EOL;
+        echo "      filled with notices about leave nobody applied for." . PHP_EOL;
+    }
+}
+
+if (MAIL_ARCHIVE_TO !== '' && !Mailer::isSendableAddress(MAIL_ARCHIVE_TO)) {
+    echo PHP_EOL;
+    echo "  *** MAIL_ARCHIVE_TO IS NOT A USABLE ADDRESS ***" . PHP_EOL;
+    echo "      Mail still sends; no copy is kept. Losing the record is better" . PHP_EOL;
+    echo "      than not telling somebody about their own leave." . PHP_EOL;
 }
 
 echo PHP_EOL;

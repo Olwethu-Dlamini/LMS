@@ -70,6 +70,9 @@ if (mail_has($argv, '--status')) {
     say('  sending as      : ' . MAIL_FROM_ADDRESS
         . (MAIL_USERNAME === '' ? ' (no authentication)' : ' (as ' . MAIL_USERNAME . ')'));
     say('  password set    : ' . (MAIL_PASSWORD === '' ? 'NO - set MAIL_PASSWORD in the environment' : 'yes'));
+    say('  replies to      : ' . MAIL_REPLY_TO
+        . (MAIL_REPLY_TO === MAIL_FROM_ADDRESS ? '  (no Reply-To header; replies follow From)' : ''));
+    say('  copies to       : ' . (MAIL_ARCHIVE_TO === '' ? 'nobody (MAIL_ARCHIVE_TO not set)' : MAIL_ARCHIVE_TO));
 
     say('  links point to  : ' . APP_URL);
 
@@ -86,6 +89,17 @@ if (mail_has($argv, '--status')) {
         say('  *** REDIRECTING: every message goes to ' . MAIL_REDIRECT_TO . ' ***');
         say('      Nobody else is being notified. Correct for UAT, wrong in production.');
         say('      Clear MAIL_REDIRECT_TO to notify the real recipients.');
+
+        if (MAIL_ARCHIVE_TO !== '') {
+            say('      Copies to ' . MAIL_ARCHIVE_TO . ' are suspended while this is set.');
+        }
+    }
+
+    if (MAIL_ARCHIVE_TO !== '' && !Mailer::isSendableAddress(MAIL_ARCHIVE_TO)) {
+        say('');
+        say('  *** MAIL_ARCHIVE_TO IS NOT A USABLE ADDRESS ***');
+        say('      Mail still sends and no copy is kept. Fix the address to start');
+        say('      filing the trail again.');
     }
 
     say('');
