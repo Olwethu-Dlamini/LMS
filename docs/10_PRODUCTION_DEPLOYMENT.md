@@ -17,8 +17,8 @@ Written 2026-08-26, from the live host.
 | Address | `https://lms.22112002.xyz` |
 | Host | Debian, user `srv1` |
 | Checkout | `/var/www/lms.22112002.xyz`, owned `srv1:www-data` |
-| PHP | mod_php under Apache, running directly on the host |
-| Database | MySQL on the same machine, `lms_db` |
+| PHP | PHP-FPM 8.4, served by Caddy. There is no Apache on this host |
+| Database | MySQL on the same machine, `lms_db`, as `lms_user` over the Unix socket |
 | Live since | 2026-08-25 |
 
 The staff roster is real. Accounts hold real `@realnet.co.sz` addresses, so
@@ -37,7 +37,8 @@ naturally looks to find out how the system is configured, and every answer they
 give is wrong for the live server:
 
 - The `PassEnv` line in the `Dockerfile` is Apache configuration *for the image*.
-  The live host's Apache has never seen it.
+  The live host runs no Apache at all, so nothing there ever reads it. Its
+  equivalent is `env[...]` in the PHP-FPM pool, section 3.4.
 - Every `MAIL_*` and `DB_*` environment variable in `docker-compose.yml` is
   container configuration. Nothing sets them on the live host.
 - `/var/www/html` is the path inside the image. On the live host the code is at
@@ -53,10 +54,10 @@ here because nothing populates it.
 ## 3. The request path
 
 ```
-browser  ->  Cloudflare  ->  Caddy tunnel  ->  Apache + mod_php  ->  MySQL
+browser  ->  Cloudflare  ->  Caddy tunnel  ->  PHP-FPM 8.4  ->  MySQL
 ```
 
-Three consequences follow from that chain, and two of them are not obvious.
+Four consequences follow from that chain, and three of them are not obvious.
 
 ### 3.1 TLS ends before PHP sees the request
 
@@ -103,7 +104,47 @@ Fixing it properly means trusting `CF-Connecting-IP` only when `REMOTE_ADDR` is
 one of Cloudflare's own published ranges, and treating it as absent otherwise.
 That is a real change to security code and is deliberately not made here.
 
-### 3.3 Cloudflare is in front of the origin
+### 3.3 PHP-FPM hands PHP an empty environment
+
+`clear_env` defaults to `yes`, so the pool discards whatever environment it
+inherited and `getenv()` sees only names the pool file lists explicitly:
+
+```ini
+; /etc/php/8.4/fpm/pool.d/www.conf
+env[DB_HOST] = localhost
+env[DB_PORT] = 3306
+env[DB_NAME] = lms_db
+env[DB_USER] = lms_user
+env[DB_PASS] = ...
+```
+
+This is the FPM equivalent of Apache's `PassEnv`, with the same silent failure: a
+name left out is not an error, it just makes `getenv()` return false so the
+caller falls through to its development default.
+
+**The CLI reads none of this.** `php tools/send_queued_email.php` runs under the
+CLI SAPI, which never opens a pool file, so a configuration that lives only in
+`www.conf` produces a working website and tools that cannot reach the database:
+
+```
+Database Connection Error: SQLSTATE[HY000] [1698] Access denied for user 'root'@'localhost'
+```
+
+That is not a wrong password. `1698` is the `auth_socket` plugin: `root@localhost`
+authenticates by operating-system identity, so `sudo mysql` succeeds and the same
+command as an ordinary user cannot. It appears here only because `getenv('DB_USER')`
+returned false and `config/database.php` fell back to `root`.
+
+The fix is to put the connection details in `config/local.php` with `putenv()`,
+which both SAPIs read, rather than in the pool file which only one of them does.
+`config/local.php.example` ships that block commented out for exactly this reason.
+A credential in two places drifts, and the way it shows up is a working portal
+whose cron mail worker has quietly stopped connecting.
+
+Note `DB_HOST` is `localhost`, not `127.0.0.1`. PDO reads `localhost` as a Unix
+socket and `127.0.0.1` as TCP, and that one word is load-bearing here.
+
+### 3.4 Cloudflare is in front of the origin
 
 Responses carry `cf-cache-status` and `server: cloudflare`. Application pages set
 `Cache-Control: no-store`, so nothing personal is cached, but a change to a file
@@ -126,6 +167,13 @@ define('APP_URL', 'https://lms.22112002.xyz');
 define('LOGIN_THROTTLE_ENABLED', true);
 define('MAIL_ENABLED', false);
 define('MAIL_REDIRECT_TO', 'somebody@example.com');
+```
+
+Because it holds the database password, it must not be world-readable, and it
+must still be readable by the PHP-FPM user. Owner `srv1`, group the pool's user:
+
+```bash
+sudo chown srv1:www-data config/local.php && chmod 640 config/local.php
 ```
 
 **Never edit `config/constants.php` on this server.** It is tracked. An edit
