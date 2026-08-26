@@ -131,7 +131,18 @@ config_default('MAIL_PASSWORD', '');
 config_default('MAIL_FROM_ADDRESS', 'lms@realnet.co.sz');
 config_default('MAIL_FROM_NAME', APP_SHORT_NAME);
 
-// Replies go to a mailbox people read. lms@ is not one.
+// Where a staff member's reply lands when they answer a leave notice.
+//
+// The default sends them to the organisation's general address, on the
+// reasoning that somebody reads it and lms@ historically nobody did. Set it to
+// MAIL_FROM_ADDRESS instead to keep replies with the sending mailbox, which is
+// where bounces already arrive: one mailbox to watch rather than two. Mailer
+// omits the header entirely when the two match, so replies fall back to From:
+// and the result is the same with one header fewer.
+//
+// Either is defensible. What is not is pointing this at a mailbox nobody opens:
+// a reply to a leave notice is usually somebody asking a question about their
+// own leave, and it fails silently, looking to them like it was ignored.
 config_default('MAIL_REPLY_TO', ORG_EMAIL);
 
 // Send everything to one address instead of to the real recipients.
