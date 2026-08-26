@@ -142,3 +142,117 @@ php tools/send_queued_email.php --status
 
 It prints the address links will be built from and says so in capitals when
 `MAIL_REDIRECT_TO` is diverting mail.
+
+---
+
+## 5. Deploying
+
+```bash
+cd /var/www/lms.22112002.xyz
+git pull
+```
+
+Then the two things a pull cannot do for you, in order.
+
+### 5.1 Migrations, because git does not move schema
+
+A pull moves files. The database is state that lives in MySQL, outside the
+repository entirely, and nothing in a checkout reaches it. Code that needs a new
+table ships a numbered file in `migrations/` and somebody applies it:
+
+```bash
+mysql lms_db < migrations/005-email-outbox.sql
+```
+
+There is no migration runner and no table recording what has been applied, so
+what has run is not discoverable from the system. Each file is safe to re-run and
+ends with a check query that names what now exists, so applying one you are
+unsure about is cheaper than reasoning about it. The full list is in the README
+under "Upgrading an existing database".
+
+The application is written to run ahead of its migrations rather than fail: until
+`004` sign-in is simply not rate limited, until `005` notifications appear in the
+bell and no email is queued. That is deliberate, and it has a cost worth knowing.
+A missing migration does not announce itself. `LoginThrottle` checks whether
+`login_attempts` exists and allows every sign-in if it does not, so
+`LOGIN_THROTTLE_ENABLED = true` with the migration unapplied is a switch that is
+on and doing nothing.
+
+### 5.2 Verify the address, not the page
+
+```bash
+curl -sI https://lms.22112002.xyz/ | grep -i location
+```
+
+Expect `location: https://lms.22112002.xyz/modules/auth/login.php`.
+
+This is the check that matters after any deploy touching configuration.
+`config/constants.php` defaults `APP_URL` to `http://localhost:8000`, so a
+correct answer here is positive evidence that `config/local.php` was read. Opening
+the login page in a browser proves nothing: it is reachable at its own URL whether
+or not `APP_URL` is right, and only the redirect from `/` and the asset paths in
+`includes/header.php` actually exercise the setting.
+
+---
+
+## 6. When a pull will not go through
+
+Recorded because it happened on 2026-08-26 and cost most of a morning.
+
+### 6.1 Divergent branches after a history rewrite
+
+```
++ 29b6609...2892756 main -> origin/main (forced update)
+fatal: Need to specify how to reconcile divergent branches.
+```
+
+A `filter-branch` on the development machine rewrote every commit, giving
+identical content entirely new hashes, and the result was force-pushed. The
+server was still on the old hashes. Git sees two histories with no common recent
+ancestor and calls them divergent, which is true, but the usual reading of that
+word is wrong here: the server held no work of its own. Its forty commits were
+the pre-rewrite twins of forty of origin's fifty-eight.
+
+Merging two lineages of the same history is the wrong operation. It produces a
+merge commit reconciling a branch with itself. Confirm there is nothing to keep,
+then take the remote's history wholesale:
+
+```bash
+git log --oneline origin/main..HEAD    # read this before the next line
+git fetch origin
+git reset --hard origin/main
+```
+
+`git log origin/main..HEAD` is the safety check, not a formality. It lists what
+would be discarded. Every subject matching a commit already in `origin/main`
+means the branch is a rewritten duplicate and nothing is lost. An unfamiliar
+subject means somebody committed on the server and `reset --hard` would destroy
+it.
+
+`config/local.php` is untracked, so `reset --hard` leaves it alone. **Write it
+before the reset, not after.** The incoming `constants.php` defaults `APP_URL` to
+localhost, and if that lands with no local file the live site starts redirecting
+staff to their own machines the moment the reset completes.
+
+### 6.2 "Entry not uptodate. Cannot merge."
+
+```
+error: Entry 'config/constants.php' not uptodate. Cannot merge.
+fatal: Could not reset index file to revision 'origin/main'.
+```
+
+`reset --hard` normally overwrites local changes without asking, so this is not
+the usual "you have uncommitted work" refusal. It means git's index holds stat
+information it has not re-verified against disk, and it will not overwrite a file
+it cannot account for.
+
+```bash
+git update-index --refresh
+git checkout -- config/constants.php
+git reset --hard origin/main
+```
+
+The same stale index is why `git status` had been reporting a clean tree while
+`config/constants.php` visibly held a hand-edit. Git was answering from an index
+it had not refreshed. If status and the file on disk disagree, refresh the index
+before believing either.
