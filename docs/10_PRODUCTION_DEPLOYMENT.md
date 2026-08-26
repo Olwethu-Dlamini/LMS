@@ -304,3 +304,90 @@ The same stale index is why `git status` had been reporting a clean tree while
 `config/constants.php` visibly held a hand-edit. Git was answering from an index
 it had not refreshed. If status and the file on disk disagree, refresh the index
 before believing either.
+
+---
+
+## 7. Testing on the live system without mailing anybody
+
+The README describes three levels of UAT, and all three assume a machine where
+`MAIL_ENABLED` can simply be left off. On this server it is on, the redirect is
+cleared, and the roster is real, so exercising the UI here mails colleagues about
+leave that does not exist.
+
+What makes that survivable is that queueing and sending are separate gates.
+`MAIL_ENABLED` decides whether a notice is written to `email_outbox`. The cron
+worker decides whether anything leaves. Closing the second one gives a live
+system that records exactly what it would have sent and sends none of it.
+
+### 7.1 Close the worker, not the queue
+
+```bash
+crontab -e     # put a # in front of the send_queued_email.php line
+crontab -l     # confirm it is commented out
+```
+
+Leave `MAIL_ENABLED` alone. Turning that off instead would mean the test
+generates no email rows at all, and the whole point is to read them.
+
+**Mail is delayed, not lost.** Genuine notices raised by staff during the window
+queue up behind yours and go out when the worker is restored. That is the queue
+doing its job, and it is why this is safer than switching queueing off.
+
+Keep the window short anyway. A colleague waiting on an approval notice is
+waiting for as long as the cron is commented out.
+
+### 7.2 Mark where your test begins
+
+```bash
+sudo mysql lms_db -e "SELECT COALESCE(MAX(id), 0) AS before_test FROM email_outbox;"
+```
+
+Write the number down. Everything above it is yours; everything at or below it
+belongs to real staff and must not be deleted. This one step is what separates
+cleaning up after yourself from destroying somebody's pending notification.
+
+### 7.3 Exercise the UI, then read what would have gone out
+
+Apply, approve, reject, cancel. Then:
+
+```bash
+sudo mysql lms_db -e "SELECT id, to_email, subject, status FROM email_outbox WHERE id > <before_test> ORDER BY id;"
+sudo mysql lms_db -e "SELECT body_text FROM email_outbox WHERE id > <before_test> ORDER BY id DESC LIMIT 1\G"
+```
+
+`to_email` is the real recipient, recorded at queue time. Reading these is the
+whole exercise: the subject line, the wording, and whether the links point at
+`https://lms.22112002.xyz` rather than anywhere else.
+
+### 7.4 Clean up before restoring the worker
+
+In this order, and only rows above your mark:
+
+```sql
+DELETE FROM email_outbox   WHERE id > <before_test>;
+DELETE FROM notifications  WHERE user_id = <your user id> AND created_at >= '<when you started>';
+DELETE FROM leave_applications WHERE id IN (<the ones you created>);
+```
+
+Then check the balance the test spent. A pending application reserves days in
+`leave_entitlements.pending_days`, and deleting the application row does not give
+them back:
+
+```sql
+SELECT user_id, leave_type_id, pending_days, remaining_days FROM leave_entitlements WHERE user_id = <your user id>;
+```
+
+Correct `pending_days` by hand if the test left it overstated.
+
+Restore the crontab entry last, once the outbox holds nothing of yours. The
+worker then flushes whatever real mail accumulated during the window.
+
+### 7.5 When not to do any of this
+
+The safe answer is not to test on production at all. `./uat.sh start` runs the
+whole application against a private database on port 3307, where `MAIL_ENABLED`
+is off, nothing can reach a colleague, and `./uat.sh reset` undoes a test session
+in one command instead of five statements typed against live data.
+
+Use this section for what genuinely cannot be reproduced there: the live mail
+path, the real proxy chain, and the real roster.

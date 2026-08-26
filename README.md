@@ -16,9 +16,14 @@ Before any code implementation begins, full architecture and system design bluep
 6. [06_ROLE_BASED_ACCESS_CONTROL_MATRIX.md](./docs/06_ROLE_BASED_ACCESS_CONTROL_MATRIX.md) - RBAC Permission Matrix across 5 User Roles
 7. [07_UI_UX_WIREFRAMES_AND_COMPONENT_MAP.md](./docs/07_UI_UX_WIREFRAMES_AND_COMPONENT_MAP.md) - Page Layout Wireframes & Bootstrap Theme Token Map
 8. [09_EMAIL_AND_SMTP.md](./docs/09_EMAIL_AND_SMTP.md) - How SMTP works, the mail server this installation talks to, the queue design, every setting, and troubleshooting by symptom
+9. [10_PRODUCTION_DEPLOYMENT.md](./docs/10_PRODUCTION_DEPLOYMENT.md) - The live server: what it runs, how a request reaches PHP, where configuration comes from, how to deploy, and how to test on it without mailing the company
+10. [11_LESSONS_FROM_GOING_LIVE.md](./docs/11_LESSONS_FROM_GOING_LIVE.md) - What the first deploy taught, and the three bugs it exposed
 
 (`08_USER_MANUAL.md` is the end-user manual rather than a design document; see
 [User Manual](#user-manual) below.)
+
+The last two were written after launch rather than before it. `10` describes the
+machine, `11` describes the mistakes.
 
 ---
 
