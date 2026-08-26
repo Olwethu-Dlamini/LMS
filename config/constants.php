@@ -163,6 +163,29 @@ config_default('MAIL_REPLY_TO', ORG_EMAIL);
 // both say loudly when it is set.
 config_default('MAIL_REDIRECT_TO', '');
 
+// Blind-copy every outgoing message to one mailbox, as a delivery trail.
+//
+// The copy rides the same SMTP transaction as a Bcc, so what lands in the
+// archive is byte-identical to what the recipient received, headers included -
+// not a re-rendering of it. The To: header still names the real person, so the
+// mailbox reads as a record of who was told what.
+//
+// Skipped entirely while MAIL_REDIRECT_TO is set. During UAT every message is
+// already going to one mailbox, and filing test notices about leave that does
+// not exist alongside the real trail would make the trail worth less than no
+// trail at all.
+//
+// An unusable value here is logged and ignored rather than raised. Failing the
+// send would mean a colleague is not told about their own leave because the
+// address for the copy has a typo, and the notice matters more than the record
+// of it. This is the opposite of how MAIL_REDIRECT_TO handles a bad address,
+// deliberately: there, delivering anyway is the harm.
+//
+// Note this doubles the volume the mail server handles, and email_outbox
+// already stores every message in full. Set it when somebody wants the trail in
+// a mailbox they can search, not as a substitute for the outbox.
+config_default('MAIL_ARCHIVE_TO', '');
+
 // Seconds to wait on the mail server before giving up and requeueing. Short on
 // purpose: the worker has a whole queue to get through.
 config_default('MAIL_TIMEOUT', 15);

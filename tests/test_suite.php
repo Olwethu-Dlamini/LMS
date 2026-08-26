@@ -1146,6 +1146,41 @@ $tester->assert(
     "Mail is not being diverted by default, so production notifies real people"
 );
 
+// MAIL_ARCHIVE_TO is empty here too, so the decision is exercised through its
+// explicit arguments rather than by setting constants that are already frozen.
+$tester->assert(
+    Mailer::archiveRecipientFor('thandi@realnet.co.sz', 'lms@realnet.co.sz', false) === 'lms@realnet.co.sz',
+    "A copy of every notice is kept when an archive mailbox is configured"
+);
+
+$tester->assert(
+    Mailer::archiveRecipientFor('thandi@realnet.co.sz', '', false) === null,
+    "No copy is kept when archiving is switched off"
+);
+
+$tester->assert(
+    Mailer::archiveRecipientFor('thandi@realnet.co.sz', 'lms@realnet.co.sz', true) === null,
+    "UAT does not file test notices into the real trail, because the redirect wins"
+);
+
+$tester->assert(
+    Mailer::archiveRecipientFor('thandi@realnet.co.sz', 'not-an-address', false) === null,
+    "An unusable archive address keeps no copy, rather than failing the notice"
+);
+
+$tester->assert(
+    Mailer::archiveRecipientFor('LMS@realnet.co.sz', 'lms@realnet.co.sz', false) === null,
+    "The archive mailbox is not copied on its own mail, whatever the casing"
+);
+
+$archived = [];
+$archiveMailer = new Mailer(function (array $message) use (&$archived) { $archived[] = $message; });
+$archiveMailer->send('thandi@realnet.co.sz', 'Thandi Mndzebele', 'Subject line', '<p>html</p>', 'text');
+$tester->assert(
+    count($archived) === 1 && array_key_exists('archive_to', $archived[0]),
+    "The transport is told where the copy goes, so one send carries both"
+);
+
 $tester->assert(
     EmailQueue::backoffMinutes(1) === 1
     && EmailQueue::backoffMinutes(2) === 5

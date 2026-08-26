@@ -426,6 +426,7 @@ Precedence, first to define a constant wins:
 | `MAIL_FROM_NAME` | `Leave Management System` | Display name in the `From:` header. |
 | `MAIL_REPLY_TO` | `info@realnet.co.sz` | Where replies go. Set it to `MAIL_FROM_ADDRESS` to keep replies with the sending mailbox, alongside the bounces. Whichever it names has to be read. |
 | `MAIL_REDIRECT_TO` | `''` | Divert **everything** to one mailbox. UAT only. |
+| `MAIL_ARCHIVE_TO` | `''` | Blind-copy every message to one mailbox, as a trail. Ignored while redirecting. |
 | `MAIL_TIMEOUT` | `15` | Seconds to wait on the server before giving up. |
 | `MAIL_BATCH_SIZE` | `20` | Messages per worker run. |
 | `MAIL_MAX_ATTEMPTS` | `5` | Attempts before a message is marked `failed`. |
@@ -443,6 +444,41 @@ It is the base of every link in every notification, and those are rendered by a
 
 Nobody reports that as a mail problem. Both `tools/test_email.php` and
 `--status` warn in capitals when `APP_URL` still looks local.
+
+### 5.3 MAIL_ARCHIVE_TO, when somebody wants the trail in a mailbox
+
+Set it and every outgoing message is blind-copied to that address:
+
+```php
+define('MAIL_ARCHIVE_TO', 'lms@realnet.co.sz');
+```
+
+It is a `Bcc` on the same SMTP transaction, not a second send. That distinction
+is the point: the archived copy **is** the message the recipient received, the
+same headers and the same rendered body, rather than a reconstruction that could
+drift from it. The `To:` header still names the real person, so the mailbox reads
+as a record of who was told what and when. Recipients see nothing.
+
+Three behaviours worth knowing before switching it on.
+
+**It is ignored while `MAIL_REDIRECT_TO` is set.** During UAT everything already
+goes to one mailbox, and filing notices about leave nobody applied for into the
+permanent record would make the record worth less than having none.
+
+**A bad address here loses the copy, it does not fail the send.** The value is
+logged once and the message goes out regardless. This is deliberately the
+opposite of how a bad `MAIL_REDIRECT_TO` behaves, and the reason is the harm in
+each case: there, sending anyway means mailing thirty real people during a test;
+here, refusing means a colleague is never told about their own leave because the
+address for the copy has a typo.
+
+**`email_outbox` is already a complete archive.** It stores `body_html` and
+`body_text` in full, with the real recipient and the delivery state, and it is
+searchable with SQL. `MAIL_ARCHIVE_TO` exists for people who would rather read
+the trail in a mail client, and it doubles what the mail server carries. It is
+not a replacement for the outbox and does not make the outbox prunable.
+
+---
 
 ### 5.2 MAIL_REDIRECT_TO deserves its own warning too
 
