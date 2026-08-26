@@ -185,14 +185,44 @@ starts authenticating. No code changes.
 
 ### 3.2 The application must run from an address the server trusts
 
-Relay is decided by the calling IP. This host is inside Realnet's ranges, which is
-why sending works with no credentials at all.
+Relay is decided by the calling IP. There is no password involved, so the
+question "may this machine send?" has nothing to do with the application and
+everything to do with where it is plugged in.
 
 **This is the setting most likely to break on a move.** Host the application
-outside those ranges and every send fails with a relay error. The symptom appears
-in the outbox as `550` in `last_error`, not as anything obvious at the
-application level. If the app is ever moved, re-run `tools/test_email.php` from
-the new host before assuming anything still works.
+outside the trusted ranges and every send fails with a relay error. The symptom
+appears in the outbox as `550` in `last_error`, not as anything obvious at the
+application level.
+
+Verified from the production host on 2026-08-26 with `php tools/test_email.php`,
+which offers an envelope and hangs up before the body, so it answers the question
+without delivering anything:
+
+```
+MAIL FROM <lms@realnet.co.sz>: 250 ok
+RCPT TO <lms@realnet.co.sz>: 250 ok its for <lms@realnet.co.sz>
+```
+
+Two things that run confirmed, both worth knowing.
+
+The live host is trusted, so no credentials are needed and none are configured.
+That is a property of the address it runs from, and it is not carried in the
+repository, the image or the database. Rebuilding the server elsewhere reopens
+the question even if every file is identical.
+
+The server also relayed to an address outside `realnet.co.sz`:
+
+```
+RCPT TO <olwethudlamini10@gmail.com>: 250 ok its for <olwethudlamini10@gmail.com>
+```
+
+That is expected for a relay that trusts by network rather than by recipient, and
+it is the reason `MAIL_REDIRECT_TO` may be an external mailbox during UAT. Do not
+read it as the server being an open relay: the same envelope offered from an
+untrusted address is refused.
+
+Re-run `tools/test_email.php` from the new host before assuming anything still
+works after a move.
 
 ### 3.3 Mail leaves unencrypted
 
@@ -541,8 +571,16 @@ WHERE status = 'failed';
 ### 8.1 The cron entry
 
 ```cron
-* * * * * cd /var/www/html && php tools/send_queued_email.php >> /var/log/ri-leave-mail.log 2>&1
+* * * * * cd /path/to/the/checkout && php tools/send_queued_email.php >> $HOME/ri-leave-mail.log 2>&1
 ```
+
+Both paths in that line are traps worth naming. `/var/www/html` is the path
+*inside the container*; a host running PHP directly keeps the code somewhere
+else, and a `cd` that fails takes the `&&` with it, so the worker never runs and
+cron tells nobody. `/var/log/` is root-owned, so a crontab belonging to an
+ordinary user cannot open the log for appending and the run dies before PHP
+starts. Both failures look identical from the outside: `queued` climbing in
+`--status` with `sent` stuck at zero.
 
 Under Docker, from the host:
 

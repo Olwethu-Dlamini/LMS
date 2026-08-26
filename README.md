@@ -382,7 +382,22 @@ configuration being ignored. The `Dockerfile` already does this.
 Nothing is sent until the worker runs. One cron entry:
 
 ```cron
-* * * * * cd /var/www/html && php tools/send_queued_email.php >> /var/log/ri-leave-mail.log 2>&1
+* * * * * cd /path/to/the/checkout && php tools/send_queued_email.php >> $HOME/ri-leave-mail.log 2>&1
+```
+
+Substitute the real checkout path. `/var/www/html` is where the code sits *inside
+the container* and is almost never where it sits on a server that runs PHP
+directly. A `cd` to a directory that does not exist fails, the `&&` stops, and
+nothing runs. Cron reports this to nobody, so the only symptom is an outbox where
+`queued` climbs and `sent` never moves.
+
+The log path is the other thing to get right. `/var/log/` is owned by root, so a
+crontab belonging to an ordinary user cannot write there and every run dies on
+the redirect before PHP starts. Either keep the log in `$HOME` as above, or
+create it once and hand it over:
+
+```bash
+sudo touch /var/log/ri-leave-mail.log && sudo chown "$USER" /var/log/ri-leave-mail.log
 ```
 
 Under Docker, run it on the host against the container:

@@ -24,11 +24,16 @@ services:
     container_name: ri-leave-web
     restart: unless-stopped
     ports:
-      # APP_URL in config/constants.php is http://localhost:8000
+      # Matches the APP_URL below. Change both together or links break.
       - "8000:80"
     volumes:
       - ./:/var/www/html
     environment:
+      # The address links and asset paths are built from. Development only:
+      # a real server sets this in config/local.php, which wins over the
+      # environment. See config/local.php.example.
+      APP_URL: "http://localhost:8000"
+
       DB_HOST: db
       DB_PORT: "3306"
       DB_NAME: lms_db
