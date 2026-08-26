@@ -256,6 +256,35 @@ record.
 
 ---
 
+### 3.5 What arrives at lms@realnet.co.sz, and who reads it
+
+Nothing the application generates is addressed to `lms@`. It is the sender, not
+a recipient. Two things reach it anyway.
+
+**Bounces.** The envelope sender is `MAIL_FROM_ADDRESS`, so a message that cannot
+be delivered - a wrong address, a full mailbox, a domain that refuses it - comes
+back here.
+
+**Replies**, if `MAIL_REPLY_TO` names it, and in any case from anyone who uses
+reply-all or a client that ignores the header.
+
+The bounce case is the one worth understanding, because of how it meets the
+outbox. `status = sent` means *the relay accepted the message*, not that anybody
+received it. A bounce arriving an hour later is invisible to this application:
+the outbox still reads `sent`, nothing is logged, and the only record is a
+message in `lms@`.
+
+So the single case where mail silently fails to reach a colleague cannot be seen
+from inside the system. Whoever operates it should either forward this mailbox to
+a person or open it after any change to staff addresses.
+
+`Mailer` keeps the noise down with `Auto-Submitted: auto-generated` and
+`X-Auto-Response-Suppress: All`, which stop out-of-office autoreplies returning
+every time somebody on leave is notified. Those headers reduce what arrives; they
+do not make the mailbox unnecessary.
+
+---
+
 ## 4. How the application is built on this
 
 ### 4.1 The four pieces
@@ -395,7 +424,7 @@ Precedence, first to define a constant wins:
 | `MAIL_PASSWORD` | `''` | Never in a tracked file. Unused against this server. |
 | `MAIL_FROM_ADDRESS` | `lms@realnet.co.sz` | Envelope sender. Must be one the server will send as. |
 | `MAIL_FROM_NAME` | `Leave Management System` | Display name in the `From:` header. |
-| `MAIL_REPLY_TO` | `info@realnet.co.sz` | Where replies go, because `lms@` is not read. |
+| `MAIL_REPLY_TO` | `info@realnet.co.sz` | Where replies go. Set it to `MAIL_FROM_ADDRESS` to keep replies with the sending mailbox, alongside the bounces. Whichever it names has to be read. |
 | `MAIL_REDIRECT_TO` | `''` | Divert **everything** to one mailbox. UAT only. |
 | `MAIL_TIMEOUT` | `15` | Seconds to wait on the server before giving up. |
 | `MAIL_BATCH_SIZE` | `20` | Messages per worker run. |
