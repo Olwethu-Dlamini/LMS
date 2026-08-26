@@ -197,7 +197,11 @@ ob_start();
 
         <div class="mb-4">
             <span class="text-muted small d-block mb-1">Reason for Leave</span>
-            <div class="p-3 bg-light rounded border text-dark"><?php echo nl2br(htmlspecialchars($viewApp['reason'])); ?></div>
+            <div class="p-3 bg-light rounded border text-dark"><?php
+                echo trim((string)$viewApp['reason']) === ''
+                    ? '<span class="text-muted font-italic">No reason given</span>'
+                    : nl2br(htmlspecialchars($viewApp['reason']));
+            ?></div>
         </div>
 
         <!-- 3-Stage Approval Progress Tracker -->
