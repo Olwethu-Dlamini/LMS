@@ -227,6 +227,83 @@ thereafter.
 
 ---
 
+## 12. An audit trail should be a copy of the artifact, not a report about it
+
+Added the day after launch: every outgoing notice is blind-copied to one mailbox,
+so there is somewhere to read what the system has told people.
+
+The implementation choice is the lesson. It would have been easier to send a
+second, separate message to the archive address, or to build a page that renders
+what a notification "would have looked like". Instead the copy is a `Bcc` on the
+same SMTP transaction as the real delivery.
+
+**The advantage is fidelity.** The archived copy *is* the message the recipient
+received. Same headers, same rendered HTML, same links, sent in the same moment
+by the same code path. There is no second rendering that can drift, no template
+that has changed since, no reconstruction that quietly differs from what somebody
+actually opened. When the question is "what exactly did this person receive?",
+the mailbox answers it rather than approximating it.
+
+Anything that re-renders is answering a different question: what the system
+*would produce today* for that event. Those are the same answer right up until a
+template changes, and it is precisely after a change that somebody asks.
+
+The same reasoning is why `email_outbox` stores `body_html` in full rather than
+the ingredients needed to rebuild it.
+
+### 12.1 Match the failure response to the harm, not to the shape
+
+`MAIL_REDIRECT_TO` and `MAIL_ARCHIVE_TO` are both "an address in configuration
+that might be wrong". They behave in opposite ways on a bad value, and neither is
+a style preference:
+
+- A bad `MAIL_REDIRECT_TO` **refuses to send at all**. Honouring the typo by
+  delivering to the real recipient is the single outcome the person who set it
+  was trying to prevent, and during UAT it means mailing thirty colleagues about
+  leave that does not exist.
+- A bad `MAIL_ARCHIVE_TO` is **logged and ignored, and the message goes out**.
+  Refusing here would mean a colleague is never told about their own leave
+  because the address for a copy nobody was waiting on has a typo.
+
+Two identical-looking errors, opposite correct responses, because what goes wrong
+is not the same. "Fail loudly" and "degrade quietly" are not house style to be
+applied consistently. Each one is derived from the cost of being wrong.
+
+### 12.2 Adding a signal to a channel devalues what is already in it
+
+The cost, stated honestly, because it arrived with the feature.
+
+`lms@realnet.co.sz` was already doing three jobs: it is the sending address, it
+receives replies, and it receives bounces. Bounces are the messages in it that
+genuinely need a person, and the only evidence that a notice failed to reach
+somebody after the relay accepted it (section 3.5 of
+[`09_EMAIL_AND_SMTP.md`](./09_EMAIL_AND_SMTP.md)).
+
+Copying every notification into that same mailbox buries them. Thirty staff
+generating routine notices will produce far more archive copies than bounces, and
+the archive is the part nobody needs to read.
+
+The fix is a filter on `Auto-Submitted: auto-generated`, which `Mailer` already
+sets on every message, sorting copies into a folder and leaving replies and
+bounces in the inbox. The general point is worth more than the fix: **a new
+stream of low-urgency messages makes the high-urgency ones in the same place
+harder to see.** Volume added to a channel is value removed from what was already
+there, and the feature that adds it should arrive with the sorting rule, not
+before it.
+
+### 12.3 Know whether you are adding information or adding access
+
+`email_outbox` already held every message in full, with the real recipient and
+the delivery state, queryable with SQL. The archive mailbox adds **no data that
+was not already recorded**. What it adds is a way to read the trail in a mail
+client instead of writing a query.
+
+That is a real benefit and worth the volume it costs, as long as it is understood
+for what it is. It does not make the outbox redundant, it does not make the
+outbox safe to prune, and if the two ever disagree the outbox is the record.
+
+---
+
 ## What this cost
 
 One morning of a live system serving redirects to `localhost`, and a rate limiter
@@ -234,3 +311,8 @@ that had been switched off since launch on a public sign-in form.
 
 Everything that caused it was known to somebody at some point. None of it was
 written down. That is what `10_PRODUCTION_DEPLOYMENT.md` is for.
+
+Section 12 was added later the same week and is a different kind of entry: not a
+mistake recovered from, but a decision recorded while the reasoning behind it was
+still available. Those are cheaper to write and worth more, and they are the ones
+that stop being obvious first.
