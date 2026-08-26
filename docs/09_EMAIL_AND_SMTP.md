@@ -541,8 +541,16 @@ WHERE status = 'failed';
 ### 8.1 The cron entry
 
 ```cron
-* * * * * cd /var/www/html && php tools/send_queued_email.php >> /var/log/ri-leave-mail.log 2>&1
+* * * * * cd /path/to/the/checkout && php tools/send_queued_email.php >> $HOME/ri-leave-mail.log 2>&1
 ```
+
+Both paths in that line are traps worth naming. `/var/www/html` is the path
+*inside the container*; a host running PHP directly keeps the code somewhere
+else, and a `cd` that fails takes the `&&` with it, so the worker never runs and
+cron tells nobody. `/var/log/` is root-owned, so a crontab belonging to an
+ordinary user cannot open the log for appending and the run dies before PHP
+starts. Both failures look identical from the outside: `queued` climbing in
+`--status` with `sent` stuck at zero.
 
 Under Docker, from the host:
 
