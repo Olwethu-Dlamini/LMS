@@ -172,8 +172,9 @@ ob_start();
                     </div>
 
                     <div class="form-group mb-4">
-                        <label class="font-weight-bold text-dark">Reason for Leave <span class="text-danger">*</span></label>
-                        <textarea name="reason" class="form-control" rows="4" placeholder="Provide clear justification for your leave request..." required><?php echo htmlspecialchars($_POST['reason'] ?? ''); ?></textarea>
+                        <label class="font-weight-bold text-dark">Reason for Leave <span class="text-muted font-weight-normal">(optional)</span></label>
+                        <textarea name="reason" class="form-control" rows="4" placeholder="Anything your approver should know. Leave blank if there is nothing to add."><?php echo htmlspecialchars($_POST['reason'] ?? ''); ?></textarea>
+                        <small class="form-text text-muted">Sick leave and other categories that need proof are covered by the attachment below, not by this box.</small>
                     </div>
 
                     <div class="form-group mb-4">

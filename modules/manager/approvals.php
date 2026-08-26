@@ -127,7 +127,11 @@ ob_start();
                             <td><span class="badge badge-info"><?php echo number_format($app['total_days'], 1); ?> Days</span></td>
                             <td>
                                 <div class="small text-truncate" style="max-width: 180px;" title="<?php echo htmlspecialchars($app['reason']); ?>">
-                                    <?php echo htmlspecialchars($app['reason']); ?>
+                                    <?php if (trim((string)$app['reason']) === ''): ?>
+                                        <span class="text-muted font-italic">No reason given</span>
+                                    <?php else: ?>
+                                        <?php echo htmlspecialchars($app['reason']); ?>
+                                    <?php endif; ?>
                                 </div>
                                 <?php if ($app['attachment_path']): ?>
                                     <a href="<?php echo APP_URL . '/modules/leave/attachment.php?app=' . (int)$app['id']; ?>" target="_blank" class="badge badge-primary">File</a>
