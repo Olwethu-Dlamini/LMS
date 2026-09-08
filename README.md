@@ -607,6 +607,50 @@ Shipped defaults: Annual 7 days notice; Casual max 3 days per request with
 1 day notice; Sick no notice with a document over 2 days; Maternity and Unpaid
 whole days only, Unpaid needing 14 days notice.
 
+### Withdrawing an allowance from everybody at once
+
+`tools/zero_leave_balances.php` sets an entitlement to zero for every user.
+Written for the decision to stop granting sick and unpaid leave, which is the
+default it acts on, but `--codes` takes any leave type:
+
+```bash
+php tools/zero_leave_balances.php                             # dry run, writes nothing
+php tools/zero_leave_balances.php --commit --with-policy      # write, and make it stick
+php tools/zero_leave_balances.php --codes=CSL --year=2027     # any type, any year
+```
+
+Nothing is written without `--commit`, and `--commit` then asks for the word
+`ZERO` on a terminal, or `--yes` when there is no terminal to ask on. Every run
+prints the connection it reached first: the same command lands on a laptop, the
+UAT instance on 3307 or the live server depending only on `DB_*` in the
+environment.
+
+**A zeroed row is not a changed policy.** The per-person number lives in
+`leave_entitlements`; the default it was copied from is
+`leave_types.max_days_per_year`, and three things still read that default and
+will hand the days straight back:
+
+- HR &gt; Leave Allocations &gt; *Bulk Initialize Annual Allocations*
+- Administration &gt; User Management, every time an account is created
+- `tools/seed_employees.php`, for each new roster entry
+
+`--with-policy` sets `max_days_per_year` to 0 as well, which is what stops the
+allowance coming back.
+
+`used_days` and `pending_days` are left alone, because they are the record of
+leave already taken or reserved and wiping them would show staff who never had
+a sick day. Anyone with days already on the clock therefore ends up with a
+negative available balance; the tool lists those people by name before it
+writes, along with any request still in the approval queue holding
+`pending_days`. Settle those in the application first if you want clean books,
+since only the approval workflow releases a reservation properly. `--zero-history`
+clears both columns for anyone who does want the slate wiped.
+
+Before running it on production take a dump (`./tools/export_database.sh
+--dump-only`). The tool also writes a rollback script holding the exact prior
+value of every row it touches to `~/ri-leave-exports/`, outside the repository,
+before it opens its transaction.
+
 ---
 
 ## Supporting documents
