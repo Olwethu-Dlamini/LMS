@@ -183,6 +183,7 @@ mysql -u root -p lms_db < migrations/002-calendar-and-notifications.sql
 mysql -u root -p lms_db < migrations/003-decode-double-escaped-text.sql
 mysql -u root -p lms_db < migrations/004-login-attempts.sql
 mysql -u root -p lms_db < migrations/005-email-outbox.sql
+mysql -u root -p lms_db < migrations/006-zero-sick-and-unpaid-leave.sql
 ```
 
 Each is safe to re-run and ends with a check query you can read to confirm it took.
@@ -194,6 +195,7 @@ Each is safe to re-run and ends with a check query you can read to confirm it to
 | `003-decode-double-escaped-text` | Repairs text stored HTML-escaped, so `Sales &amp; Marketing` reads as `Sales & Marketing` again. |
 | `004-login-attempts` | Adds the `login_attempts` table behind the sign-in rate limit. |
 | `005-email-outbox` | Adds the `email_outbox` table that outgoing notification email is queued in. |
+| `006-zero-sick-and-unpaid-leave` | Withdraws the sick and unpaid leave allowance from everybody, and from the policy. A decision, not a repair - see below. |
 
 The portal keeps working ahead of each of these rather than failing. Until `002`
 the notification bell stays hidden and the calendar shows no coverage limits;
@@ -609,47 +611,54 @@ whole days only, Unpaid needing 14 days notice.
 
 ### Withdrawing an allowance from everybody at once
 
-`tools/zero_leave_balances.php` sets an entitlement to zero for every user.
-Written for the decision to stop granting sick and unpaid leave, which is the
-default it acts on, but `--codes` takes any leave type:
+`migrations/006-zero-sick-and-unpaid-leave.sql` sets every user's Sick Leave and
+Unpaid Leave allowance to zero for the current leave year. Unlike the other
+migrations it is a policy decision rather than a repair, which is why it is
+described here as well as in the table above:
 
 ```bash
-php tools/zero_leave_balances.php                             # dry run, writes nothing
-php tools/zero_leave_balances.php --commit --with-policy      # write, and make it stick
-php tools/zero_leave_balances.php --codes=CSL --year=2027     # any type, any year
+sudo mysql lms_db < migrations/006-zero-sick-and-unpaid-leave.sql
 ```
 
-Nothing is written without `--commit`, and `--commit` then asks for the word
-`ZERO` on a terminal, or `--yes` when there is no terminal to ask on. Every run
-prints the connection it reached first: the same command lands on a laptop, the
-UAT instance on 3307 or the live server depending only on `DB_*` in the
-environment.
+It prints three tables before it writes anything - how many rows and users are
+affected, who ends up with a negative balance, and which requests are still in
+the approval queue - then two check queries afterwards. Safe to re-run: every
+statement writes a fixed value rather than adjusting one.
 
-**A zeroed row is not a changed policy.** The per-person number lives in
-`leave_entitlements`; the default it was copied from is
+**It has two halves, and both matter.** The per-person number is
+`leave_entitlements.total_days`; the default it was copied from is
 `leave_types.max_days_per_year`, and three things still read that default and
-will hand the days straight back:
+would hand the days straight back:
 
 - HR &gt; Leave Allocations &gt; *Bulk Initialize Annual Allocations*
 - Administration &gt; User Management, every time an account is created
 - `tools/seed_employees.php`, for each new roster entry
 
-`--with-policy` sets `max_days_per_year` to 0 as well, which is what stops the
-allowance coming back.
+So step 1 zeroes the rows and step 2 zeroes the policy. Zero the rows alone and
+the next account created gets ten sick days. Drop step 2 only if this is meant
+to be a correction to this year, and tell whoever runs the next bulk
+initialisation.
 
-`used_days` and `pending_days` are left alone, because they are the record of
-leave already taken or reserved and wiping them would show staff who never had
-a sick day. Anyone with days already on the clock therefore ends up with a
-negative available balance; the tool lists those people by name before it
-writes, along with any request still in the approval queue holding
-`pending_days`. Settle those in the application first if you want clean books,
-since only the approval workflow releases a reservation properly. `--zero-history`
-clears both columns for anyone who does want the slate wiped.
+`used_days` and `pending_days` are left as they are, because they are the record
+of leave already taken or reserved and wiping them would show staff who never
+had a sick day. Anyone with days already on the clock is therefore left with a
+negative available balance, which the dashboard and HR reports display. Nothing
+breaks - no new request can pass a zero balance either way - but if the books
+need to be clean, cancel or reject those requests in the application first, since
+only the approval workflow releases a reservation properly. Step 3 of the
+migration is a commented-out block that clears both columns for anyone who does
+want the slate wiped.
 
-Before running it on production take a dump (`./tools/export_database.sh
---dump-only`). The tool also writes a rollback script holding the exact prior
-value of every row it touches to `~/ri-leave-exports/`, outside the repository,
-before it opens its transaction.
+The old numbers are recorded nowhere once it has run, so take a dump first:
+
+```bash
+./tools/export_database.sh --dump-only
+```
+
+Note that `export_database.sh` applies everything in `migrations/` before it
+dumps, so once this file is in the repository a plain run of that script zeroes
+the allowance on whatever database it is pointed at. It is idempotent, so that is
+harmless on a database already migrated, and intended on a fresh one.
 
 ---
 
