@@ -254,7 +254,19 @@ class ArrayMockPDO extends PDO {
                         : false;
                 }
                 if (stripos($this->query, 'FROM users') !== false) {
-                    return ['manager_id' => 4, 'line_manager_id' => 4];
+                    // Serves both the Stage 1 manager check and EmailQueue's
+                    // recipient lookup. The address matters: without one, every
+                    // notification on a host where MAIL_ENABLED is true took
+                    // the "no usable address" branch, so the suite never
+                    // exercised queueing and printed a warning per notice.
+                    $forUser = (int)($this->lastParams['id'] ?? 0);
+                    return [
+                        'manager_id'      => 4,
+                        'line_manager_id' => 4,
+                        'email'           => 'user' . $forUser . '@example.invalid',
+                        'first_name'      => 'Test',
+                        'last_name'       => 'Applicant',
+                    ];
                 }
                 return false;
             }
@@ -341,11 +353,11 @@ $tester->assert(
     LoginThrottle::enabled() === LOGIN_THROTTLE_ENABLED,
     "Rate limiting follows the LOGIN_THROTTLE_ENABLED switch"
 );
-$tester->assert(
-    LoginThrottle::enabled() === false,
-    "Rate limiting ships switched off for testing",
-    "LOGIN_THROTTLE_ENABLED is " . var_export(LOGIN_THROTTLE_ENABLED, true)
-);
+// No assertion on the switch's value. It used to require false, which is the
+// development default, and that made the suite fail on any server configured
+// the way the go-live checklist says to configure one - reporting a correctly
+// hardened host as a broken build. The assertion above, that enabled() follows
+// the constant, is the part that is actually about this code.
 
 echo "\n--- 2. Testing LeaveCalculator Engine ---\n";
 $calc = new LeaveCalculator($mockDb);

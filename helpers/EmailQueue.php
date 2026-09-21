@@ -108,7 +108,11 @@ class EmailQueue {
 
         try {
             $person = $this->recipient($userId);
-            if ($person === null || !Mailer::isSendableAddress($person['email'])) {
+            // Coalesced rather than indexed: users.email is NOT NULL in the
+            // schema, but a row read through anything that does not select it
+            // would otherwise raise a warning here on the way to the same
+            // decision this makes anyway.
+            if ($person === null || !Mailer::isSendableAddress($person['email'] ?? null)) {
                 // Worth a log line: an active account that cannot be emailed is
                 // something an administrator can fix, but only if told.
                 error_log('EmailQueue: no usable address for user ' . $userId . ', notification not emailed');
