@@ -2,6 +2,7 @@
 require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../config/constants.php';
 require_once __DIR__ . '/EmailQueue.php';
+require_once __DIR__ . '/LeaveCalculator.php';
 // Circular by design, and safe: ApprovalWorkflow requires this file in turn,
 // and PHP treats the second require_once as a no-op because the first is still
 // in progress. Neither class touches the other while its own body is being
@@ -65,6 +66,13 @@ class Notifier {
 
     private PDO $db;
     private EmailQueue $emails;
+    /**
+     * Consulted for the leave category's own rules: whether approvers should be
+     * told about it as urgent, and which category's balance it spends. Read
+     * through getLeaveType(), which fills in defaults for the columns migration
+     * 008 adds, so this works either side of that migration.
+     */
+    private LeaveCalculator $calculator;
 
     /**
      * @param EmailQueue|null $emails injected by the tests, which check that a
@@ -72,8 +80,9 @@ class Notifier {
      *                                needing a mail server to exist
      */
     public function __construct(?PDO $db = null, ?EmailQueue $emails = null) {
-        $this->db     = $db ?? getDBConnection();
-        $this->emails = $emails ?? new EmailQueue($this->db);
+        $this->db         = $db ?? getDBConnection();
+        $this->emails     = $emails ?? new EmailQueue($this->db);
+        $this->calculator = new LeaveCalculator($this->db);
     }
 
     /* ------------------------------------------------------------------ *
@@ -81,18 +90,31 @@ class Notifier {
      * ------------------------------------------------------------------ */
 
     /**
-     * What an approver at a given stage should be told is waiting for them.
+     * What an approver should be told is waiting for them.
+     *
+     * A category flagged urgent leads the title with its own name, so a queue
+     * can be triaged from the bell or an inbox list without opening anything.
+     * "Emergency Leave request awaiting your approval" is the whole point of
+     * having an emergency category: one sitting unnoticed among ordinary
+     * requests would defeat it.
+     *
+     * @param string|null $urgentLeaveName the category's name when it is
+     *                                     flagged notify_as_urgent
      */
-    public static function awaitingTitle(string $status): string {
+    public static function awaitingTitle(string $status, ?string $urgentLeaveName = null): string {
+        $subject = ($urgentLeaveName !== null && trim($urgentLeaveName) !== '')
+            ? trim($urgentLeaveName) . ' request'
+            : 'Leave request';
+
         switch ($status) {
             case STATUS_PENDING_MANAGER:
-                return 'Leave request awaiting your approval';
+                return $subject . ' awaiting your approval';
             case STATUS_PENDING_HR:
-                return 'Leave request awaiting your HR approval';
+                return $subject . ' awaiting your HR approval';
             case STATUS_PENDING_EXECUTIVE:
-                return 'Leave request awaiting your sign-off';
+                return $subject . ' awaiting your sign-off';
             default:
-                return 'Leave request awaiting your review';
+                return $subject . ' awaiting your review';
         }
     }
 
@@ -175,6 +197,13 @@ class Notifier {
         $days = rtrim(rtrim(number_format((float)$app['total_days'], 1), '0'), '.');
         $details['Working days'] = $days . ($days === '1' ? ' day' : ' days');
 
+        if (!empty($app['balance_from'])) {
+            // Emergency leave has no allowance of its own, so an email that
+            // named only the category would list one the recipient holds no
+            // balance for and the day count would look invented.
+            $details['Deducted from'] = (string)$app['balance_from'];
+        }
+
         if ($decisionIsFinal) {
             // Last row rather than first: the facts of the request are what an
             // approver is deciding on, and this is the consequence of deciding.
@@ -243,7 +272,8 @@ class Notifier {
                     // facts as a table, plus the approver's remarks quoted on
                     // their own. Both fall back gracefully when absent.
                     $emailExtras['details'] ?? [],
-                    $emailExtras['remarks'] ?? null
+                    $emailExtras['remarks'] ?? null,
+                    (bool)($emailExtras['urgent'] ?? false)
                 );
             } catch (Throwable $e) {
                 error_log('Notifier: could not queue notification email - ' . $e->getMessage());
@@ -358,7 +388,7 @@ class Notifier {
     private function applicationContext(int $applicationId): ?array {
         $stmt = $this->db->prepare("
             SELECT a.id, a.application_no, a.user_id, a.start_date, a.end_date,
-                   a.total_days, a.status,
+                   a.total_days, a.status, a.leave_type_id,
                    t.name AS leave_name,
                    u.first_name, u.last_name, u.manager_id, u.department_id,
                    r.name AS applicant_role,
@@ -372,7 +402,28 @@ class Notifier {
         ");
         $stmt->execute(['id' => $applicationId]);
         $row = $stmt->fetch();
-        return $row ?: null;
+        if (!$row) {
+            return null;
+        }
+
+        // The category's own rules, read separately rather than joined in.
+        // getLeaveType() selects the whole row and fills in defaults for the
+        // columns migration 008 adds, so naming them here would be the one
+        // thing that broke notifications on an installation that has pulled
+        // this code and not yet run it.
+        $leaveType = $this->calculator->getLeaveType((int)$row['leave_type_id']);
+        $row['notify_as_urgent'] = $leaveType !== null
+            && (int)($leaveType['notify_as_urgent'] ?? 0) === 1;
+
+        $row['balance_from'] = null;
+        if ($leaveType !== null) {
+            $balanceType = $this->calculator->balanceTypeFor($leaveType);
+            if ((int)($balanceType['id'] ?? 0) !== (int)($leaveType['id'] ?? 0)) {
+                $row['balance_from'] = (string)$balanceType['name'];
+            }
+        }
+
+        return $row;
     }
 
     /**
@@ -466,14 +517,16 @@ class Notifier {
                 ['details' => self::detailsFor($app)]
             );
 
+            $urgent = !empty($app['notify_as_urgent']);
+
             $this->pushMany(
                 $this->approversFor($app),
                 self::TYPE_AWAITING,
-                self::awaitingTitle($app['status']),
+                self::awaitingTitle($app['status'], $urgent ? (string)$app['leave_name'] : null),
                 $who . ' - ' . $summary . '. ' . self::DECISION_IS_FINAL,
                 self::queueLink($app['status']),
                 $applicationId,
-                ['details' => self::detailsFor($app, $who, true)]
+                ['details' => self::detailsFor($app, $who, true), 'urgent' => $urgent]
             );
         } catch (Throwable $e) {
             error_log('Notifier: submission notice failed - ' . $e->getMessage());

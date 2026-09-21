@@ -88,6 +88,8 @@ class EmailQueue {
      *
      * @param int      $userId         recipient
      * @param int|null $notificationId the in-app row this mirrors, for tracing
+     * @param bool     $urgent         render it as urgent, for a leave category
+     *                                 flagged notify_as_urgent
      */
     public function enqueueNotification(
         int $userId,
@@ -97,7 +99,8 @@ class EmailQueue {
         ?string $body = null,
         ?string $link = null,
         array $details = [],
-        ?string $remarks = null
+        ?string $remarks = null,
+        bool $urgent = false
     ): bool {
         if (!Mailer::isConfigured()) {
             return false;
@@ -125,8 +128,8 @@ class EmailQueue {
                 'to_email'        => $person['email'],
                 'to_name'         => trim($person['first_name'] . ' ' . $person['last_name']),
                 'subject'         => Mailer::singleLine(EmailTemplate::subject($type, $title)),
-                'body_html'       => EmailTemplate::renderHtml($type, $title, $body, $link, $person['first_name'], $details, $remarks),
-                'body_text'       => EmailTemplate::renderText($type, $title, $body, $link, $person['first_name'], $details, $remarks),
+                'body_html'       => EmailTemplate::renderHtml($type, $title, $body, $link, $person['first_name'], $details, $remarks, $urgent),
+                'body_text'       => EmailTemplate::renderText($type, $title, $body, $link, $person['first_name'], $details, $remarks, $urgent),
             ]);
         } catch (Throwable $e) {
             error_log('EmailQueue: could not queue email - ' . $e->getMessage());

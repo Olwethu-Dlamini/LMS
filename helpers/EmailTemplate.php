@@ -59,8 +59,16 @@ class EmailTemplate {
     /**
      * The accent colour for the kind of event, matching the icon colours the
      * in-app notification list already uses so the two do not disagree.
+     *
+     * An urgent request takes the danger colour whatever its type. A leave
+     * request that cannot wait is the one case where a queue notice should not
+     * look like every other queue notice, and the colour bar is the only part
+     * of the message that survives a client ignoring text colour.
      */
-    public static function accent(string $type): string {
+    public static function accent(string $type, bool $urgent = false): string {
+        if ($urgent) {
+            return self::DANGER;
+        }
         switch ($type) {
             case Notifier::TYPE_APPROVED:
                 return self::SUCCESS;
@@ -80,7 +88,10 @@ class EmailTemplate {
      * message is read. Deliberately shorter than the title: the pill is scanned,
      * the title is read.
      */
-    public static function statusLabel(string $type): string {
+    public static function statusLabel(string $type, bool $urgent = false): string {
+        if ($urgent) {
+            return 'Urgent';
+        }
         switch ($type) {
             case Notifier::TYPE_APPROVED:
                 return 'Approved';
@@ -169,13 +180,21 @@ class EmailTemplate {
         ?string $link,
         ?string $firstName,
         array $details = [],
-        ?string $remarks = null
+        ?string $remarks = null,
+        bool $urgent = false
     ): string {
         $lines = [];
         $lines[] = self::greeting($firstName);
         $lines[] = '';
         $lines[] = $title;
         $lines[] = str_repeat('=', min(72, max(8, strlen($title))));
+
+        if ($urgent) {
+            // Said in words, because the plain-text part has no colour to carry
+            // it and is what some staff read the message in.
+            $lines[] = '';
+            $lines[] = 'This request is marked urgent.';
+        }
 
         if (!empty($details)) {
             $lines[] = '';
@@ -235,9 +254,10 @@ class EmailTemplate {
         ?string $link,
         ?string $firstName,
         array $details = [],
-        ?string $remarks = null
+        ?string $remarks = null,
+        bool $urgent = false
     ): string {
-        $accent = self::accent($type);
+        $accent = self::accent($type, $urgent);
         $safeTitle = self::e($title);
 
         return '<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
@@ -295,7 +315,7 @@ class EmailTemplate {
                 <!-- Body -->
                 <tr>
                     <td style="padding:28px 28px 8px;font-family:Arial,Helvetica,sans-serif;">
-                        ' . self::statusPill($type, $accent) . '
+                        ' . self::statusPill($type, $accent, $urgent) . '
                         <h1 style="margin:14px 0 6px;font-size:20px;line-height:1.3;font-weight:bold;color:' . self::NAVY . ';">' . $safeTitle . '</h1>
                         <p style="margin:0 0 20px;font-size:14px;line-height:1.6;color:' . self::MUTED . ';">' . self::e(self::greeting($firstName)) . '</p>
                         ' . self::detailBlock($details, $body) . '
@@ -330,13 +350,13 @@ class EmailTemplate {
      * the accent for the text and border instead. Padding is on the cell rather
      * than the span, because Word ignores padding on inline elements.
      */
-    private static function statusPill(string $type, string $accent): string {
+    private static function statusPill(string $type, string $accent, bool $urgent = false): string {
         return '<table role="presentation" cellpadding="0" cellspacing="0" border="0">
                             <tr>
                                 <td style="padding:5px 12px;border:1px solid ' . $accent . ';border-radius:20px;
                                     font-family:Arial,Helvetica,sans-serif;font-size:10.5px;font-weight:bold;
                                     letter-spacing:.9px;text-transform:uppercase;color:' . $accent . ';">'
-                                    . self::e(self::statusLabel($type)) . '</td>
+                                    . self::e(self::statusLabel($type, $urgent)) . '</td>
                             </tr>
                         </table>';
     }
