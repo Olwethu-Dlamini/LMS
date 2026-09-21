@@ -63,11 +63,10 @@ top of any page. You will need your current password to set a new one.
 but it always arrives as a temporary one. You will be asked to set your own the
 next time you sign in.
 
-**If you are locked out.** After five failed attempts in a row the sign-in form
-stops answering for fifteen minutes. This protects your account from somebody
-guessing at it. Wait it out and try again, or ask IT to reset your password if
-you have genuinely forgotten it. Signing in successfully clears the count, so
-mistyping once or twice costs you nothing.
+**If you cannot get in.** There is no lockout: the form will keep accepting
+attempts, so a wrong password only ever means try again. If you have genuinely
+forgotten it, ask IT to reset it - you will be given a temporary password and
+asked to set your own at the next sign-in.
 
 ---
 

@@ -18,11 +18,17 @@ require_once __DIR__ . '/../config/constants.php';
  * Successful sign-ins clear the count, so the limit is never felt by somebody
  * who simply mistyped once or twice.
  *
- * Currently SWITCHED OFF - see LOGIN_THROTTLE_ENABLED in config/constants.php.
- * While the system is in testing, accounts are shared and passwords are guessed
- * at deliberately, so the only person it ever locked out was the tester. The
- * rules live on here rather than being deleted, because the day this system
- * holds real staff records on a real network is the day it needs them.
+ * SWITCHED OFF - see LOGIN_THROTTLE_ENABLED in config/constants.php.
+ *
+ * It was off during testing because shared accounts and deliberate wrong
+ * guesses only ever locked out the tester, then on from launch, and off again
+ * from 2026-09-21 by a decision that it is not wanted. Switched off, nothing is
+ * counted and nothing is ever refused: the sign-in form answers guesses as fast
+ * as they arrive, against addresses that follow a predictable pattern, and no
+ * record of the attempts is kept anywhere.
+ *
+ * The rules live on here rather than being deleted, so the decision is one
+ * constant to reverse rather than a feature to write again.
  */
 class LoginThrottle {
     /** Failures allowed inside the window before the door closes. */

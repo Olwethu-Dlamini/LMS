@@ -63,12 +63,19 @@ define('MAIL_REDIRECT_TO', '');
 define('MAIL_ARCHIVE_TO', '');
 
 // ---------------------------------------------------------------------------
-// Security. Both should be on for a live server.
+// Sign-in rate limiting.
 // ---------------------------------------------------------------------------
 
-// Stops answering after five failed sign-ins for the same address in fifteen
-// minutes. Off in development because shared test accounts trip it.
-define('LOGIN_THROTTLE_ENABLED', true);
+// OFF by a decision taken on 2026-09-21, not by accident and not because of
+// testing. It would stop answering after five failed sign-ins for the same
+// address and caller in fifteen minutes.
+//
+// The consequence, stated plainly so nobody has to rediscover it: the sign-in
+// form accepts password guesses as fast as they can be sent, against addresses
+// that follow a predictable pattern, and nothing records that it happened.
+// LoginThrottle and the login_attempts table both remain in place, so turning
+// this to true is the only change needed to have it back.
+define('LOGIN_THROTTLE_ENABLED', false);
 
 // ---------------------------------------------------------------------------
 // Database. Only needed if the DB_* environment variables are not being set;

@@ -164,10 +164,16 @@ At minimum, on this server:
 ```php
 <?php
 define('APP_URL', 'https://lms.22112002.xyz');
-define('LOGIN_THROTTLE_ENABLED', true);
+define('LOGIN_THROTTLE_ENABLED', false);
 define('MAIL_ENABLED', false);
 define('MAIL_REDIRECT_TO', 'somebody@example.com');
 ```
+
+`LOGIN_THROTTLE_ENABLED` is `false` here by a decision taken on 2026-09-21,
+having been `true` since launch. Section 3.2 explains what it was buying behind
+this proxy chain and what it was not; off, it buys neither, and the sign-in form
+answers guesses as fast as they arrive with nothing recording them. The code and
+the table stay, so it is one line to put back.
 
 Because it holds the database password, it must not be world-readable, and it
 must still be readable by the PHP-FPM user. Owner `srv1`, group the pool's user:

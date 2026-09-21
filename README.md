@@ -317,7 +317,7 @@ A minimal live `config/local.php`:
 <?php
 define('APP_URL', 'https://leave.example.co.sz');
 define('MAIL_ENABLED', true);
-define('LOGIN_THROTTLE_ENABLED', true);
+define('LOGIN_THROTTLE_ENABLED', false);   // off by decision; see below
 ```
 
 ---
@@ -584,12 +584,15 @@ a manager, only an admin can clear Stage 1 for them.
   cannot reach the rest of the app until they set their own password.
 - An admin password reset (**User Management → Password**) is always treated as
   temporary and re-raises that flag.
-- Sign-in rate limiting exists but is **switched off** while the system is in
-  testing; see `LOGIN_THROTTLE_ENABLED` in `config/constants.php`. Switched on,
-  five failures for the same address and email inside fifteen minutes stops
-  answering until the window passes, and a successful sign-in clears the count.
-  Counting per email *and* caller together is deliberate: per email alone would
-  let anyone lock a colleague out on purpose. **Turn it on before go-live.**
+- Sign-in rate limiting is **switched off, by decision** (2026-09-21), on
+  development and on the live server alike: `LOGIN_THROTTLE_ENABLED` is `false`.
+  Switched on, five failures for the same address and email inside fifteen
+  minutes would stop answering until the window passed, with a successful
+  sign-in clearing the count. Off, the form accepts guesses as fast as they can
+  be sent against addresses that follow a predictable pattern, and nothing
+  records the attempts. `helpers/LoginThrottle.php` and the `login_attempts`
+  table are both still in place, so setting the constant to `true` in
+  `config/local.php` is the only change needed to have it back.
 - Password fields carry a show/hide eye, so a temporary password full of
   punctuation can be checked before it is submitted rather than after being
   locked out by it.
@@ -750,7 +753,10 @@ without the certificate it depends on.
 - [ ] Apply every migration in `migrations/`, in order.
 - [ ] Block `/uploads/` at the web server if you serve with nginx (Apache is
       covered by the `.htaccess` already in the directory).
-- [ ] Set `LOGIN_THROTTLE_ENABLED` to `true` in `config/local.php`.
+- [x] ~~Set `LOGIN_THROTTLE_ENABLED` to `true` in `config/local.php`.~~
+      Decided against on 2026-09-21: it stays `false`. The rules and the table
+      remain, so it is one line to reverse. See Password rules above for what
+      that costs.
 - [ ] Prove email from the production host with `php tools/test_email.php`, send
       one real message with `--to`, then set `MAIL_ENABLED=true`.
 - [ ] Add the `tools/send_queued_email.php` cron entry. Without it nothing is
