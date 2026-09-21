@@ -127,8 +127,9 @@ $stmt->execute(['year' => $selectedYear]);
 // Columns are the categories that actually hold an allocation this year, so a
 // category nobody has - emergency leave, which spends annual leave - never
 // appears as a column of zeroes.
-$columns = [];
-$staff   = [];
+$columns        = [];
+$columnHasDays  = [];
+$staff          = [];
 $needsAttention = 0;
 
 foreach ($stmt->fetchAll() as $row) {
@@ -165,6 +166,12 @@ foreach ($stmt->fetchAll() as $row) {
         'available' => $available,
     ];
 
+    // A category where nobody holds a day, has taken one or has one pending is
+    // a column of zeroes. Sick and unpaid leave are exactly that since
+    // migration 006 withdrew them, and they were two thirds of this page.
+    $columnHasDays[$typeId] = !empty($columnHasDays[$typeId])
+        || $total > 0 || $used > 0 || $pending > 0;
+
     // Worth surfacing rather than leaving to be spotted: a negative balance,
     // which emergency leave can now produce, and a category somebody holds a
     // row for but no days in while they have leave booked against it.
@@ -180,6 +187,20 @@ foreach ($staff as $userId => $person) {
     }
     if (!empty($staff[$userId]['flags'])) {
         $needsAttention++;
+    }
+}
+
+// Columns of pure zeroes are folded away behind a link rather than deleted:
+// they are a real policy position, not an absence of data, and somebody will
+// want to confirm it rather than wonder whether the page is broken.
+$showWithdrawn    = isset($_GET['withdrawn']);
+$withdrawnColumns = [];
+foreach ($columns as $typeId => $typeName) {
+    if (empty($columnHasDays[$typeId])) {
+        $withdrawnColumns[$typeId] = $typeName;
+        if (!$showWithdrawn) {
+            unset($columns[$typeId]);
+        }
     }
 }
 
@@ -331,18 +352,16 @@ ob_start();
         <?php if (empty($staff)): ?>
             <div class="ri-empty">
                 <i class="ti-pie-chart"></i>
-                No allocations exist for <?php echo $selectedYear; ?>.
-                Use <strong>Bulk Initialize Year</strong> to give every active employee the
-                standard allowance, or <strong>Allocate / Update</strong> for one person.
+                No staff to allocate for <?php echo $selectedYear; ?>.
             </div>
         <?php else: ?>
         <div class="table-responsive">
-            <table class="table table-hover mb-0 ri-alloc">
-                <thead class="thead-light">
+            <table class="table mb-0 ri-alloc">
+                <thead>
                     <tr>
                         <th>Employee</th>
                         <?php foreach ($columns as $typeId => $typeName): ?>
-                            <th class="text-center"><?php echo htmlspecialchars($typeName); ?></th>
+                            <th><?php echo htmlspecialchars($typeName); ?></th>
                         <?php endforeach; ?>
                     </tr>
                 </thead>
@@ -350,54 +369,73 @@ ob_start();
                 <?php foreach ($staff as $userId => $person): ?>
                     <tr data-alloc-row="<?php echo htmlspecialchars(strtolower($person['name'] . ' ' . $person['emp_id'])); ?>">
                         <td class="ri-alloc-who">
-                            <strong><?php echo htmlspecialchars($person['name']); ?></strong>
-                            <small class="d-block text-muted">
+                            <span class="ri-alloc-name"><?php echo htmlspecialchars($person['name']); ?></span>
+                            <span class="ri-alloc-emp">
                                 <?php echo htmlspecialchars($person['emp_id']); ?>
                                 <?php if ($person['archived']): ?>
-                                    <span class="badge badge-secondary">Archived</span>
+                                    <span class="ri-alloc-tag ri-alloc-tag-muted">Archived</span>
                                 <?php endif; ?>
                                 <?php if (empty($person['cells'])): ?>
-                                    <span class="badge badge-danger">No allocation &middot; cannot apply</span>
+                                    <span class="ri-alloc-tag ri-alloc-tag-bad">No allocation &middot; cannot apply</span>
                                 <?php endif; ?>
-                            </small>
+                            </span>
                         </td>
 
                         <?php foreach ($columns as $typeId => $typeName): ?>
                             <?php $cell = $person['cells'][$typeId] ?? null; ?>
-                            <td class="text-center ri-alloc-cell">
+                            <td class="ri-alloc-cell">
                                 <?php if ($cell === null): ?>
-                                    <button type="button" class="ri-alloc-none" data-alloc-open
+                                    <button type="button" class="ri-alloc-box ri-alloc-none" data-alloc-open
                                             data-user="<?php echo (int)$userId; ?>"
                                             data-type="<?php echo (int)$typeId; ?>"
                                             title="No <?php echo htmlspecialchars($typeName); ?> allocation. Click to set one.">
-                                        &mdash;
+                                        <span class="ri-alloc-avail">&mdash;</span>
+                                        <span class="ri-alloc-detail">not allocated</span>
                                     </button>
                                 <?php else: ?>
                                     <?php
                                     $tone = 'ri-alloc-ok';
-                                    if ($cell['available'] < 0)        { $tone = 'ri-alloc-neg'; }
-                                    elseif ($cell['total'] <= 0)       { $tone = 'ri-alloc-zero'; }
-                                    elseif ($cell['available'] == 0.0) { $tone = 'ri-alloc-spent'; }
+                                    if ($cell['available'] < 0)          { $tone = 'ri-alloc-neg'; }
+                                    elseif ($cell['total'] <= 0)         { $tone = 'ri-alloc-zero'; }
+                                    elseif ($cell['available'] == 0.0)   { $tone = 'ri-alloc-spent'; }
+
+                                    // Same usage bar the dashboard draws, so a
+                                    // balance reads the same way in both places.
+                                    $usedPct    = $cell['total'] > 0 ? min(100, ($cell['used'] / $cell['total']) * 100) : 0;
+                                    $pendingPct = $cell['total'] > 0 ? min(100 - $usedPct, ($cell['pending'] / $cell['total']) * 100) : 0;
                                     ?>
-                                    <button type="button" class="ri-alloc-figure <?php echo $tone; ?>" data-alloc-open
+                                    <button type="button" class="ri-alloc-box <?php echo $tone; ?>" data-alloc-open
                                             data-user="<?php echo (int)$userId; ?>"
                                             data-type="<?php echo (int)$typeId; ?>"
                                             data-total="<?php echo number_format($cell['total'], 1, '.', ''); ?>"
                                             title="<?php echo htmlspecialchars(sprintf(
-                                                '%s of %s allocated, %s taken, %s awaiting approval. Click to change the allocation.',
+                                                '%s available of %s allocated. %s taken, %s awaiting approval. Click to change the allocation.',
                                                 number_format($cell['available'], 1),
                                                 number_format($cell['total'], 1),
                                                 number_format($cell['used'], 1),
                                                 number_format($cell['pending'], 1)
                                             )); ?>">
-                                        <span class="ri-alloc-avail"><?php echo number_format($cell['available'], 1); ?></span>
+                                        <span class="ri-alloc-top">
+                                            <span class="ri-alloc-avail"><?php echo number_format($cell['available'], 1); ?></span>
+                                            <span class="ri-alloc-of">of <?php echo number_format($cell['total'], 1); ?></span>
+                                        </span>
+                                        <?php if ($cell['total'] > 0): ?>
+                                            <span class="ri-usebar">
+                                                <span class="ri-usebar-used" style="width: <?php echo round($usedPct, 1); ?>%"></span>
+                                                <span class="ri-usebar-pending" style="width: <?php echo round($pendingPct, 1); ?>%"></span>
+                                            </span>
+                                        <?php endif; ?>
                                         <span class="ri-alloc-detail">
-                                            of <?php echo number_format($cell['total'], 1); ?>
-                                            <?php if ($cell['used'] > 0): ?>
-                                                &middot; <?php echo number_format($cell['used'], 1); ?> taken
-                                            <?php endif; ?>
-                                            <?php if ($cell['pending'] > 0): ?>
-                                                &middot; <?php echo number_format($cell['pending'], 1); ?> pending
+                                            <?php if ($cell['used'] > 0 || $cell['pending'] > 0): ?>
+                                                <?php echo number_format($cell['used'], 1); ?> taken<?php
+                                                    if ($cell['pending'] > 0) {
+                                                        echo ' &middot; ' . number_format($cell['pending'], 1) . ' pending';
+                                                    }
+                                                ?>
+                                            <?php elseif ($cell['total'] <= 0): ?>
+                                                no days allocated
+                                            <?php else: ?>
+                                                nothing booked
                                             <?php endif; ?>
                                         </span>
                                     </button>
@@ -413,11 +451,25 @@ ob_start();
     </div>
 
     <div class="card-footer bg-white small text-muted">
-        The large figure is <strong>days available</strong>: allocated, minus taken, minus
-        awaiting approval. Click any figure to change that person's allocation.
-        A dash means no allocation row for that category, and nobody can apply against it.
-        Emergency leave has no column because it has no allowance of its own - it is
-        deducted from Annual Leave.
+        The large figure is <strong>days available</strong> - allocated, minus taken, minus
+        awaiting approval - and the bar under it is how much of the allowance is committed.
+        Click any figure to change that person's allocation.
+        Emergency leave has no column: it holds no allowance and is deducted from Annual Leave.
+        <?php if (!empty($withdrawnColumns)): ?>
+            <br>
+            <?php echo htmlspecialchars(implode(' and ', $withdrawnColumns)); ?>
+            hold no days for anybody in <?php echo $selectedYear; ?>.
+            <?php if ($showWithdrawn): ?>
+                Shown anyway.
+                <a href="?year=<?php echo (int)$selectedYear; ?>">Hide
+                <?php echo count($withdrawnColumns) === 1 ? 'it' : 'them'; ?></a>.
+            <?php else: ?>
+                <?php echo count($withdrawnColumns) === 1 ? 'That column is' : 'Those columns are'; ?>
+                hidden.
+                <a href="?year=<?php echo (int)$selectedYear; ?>&amp;withdrawn=1">Show
+                <?php echo count($withdrawnColumns) === 1 ? 'it' : 'them'; ?> anyway</a>.
+            <?php endif; ?>
+        <?php endif; ?>
     </div>
 </div>
 
