@@ -22,6 +22,9 @@ Before any code implementation begins, full architecture and system design bluep
 (`08_USER_MANUAL.md` is the end-user manual rather than a design document; see
 [User Manual](#user-manual) below.)
 
+[`CHANGELOG.md`](./CHANGELOG.md) records what changed in each release, and which
+migrations a server needs after the pull.
+
 The last two were written after launch rather than before it. `10` describes the
 machine, `11` describes the mistakes.
 
