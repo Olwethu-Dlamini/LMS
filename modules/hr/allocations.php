@@ -128,7 +128,6 @@ $stmt->execute(['year' => $selectedYear]);
 // category nobody has - emergency leave, which spends annual leave - never
 // appears as a column of zeroes.
 $columns        = [];
-$columnHasDays  = [];
 $staff          = [];
 $needsAttention = 0;
 
@@ -165,12 +164,6 @@ foreach ($stmt->fetchAll() as $row) {
         'pending'   => $pending,
         'available' => $available,
     ];
-
-    // A category where nobody holds a day, has taken one or has one pending is
-    // a column of zeroes. Sick and unpaid leave are exactly that since
-    // migration 006 withdrew them, and they were two thirds of this page.
-    $columnHasDays[$typeId] = !empty($columnHasDays[$typeId])
-        || $total > 0 || $used > 0 || $pending > 0;
 
     // Worth surfacing rather than leaving to be spotted: a negative balance,
     // which emergency leave can now produce, and a category somebody holds a
