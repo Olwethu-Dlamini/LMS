@@ -1701,6 +1701,15 @@ $tester->assert(
     "HR and executives get no queue email: they work from the overview"
 );
 $tester->assert(
+    Notifier::shouldEmail(Notifier::TYPE_AWAITING, ROLE_HR, true) === true
+    && Notifier::shouldEmail(Notifier::TYPE_AWAITING, ROLE_EXECUTIVE, true) === true,
+    "An urgent request is emailed to them anyway, because an emergency must not wait for a screen"
+);
+$tester->assert(
+    Notifier::shouldEmail(Notifier::TYPE_AWAITING, ROLE_MANAGER, true) === true,
+    "Urgency changes nothing for the roles that were already emailed"
+);
+$tester->assert(
     Notifier::shouldEmail(Notifier::TYPE_APPROVED, ROLE_HR) === true
     && Notifier::shouldEmail(Notifier::TYPE_REJECTED, ROLE_EXECUTIVE) === true
     && Notifier::shouldEmail(Notifier::TYPE_SUBMITTED, ROLE_HR) === true,
@@ -1743,6 +1752,7 @@ $chanNotifier->push(3, Notifier::TYPE_AWAITING, 'Waiting on HR');
 $chanNotifier->push(2, Notifier::TYPE_AWAITING, 'Waiting on an executive');
 $chanNotifier->push(3, Notifier::TYPE_APPROVED, "HR's own leave approved");
 $chanNotifier->push(5, Notifier::TYPE_AWAITING, 'Waiting on an employee', null, null, null, ['urgent' => true]);
+$chanNotifier->push(3, Notifier::TYPE_AWAITING, 'Emergency waiting on HR', null, null, null, ['urgent' => true]);
 
 $tester->assert(
     in_array('4:leave_awaiting_you', $chanRecorder->queued, true),
@@ -1766,7 +1776,12 @@ $tester->assert(
     json_encode($chanRecorder->queued)
 );
 $tester->assert(
-    count($chanDb->notifications) === 5,
+    in_array('3:leave_awaiting_you:urgent', $chanRecorder->queued, true),
+    "An urgent request reaches HR by email even though an ordinary one does not",
+    json_encode($chanRecorder->queued)
+);
+$tester->assert(
+    count($chanDb->notifications) === 6,
     "Every notice is written to the bell whether or not it is emailed",
     (string)count($chanDb->notifications)
 );

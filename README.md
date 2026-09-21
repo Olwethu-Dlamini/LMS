@@ -144,6 +144,12 @@ ignoring their mail - to say something their queue and their company overview
 already show. Those two roles get no "awaiting your approval" email; everything
 about their own leave still reaches them, and line managers keep both.
 
+**Urgency lifts that rule.** A request in a category flagged urgent - emergency
+leave - is emailed to whoever it is waiting on, whatever their role. The
+suppression exists so routine queue traffic does not train somebody to stop
+reading their mail; an emergency is the one thing that must not wait for them to
+open a screen.
+
 The shared engines are `helpers/LeaveCapacity.php` (who is away, and does that
 break cover), `helpers/Notifier.php` (who to tell, and what to say),
 `helpers/EmailQueue.php` (the outbox), `helpers/Mailer.php` (SMTP) and

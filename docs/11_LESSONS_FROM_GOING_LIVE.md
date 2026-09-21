@@ -380,6 +380,15 @@ trace.** Nothing is queued, so nothing appears in `email_outbox`, and "why did
 HR not get an email" is answerable only from the rule. A notification row with
 no outbox row is the evidence.
 
+The rule also needed an exception before it was finished, and the exception is
+the more interesting half: a request marked urgent is emailed to whoever it is
+waiting on, whatever their role. Suppressing queue mail is a bet that the
+recipient will look at a screen soon enough, and that bet is reasonable for
+routine leave and unreasonable for an emergency. **A blanket rule about volume
+has to make room for the messages that are not about volume.** One flag on the
+leave category carries both halves: it makes the message look urgent, and it
+makes sure the message is sent at all.
+
 ### 13.5 A category that spends another category's balance
 
 Emergency leave has no allowance. Giving it one would have meant a second

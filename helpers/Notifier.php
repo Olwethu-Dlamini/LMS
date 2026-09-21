@@ -49,6 +49,12 @@ require_once __DIR__ . '/ApprovalWorkflow.php';
  * show. So those two roles get no queue email. Everything about their own
  * leave still reaches them, because that is news they cannot look up by
  * opening a screen they had no reason to open.
+ *
+ * One exception, and it is the reason the urgent flag exists at all: a request
+ * in a category marked urgent is emailed to whoever it is waiting on, whatever
+ * their role. An emergency that waits for somebody to open a screen is an
+ * emergency the system failed to raise, and there are few enough of them that
+ * they cannot bury anything.
  */
 class Notifier {
     const TYPE_SUBMITTED  = 'leave_submitted';
@@ -170,9 +176,15 @@ class Notifier {
      * Note this covers the "awaiting your approval" notice only. A request
      * withdrawn from their queue still emails them, because it is a thing that
      * happened rather than a thing waiting to be done, and it is rare.
+     *
+     * $urgent lifts the rule entirely. A category flagged notify_as_urgent is
+     * emailed to every approver it is waiting on, including HR and executives:
+     * the suppression exists so routine queue traffic does not train somebody
+     * to ignore their mail, and an emergency is the one thing that must not
+     * wait for them to open a screen.
      */
-    public static function shouldEmail(string $type, string $recipientRole): bool {
-        if ($type !== self::TYPE_AWAITING) {
+    public static function shouldEmail(string $type, string $recipientRole, bool $urgent = false): bool {
+        if ($type !== self::TYPE_AWAITING || $urgent) {
             return true;
         }
         return !in_array(strtolower($recipientRole), [ROLE_HR, ROLE_EXECUTIVE], true);
@@ -270,6 +282,9 @@ class Notifier {
      * notice that is deliberately not emailed leaves no email_outbox row, so
      * the bell row existing without one is the evidence that the rule applied
      * rather than that the queue is broken.
+     *
+     * $emailExtras['urgent'] therefore does two things from one flag: it makes
+     * the message look urgent, and it makes sure the message is sent at all.
      */
     public function push(
         int $userId,
@@ -298,7 +313,9 @@ class Notifier {
             return false;
         }
 
-        if ($stored && self::shouldEmail($type, $this->roleOf($userId))) {
+        $urgent = (bool)($emailExtras['urgent'] ?? false);
+
+        if ($stored && self::shouldEmail($type, $this->roleOf($userId), $urgent)) {
             // Separate try/catch, deliberately. The notification is already
             // written and this method has already succeeded; a mail problem from
             // here on must not turn that into a false return.
@@ -315,7 +332,7 @@ class Notifier {
                     // their own. Both fall back gracefully when absent.
                     $emailExtras['details'] ?? [],
                     $emailExtras['remarks'] ?? null,
-                    (bool)($emailExtras['urgent'] ?? false)
+                    $urgent
                 );
             } catch (Throwable $e) {
                 error_log('Notifier: could not queue notification email - ' . $e->getMessage());

@@ -398,12 +398,12 @@ One rule, in `Notifier::shouldEmail()`:
 > **Email is for news about you. The bell and the screens are for work waiting
 > on you.**
 
-| Recipient | "Awaiting your approval" | Their own leave | Bell |
-|---|---|---|---|
-| Employee | n/a | email | yes |
-| Line Manager | **email** | email | yes |
-| HR | **no email** | email | yes |
-| Executive | **no email** | email | yes |
+| Recipient | "Awaiting your approval" | …if the category is urgent | Their own leave | Bell |
+|---|---|---|---|---|
+| Employee | n/a | n/a | email | yes |
+| Line Manager | **email** | email | email | yes |
+| HR | **no email** | **email** | email | yes |
+| Executive | **no email** | **email** | email | yes |
 
 HR decides every line manager's and every executive's leave, and the executive
 decides HR's. A message per waiting request would fill the mailboxes of the two
@@ -411,6 +411,13 @@ roles who can least afford to start ignoring their mail, and it would say
 nothing their own queue and the company-wide *Away This Week* overview on their
 dashboard do not already show. Their own leave is different: that is news they
 cannot get by opening a screen they had no reason to open, so it is emailed.
+
+The third column is the exception that keeps the rule defensible. A category
+carrying `notify_as_urgent` - emergency leave - is emailed to every approver it
+is waiting on, whatever their role. Suppression exists so routine queue traffic
+does not train somebody to stop reading their mail, and an emergency is the one
+thing that must not wait for them to open a screen. There are few enough of them
+to bury nothing.
 
 Two consequences worth knowing before reading `--status`:
 

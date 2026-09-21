@@ -242,6 +242,11 @@ of all requests and nothing else would push them.
 A suppressed notice writes no `email_outbox` row at all, so a bell row with no
 outbox row is evidence the rule applied rather than that the queue is broken.
 
+One exception, from the same flag that makes an emergency *look* urgent: a
+category carrying `notify_as_urgent` is emailed to whoever it is waiting on
+regardless of role. The suppression is there so routine traffic does not teach
+somebody to ignore their mail; an emergency is what the mail is for.
+
 The channels differ only in format, and for a reason. The bell gets a single
 short line, because the navbar dropdown has room for two rows of small text. The
 email gets the same facts as a labelled table, because an approver working

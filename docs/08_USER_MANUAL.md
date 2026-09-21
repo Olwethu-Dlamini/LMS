@@ -158,6 +158,9 @@ the mail that actually needs you. Those requests appear in the **Alerts** bell,
 in your queue, and on the company overview on your dashboard. Everything about
 *your own* leave still reaches you by email.
 
+**Anything urgent is the exception**: emergency leave waiting on you is emailed
+as well, because it should not have to wait for you to open a screen.
+
 If notices are not arriving, check your junk folder first: a new sending address
 is often filtered the first few times, and marking one message as not junk
 usually settles it. If they show in the **Alerts** bell but never arrive by mail,
@@ -419,6 +422,10 @@ is approved or declined without reaching you.
 > queue itself, and the company-wide *Away This Week* overview on your dashboard
 > is there so leave can be watched without an inbox. Your own leave is still
 > emailed to you.
+>
+> **Emergency leave is emailed to you**, even though ordinary requests are not.
+> That is the point of the category: it should not sit waiting for somebody to
+> open a screen.
 
 ### Leave allocations
 
@@ -463,7 +470,8 @@ Your dashboard shows how many requests are waiting on you, and the *Away This
 Week* strip covers **every department in the company** with a count of how many
 people are off today. Like HR, you are not emailed about the queue: the overview
 and the **Alerts** bell are the intended way to keep track, and your own leave
-still arrives by email.
+still arrives by email. Emergency leave is the exception and is emailed to you,
+because it should not wait for you to open a screen.
 
 > **Worth knowing.** Every approval deducts days, whoever gives it. An
 > employee's leave is deducted when their line manager approves it, not when it
