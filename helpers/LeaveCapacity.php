@@ -234,6 +234,78 @@ class LeaveCapacity {
     }
 
     /**
+     * The away-this-week strip, folded into one row per department.
+     *
+     * The dashboard used to show a single department: the viewer's own, or else
+     * the first they were entitled to see. For an employee that is the right
+     * answer and still what they get. For the people who carry the whole
+     * company it was close to useless - an HR manager saw the four people in
+     * the HR department, and an HR manager with no department at all saw the
+     * words "you are not assigned to a department", which is the emptiest
+     * possible screen for the person most responsible for leave.
+     *
+     * So the caller decides the scope and passes in the departments it wants:
+     * one for an employee, the ones they approve for a manager, all of them for
+     * HR, an executive or an administrator. Every row carries its own headcount
+     * and its own limit, because a two-person team and a twenty-person team do
+     * not share a threshold.
+     *
+     * Pure. Insertion order follows $limits, which departmentLimits() returns
+     * by name.
+     *
+     * @param array<string, array> $byDay      from absencesInRange()
+     * @param array<int, array{name:string, limit:int|null}> $limits from departmentLimits()
+     * @param array<int, int>      $headcounts from headcounts()
+     * @return array<int, array{department_id:int, name:string, limit:int|null,
+     *                          headcount:int, has_absence:bool, days:array}>
+     */
+    public static function weekByDepartment(array $byDay, array $limits, array $headcounts): array {
+        $rows = [];
+
+        foreach ($limits as $id => $dept) {
+            $departmentId = (int)$id;
+            $limit        = $dept['limit'] ?? null;
+            $days         = [];
+            $hasAbsence   = false;
+
+            foreach ($byDay as $date => $absences) {
+                $mine = array_values(array_filter($absences, function (array $absence) use ($departmentId) {
+                    return (int)($absence['department_id'] ?? 0) === $departmentId;
+                }));
+                if (!empty($mine)) {
+                    $hasAbsence = true;
+                }
+                [$approved, $pending] = self::splitByStatus($mine);
+                $days[$date] = [
+                    'date'     => $date,
+                    'approved' => $approved,
+                    'pending'  => $pending,
+                    'state'    => null,
+                ];
+            }
+
+            // Cover state per day, from the one function that owns that rule -
+            // which counts requests as well as approved leave, on purpose.
+            foreach (self::capacityWarnings($byDay, $departmentId, $limit) as $warning) {
+                if (isset($days[$warning['date']])) {
+                    $days[$warning['date']]['state'] = $warning['state'];
+                }
+            }
+
+            $rows[$departmentId] = [
+                'department_id' => $departmentId,
+                'name'          => (string)($dept['name'] ?? ''),
+                'limit'         => $limit,
+                'headcount'     => (int)($headcounts[$departmentId] ?? 0),
+                'has_absence'   => $hasAbsence,
+                'days'          => array_values($days),
+            ];
+        }
+
+        return $rows;
+    }
+
+    /**
      * Absences per working day for the given departments.
      *
      * @param int[] $departmentIds empty with $unrestricted = true means every department

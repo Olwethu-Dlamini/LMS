@@ -73,43 +73,62 @@ $ownDept  = isset($_SESSION['department_id']) && $_SESSION['department_id'] !== 
 // The signed-in user's next approved leave.
 $nextLeave = $insights->nextApprovedLeave((int)$userId);
 
-// Who is away over the coming week, for one department: the viewer's own where
-// they have one, otherwise the first they are entitled to see. The calendar
-// covers the rest, and is linked from the widget.
-$weekStart   = date('Y-m-d');
-$weekEnd     = date('Y-m-d', strtotime('+6 days'));
-$weekDept    = $ownDept;
-if ($weekDept === null && !empty($scopedDeptIds)) {
-    $weekDept = (int)$scopedDeptIds[0];
-}
-$weekDays      = [];
-$weekDeptName  = null;
-$weekHeadcount = 0;
-$weekLimit     = null;
-if ($weekDept !== null) {
-    $limits        = $capacity->departmentLimits([$weekDept]);
-    $weekDeptName  = $limits[$weekDept]['name'] ?? null;
-    $weekLimit     = $limits[$weekDept]['limit'] ?? null;
-    $weekHeadcount = $capacity->headcounts([$weekDept])[$weekDept] ?? 0;
+// Who is away over the coming week, scoped to what this viewer is responsible
+// for: their own department as an employee, every department they approve for
+// as a line manager, and the whole company for HR, an executive or an
+// administrator. visible_department_ids() already draws exactly that boundary
+// for the calendar, so the dashboard borrows it rather than inventing a second
+// rule that could disagree.
+//
+// Approved leave and requests are counted apart per department; see
+// LeaveCapacity::weekByDepartment().
+$weekStart = date('Y-m-d');
+$weekEnd   = date('Y-m-d', strtotime('+6 days'));
 
-    $weekAbsences = $capacity->absencesInRange([$weekDept], $weekStart, $weekEnd);
-    $weekWarnings = [];
-    foreach ($capacity->capacityWarnings($weekAbsences, $weekDept, $weekLimit) as $warning) {
-        $weekWarnings[$warning['date']] = $warning['state'];
+$weekDeptIds  = $unrestricted ? [] : $scopedDeptIds;
+$weekRows     = [];
+$weekAwayRows = [];
+$weekQuiet    = [];
+$weekAwayToday    = 0;
+$weekHeadcountAll = 0;
+
+if ($unrestricted || !empty($weekDeptIds)) {
+    $weekRows = LeaveCapacity::weekByDepartment(
+        $capacity->absencesInRange($weekDeptIds, $weekStart, $weekEnd, $unrestricted),
+        $capacity->departmentLimits($weekDeptIds),
+        $capacity->headcounts($weekDeptIds)
+    );
+
+    // Departments with nobody away are listed by name rather than drawn as
+    // seven empty cells each. On a company-wide view most of them usually are.
+    foreach ($weekRows as $row) {
+        $weekHeadcountAll += $row['headcount'];
+        if ($row['has_absence']) {
+            $weekAwayRows[] = $row;
+        } else {
+            $weekQuiet[] = $row['name'];
+        }
+        $today = $row['days'][0] ?? null;
+        if ($today !== null && $today['date'] === $weekStart) {
+            $weekAwayToday += count($today['approved']);
+        }
     }
-    foreach ($weekAbsences as $date => $absences) {
-        // Approved and requested are counted apart, the way the team calendar
-        // has always counted them. This widget used to fold them together, so a
-        // day with one person off and two who had only asked read as "3 away"
-        // here and "1/8" on the calendar, from the same rows.
-        [$dayApproved, $dayPending] = LeaveCapacity::splitByStatus($absences);
-        $weekDays[] = [
-            'date'     => $date,
-            'approved' => $dayApproved,
-            'pending'  => $dayPending,
-            'state'    => $weekWarnings[$date] ?? null,
-        ];
-    }
+}
+
+$weekFirstRow        = empty($weekRows) ? null : reset($weekRows);
+$weekHasWorkingDays  = $weekFirstRow !== null && !empty($weekFirstRow['days']);
+
+// Where the "full calendar" link lands: on the one department when that is all
+// the viewer has, otherwise on the calendar's own default.
+$weekCalendarUrl = APP_URL . '/modules/leave/team_calendar.php'
+    . (count($weekRows) === 1 ? '?dept=' . (int)array_key_first($weekRows) : '');
+
+if ($unrestricted) {
+    $weekScopeLabel = 'whole company';
+} elseif (count($weekRows) === 1 && $weekFirstRow !== null) {
+    $weekScopeLabel = (string)$weekFirstRow['name'];
+} else {
+    $weekScopeLabel = count($weekRows) . ' departments';
 }
 
 // Department utilisation, for the people who carry staffing responsibility.
@@ -220,73 +239,101 @@ ob_start();
         </div>
     </div>
 
-    <!-- Who is away over the next seven days -->
-    <div class="col-lg-8 mb-3">
+    <!-- Who is away over the next seven days, one row per department in scope -->
+    <div class="col-lg-<?php echo $unrestricted ? '12' : '8'; ?> mb-3">
         <div class="card h-100">
-            <div class="card-header bg-white d-flex justify-content-between align-items-center">
+            <div class="card-header bg-white d-flex justify-content-between align-items-center flex-wrap">
                 <span class="font-weight-bold text-dark">
                     <i class="ti-user text-primary"></i> Away This Week
-                    <?php if ($weekDeptName !== null): ?>
-                        <span class="text-muted font-weight-normal">&middot; <?php echo htmlspecialchars($weekDeptName); ?></span>
+                    <?php if (!empty($weekRows)): ?>
+                        <span class="text-muted font-weight-normal">&middot; <?php echo htmlspecialchars($weekScopeLabel); ?></span>
                     <?php endif; ?>
                 </span>
-                <?php if ($weekDept !== null): ?>
-                    <a href="<?php echo APP_URL . '/modules/leave/team_calendar.php?dept=' . (int)$weekDept; ?>"
-                       class="btn btn-xs btn-outline-primary">Full calendar</a>
+                <?php if (!empty($weekRows)): ?>
+                    <span>
+                        <?php if ($weekHeadcountAll > 0): ?>
+                            <span class="badge badge-light border mr-2"
+                                  title="Approved leave only, today">
+                                <?php echo (int)$weekAwayToday; ?> of <?php echo (int)$weekHeadcountAll; ?> away today
+                            </span>
+                        <?php endif; ?>
+                        <a href="<?php echo htmlspecialchars($weekCalendarUrl); ?>"
+                           class="btn btn-xs btn-outline-primary">Full calendar</a>
+                    </span>
                 <?php endif; ?>
             </div>
             <div class="card-body">
-                <?php if ($weekDept === null): ?>
+                <?php if (empty($weekRows)): ?>
                     <p class="text-muted small mb-0">
                         You are not assigned to a department, so there is no team view to show.
+                        Ask an administrator to add you to one.
                     </p>
-                <?php elseif (empty($weekDays)): ?>
+                <?php elseif (!$weekHasWorkingDays): ?>
                     <p class="text-muted small mb-0">No working days in the next seven, so nobody is scheduled away.</p>
+                <?php elseif (empty($weekAwayRows)): ?>
+                    <p class="text-muted small mb-0">
+                        Nobody is approved off in the next seven working days
+                        <?php echo $unrestricted ? 'anywhere in the company' : 'in your team'; ?>.
+                    </p>
                 <?php else: ?>
-                    <div class="ri-week">
-                        <?php foreach ($weekDays as $day): ?>
-                            <?php
-                            $dayClass = 'ri-week-day';
-                            if ($day['state'] === LeaveCapacity::AT_LIMIT)   { $dayClass .= ' ri-week-at'; }
-                            if ($day['state'] === LeaveCapacity::OVER_LIMIT) { $dayClass .= ' ri-week-over'; }
-                            ?>
-                            <div class="<?php echo $dayClass; ?>">
-                                <div class="ri-week-date">
-                                    <?php echo htmlspecialchars(date('D', strtotime($day['date']))); ?>
-                                    <span><?php echo htmlspecialchars(date('j', strtotime($day['date']))); ?></span>
-                                </div>
-                                <div class="ri-week-count">
-                                    <?php echo count($day['approved']); ?>/<?php echo (int)$weekHeadcount; ?>
-                                    <?php if (!empty($day['pending'])): ?>
-                                        <span class="ri-week-pending"
-                                              title="<?php echo count($day['pending']); ?> awaiting a decision, not counted">
-                                            +<?php echo count($day['pending']); ?>
-                                        </span>
+                    <?php foreach ($weekAwayRows as $row): ?>
+                        <div class="ri-weekdept">
+                            <div class="ri-weekdept-head">
+                                <span class="font-weight-bold text-dark"><?php echo htmlspecialchars($row['name']); ?></span>
+                                <span class="small text-muted">
+                                    <?php echo (int)$row['headcount']; ?> staff
+                                    <?php if ($row['limit'] !== null): ?>
+                                        &middot; limit <?php echo (int)$row['limit']; ?> away at a time
+                                    <?php else: ?>
+                                        &middot; no limit set
                                     <?php endif; ?>
-                                </div>
-                                <?php foreach ($day['approved'] as $absence): ?>
-                                    <div class="ri-week-who" title="<?php echo htmlspecialchars($absence['name']); ?> - approved">
-                                        <?php echo htmlspecialchars($absence['initials']); ?>
-                                    </div>
-                                <?php endforeach; ?>
-                                <?php foreach ($day['pending'] as $absence): ?>
-                                    <div class="ri-week-who ri-week-who-pending"
-                                         title="<?php echo htmlspecialchars($absence['name']); ?> - requested, not yet approved">
-                                        <?php echo htmlspecialchars($absence['initials']); ?>
+                                </span>
+                            </div>
+                            <div class="ri-week">
+                                <?php foreach ($row['days'] as $day): ?>
+                                    <?php
+                                    $dayClass = 'ri-week-day';
+                                    if ($day['state'] === LeaveCapacity::AT_LIMIT)   { $dayClass .= ' ri-week-at'; }
+                                    if ($day['state'] === LeaveCapacity::OVER_LIMIT) { $dayClass .= ' ri-week-over'; }
+                                    ?>
+                                    <div class="<?php echo $dayClass; ?>">
+                                        <div class="ri-week-date">
+                                            <?php echo htmlspecialchars(date('D', strtotime($day['date']))); ?>
+                                            <span><?php echo htmlspecialchars(date('j', strtotime($day['date']))); ?></span>
+                                        </div>
+                                        <div class="ri-week-count">
+                                            <?php echo count($day['approved']); ?>/<?php echo (int)$row['headcount']; ?>
+                                            <?php if (!empty($day['pending'])): ?>
+                                                <span class="ri-week-pending"
+                                                      title="<?php echo count($day['pending']); ?> awaiting a decision, not counted">
+                                                    +<?php echo count($day['pending']); ?>
+                                                </span>
+                                            <?php endif; ?>
+                                        </div>
+                                        <?php foreach ($day['approved'] as $absence): ?>
+                                            <div class="ri-week-who" title="<?php echo htmlspecialchars($absence['name']); ?> - approved">
+                                                <?php echo htmlspecialchars($absence['initials']); ?>
+                                            </div>
+                                        <?php endforeach; ?>
+                                        <?php foreach ($day['pending'] as $absence): ?>
+                                            <div class="ri-week-who ri-week-who-pending"
+                                                 title="<?php echo htmlspecialchars($absence['name']); ?> - requested, not yet approved">
+                                                <?php echo htmlspecialchars($absence['initials']); ?>
+                                            </div>
+                                        <?php endforeach; ?>
                                     </div>
                                 <?php endforeach; ?>
                             </div>
-                        <?php endforeach; ?>
-                    </div>
+                        </div>
+                    <?php endforeach; ?>
+
                     <div class="small text-muted mt-2">
-                        The count is people <strong>approved</strong> off out of the team;
+                        The count is people <strong>approved</strong> off out of that department;
                         <span class="ri-week-pending">+n</span> is requests still awaiting a decision,
-                        which are never counted.
-                        <?php if ($weekLimit === null): ?>
-                            No absence limit is configured for this department.
-                        <?php else: ?>
-                            Limit <?php echo (int)$weekLimit; ?> away at a time, counting requests too:
-                            amber days sit on it, red days pass it.
+                        which are never counted. Amber days sit on a department's limit and red days
+                        pass it, counting requests too.
+                        <?php if (!empty($weekQuiet)): ?>
+                            <br>Nobody away in: <?php echo htmlspecialchars(implode(', ', $weekQuiet)); ?>.
                         <?php endif; ?>
                     </div>
                 <?php endif; ?>

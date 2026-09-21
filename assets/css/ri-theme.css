@@ -705,6 +705,15 @@ hr { border-top: 1px solid var(--ri-grey-line); }
 }
 .ri-week-pending { color: var(--ri-warning); font-weight: 700; }
 
+/* one away-strip per department, for a manager with several teams and for the
+   company-wide view HR and executives get */
+.ri-weekdept { padding: 2px 0 10px; }
+.ri-weekdept + .ri-weekdept { border-top: 1px solid var(--ri-grey-line); padding-top: 10px; }
+.ri-weekdept-head {
+  display: flex; justify-content: space-between; align-items: baseline;
+  gap: 10px; flex-wrap: wrap; margin-bottom: 6px;
+}
+
 /* per-department utilisation rows */
 .ri-util-row { padding: 10px 0; border-bottom: 1px solid var(--ri-grey-line); }
 .ri-util-row:last-of-type { border-bottom: none; }
