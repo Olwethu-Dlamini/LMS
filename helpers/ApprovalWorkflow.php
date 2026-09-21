@@ -16,15 +16,24 @@ class ApprovalWorkflow {
     }
 
     /**
-     * Where an application enters the chain, based on the applicant's own role.
+     * Who decides an application, based on the applicant's own role.
      *
-     * Nobody is asked to sign off on a peer or on themselves, so senior roles
-     * skip the stages they would otherwise be the approver for:
-     *   employee  -> Stage 1 line manager, then HR, then executive
-     *   manager   -> straight to HR (they are the Stage 1 approver)
-     *   hr        -> straight to the executive (they are the Stage 2 approver)
-     *   executive -> HR, and HR's approval is final (nobody sits above them)
-     * Admin is a system role with no leave entitlement and cannot apply.
+     * One approval decides a request. There is no chain to climb and no second
+     * opinion: whoever this routes to has the last word, and their approval is
+     * what books the leave and deducts the days.
+     *
+     *   employee  -> their line manager, or the head of their department
+     *   manager   -> HR
+     *   executive -> HR
+     *   hr        -> the executive
+     *
+     * Nobody is asked to sign off on themselves, which is what the senior
+     * routing is for: HR owns the queue a manager's leave would otherwise sit
+     * in, and the executive owns HR's. Admin is a system role with no leave
+     * entitlement and cannot apply.
+     *
+     * The three queues therefore all remain in use, each holding a different
+     * kind of applicant rather than a different stage of the same request.
      *
      * @return array{0:string,1:string} [status, current_approver_role]
      */
@@ -46,43 +55,47 @@ class ApprovalWorkflow {
     }
 
     /**
-     * Which stage an approval moves the application to next.
+     * Where an approval leaves the application: approved, always.
      *
-     * The applicant's role matters here, not just the current status: HR sign-off
-     * is the final decision on an executive's own leave, but only the middle
-     * stage for everyone else.
+     * One approval is the whole decision, so this is terminal wherever it is
+     * called from. It used to take the applicant's role as well, because HR
+     * sign-off was final on an executive's own leave and intermediate for
+     * everybody else; with nothing to escalate to, the role no longer changes
+     * the answer and the parameter has gone.
+     *
+     * It still refuses to act on an application that is already finalised,
+     * which is what stops a second approval deducting the days twice.
      *
      * @return array{0:string,1:string} [status, current_approver_role]
      */
-    public static function nextStageFor(string $applicantRole, string $currentStatus): array {
-        if ($currentStatus === STATUS_PENDING_MANAGER) {
-            return [STATUS_PENDING_HR, ROLE_HR];
-        }
-        if ($currentStatus === STATUS_PENDING_HR) {
-            return $applicantRole === ROLE_EXECUTIVE
-                ? [STATUS_APPROVED, 'none']
-                : [STATUS_PENDING_EXECUTIVE, ROLE_EXECUTIVE];
-        }
-        if ($currentStatus === STATUS_PENDING_EXECUTIVE) {
+    public static function nextStageFor(string $currentStatus): array {
+        if (in_array($currentStatus, [STATUS_PENDING_MANAGER, STATUS_PENDING_HR, STATUS_PENDING_EXECUTIVE], true)) {
             return [STATUS_APPROVED, 'none'];
         }
         throw new Exception("Application is already finalized.");
     }
 
     /**
-     * Human-readable list of the stages an applicant's role skips, for the
-     * notice shown on the application form.
+     * Who decides this applicant's own leave, in words.
+     *
+     * Used by the notice on the application form and by the notification that
+     * confirms a submission, so somebody is told who to expect a decision from
+     * rather than being left to infer it from a stage number.
+     *
+     * Named by role rather than by person on purpose: an administrator can
+     * reassign a department's head, and a notification that named last week's
+     * holder would be wrong. This is the same reason recipients are derived
+     * from the workflow instead of being stored alongside the request.
      */
-    public static function skippedStagesFor(string $applicantRole): array {
+    public static function deciderLabelFor(string $applicantRole): string {
         switch ($applicantRole) {
             case ROLE_MANAGER:
-                return ['Stage 1 · Line Manager'];
-            case ROLE_HR:
-                return ['Stage 1 · Line Manager', 'Stage 2 · HR Review'];
             case ROLE_EXECUTIVE:
-                return ['Stage 1 · Line Manager', 'Stage 3 · Executive Sign-Off'];
+                return 'HR';
+            case ROLE_HR:
+                return 'the Executive';
             default:
-                return [];
+                return 'your line manager';
         }
     }
 
@@ -259,7 +272,7 @@ class ApprovalWorkflow {
                 'id' => $appId,
                 'status' => $initialStatus,
                 'next_approver_role' => $initialRole,
-                'skipped_stages' => self::skippedStagesFor($applicantRole)
+                'decided_by' => self::deciderLabelFor($applicantRole)
             ];
         } catch (Exception $e) {
             $this->db->rollBack();
@@ -288,7 +301,6 @@ class ApprovalWorkflow {
             $userId = (int)$app['user_id'];
             $leaveTypeId = (int)$app['leave_type_id'];
             $year = (int)date('Y', strtotime($app['start_date']));
-            $applicantRole = $this->roleOf($userId);
 
             // Self-approval restriction
             if ((int)$userId === (int)$approverId && $action === 'approve') {
@@ -341,10 +353,10 @@ class ApprovalWorkflow {
                     'year' => $year
                 ]);
             } else {
-                // Approval Transition Path. Where this lands depends on the
-                // applicant's role, not just the current stage: HR sign-off is
-                // final for an executive's own leave.
-                [$newStatus, $nextRole] = self::nextStageFor($applicantRole, $currentStatus);
+                // Approval path. One approval decides the request, so this is
+                // always the end of it: the status becomes approved and the
+                // days are deducted below.
+                [$newStatus, $nextRole] = self::nextStageFor($currentStatus);
 
                 if ($newStatus === STATUS_APPROVED) {
                     // Deduct from pending_days and add to used_days
