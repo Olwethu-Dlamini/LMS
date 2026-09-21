@@ -36,6 +36,19 @@ require_once __DIR__ . '/ApprovalWorkflow.php';
  * everybody else, which is the point. Queueing follows the first rule above: it
  * happens after the notification row is safely written, and it cannot fail
  * loudly enough to matter.
+ *
+ * The channels are not identical, and shouldEmail() is the rule:
+ *
+ *   Email is for news about you. The bell and the screens are for work waiting
+ *   on you.
+ *
+ * HR decides every manager's and every executive's leave, and the executive
+ * decides HR's. A message per waiting request would fill the mailboxes of the
+ * two roles who can least afford to start ignoring their mail, to tell them
+ * something their own queue and the company overview on their dashboard already
+ * show. So those two roles get no queue email. Everything about their own
+ * leave still reaches them, because that is news they cannot look up by
+ * opening a screen they had no reason to open.
  */
 class Notifier {
     const TYPE_SUBMITTED  = 'leave_submitted';
@@ -73,6 +86,8 @@ class Notifier {
      * 008 adds, so this works either side of that migration.
      */
     private LeaveCalculator $calculator;
+    /** @var array<int, string> role name per user id, for this request only. */
+    private array $roleCache = [];
 
     /**
      * @param EmailQueue|null $emails injected by the tests, which check that a
@@ -140,6 +155,27 @@ class Notifier {
             return [self::TYPE_APPROVED, 'Your leave request is approved'];
         }
         return [self::TYPE_ADVANCED, 'Your leave request has been updated'];
+    }
+
+    /**
+     * Whether a notification of this kind should also be emailed to somebody in
+     * this role.
+     *
+     * Pure, so the rule can be asserted without a mail server, a database or an
+     * inbox. See the note on channels at the top of this file for why the two
+     * senior roles are treated differently: they are the ones whose queue is
+     * fed by everybody else's seniority rather than by their own team, and the
+     * overview they work from makes the mail redundant.
+     *
+     * Note this covers the "awaiting your approval" notice only. A request
+     * withdrawn from their queue still emails them, because it is a thing that
+     * happened rather than a thing waiting to be done, and it is rare.
+     */
+    public static function shouldEmail(string $type, string $recipientRole): bool {
+        if ($type !== self::TYPE_AWAITING) {
+            return true;
+        }
+        return !in_array(strtolower($recipientRole), [ROLE_HR, ROLE_EXECUTIVE], true);
     }
 
     /**
@@ -228,6 +264,12 @@ class Notifier {
      * not be queued is still a success, because the bell will show it and the
      * queue failure has been logged. Reporting it as a failure would tell the
      * caller to do something about a problem it has no way to fix.
+     *
+     * Whether an email is queued at all is shouldEmail()'s decision, taken
+     * here because this is the single place both channels pass through. A
+     * notice that is deliberately not emailed leaves no email_outbox row, so
+     * the bell row existing without one is the evidence that the rule applied
+     * rather than that the queue is broken.
      */
     public function push(
         int $userId,
@@ -256,7 +298,7 @@ class Notifier {
             return false;
         }
 
-        if ($stored) {
+        if ($stored && self::shouldEmail($type, $this->roleOf($userId))) {
             // Separate try/catch, deliberately. The notification is already
             // written and this method has already succeeded; a mail problem from
             // here on must not turn that into a false return.
@@ -281,6 +323,38 @@ class Notifier {
         }
 
         return $stored;
+    }
+
+    /**
+     * The recipient's role, cached for the life of the request.
+     *
+     * push() needs it to decide whether to email, and pushMany() would
+     * otherwise ask the same question again for each of a handful of people.
+     *
+     * An account that cannot be read falls back to employee, which errs towards
+     * sending: a message that arrives when it need not have is a nuisance,
+     * while one silently dropped is an approval nobody hears about.
+     */
+    private function roleOf(int $userId): string {
+        if (!array_key_exists($userId, $this->roleCache)) {
+            $role = ROLE_EMPLOYEE;
+            try {
+                $stmt = $this->db->prepare("
+                    SELECT r.name AS role_name
+                    FROM users u JOIN roles r ON r.id = u.role_id
+                    WHERE u.id = :id
+                ");
+                $stmt->execute(['id' => $userId]);
+                $row = $stmt->fetch();
+                if (!empty($row['role_name'])) {
+                    $role = strtolower((string)$row['role_name']);
+                }
+            } catch (Throwable $e) {
+                // Left as employee, so the message is sent rather than lost.
+            }
+            $this->roleCache[$userId] = $role;
+        }
+        return $this->roleCache[$userId];
     }
 
     /**
