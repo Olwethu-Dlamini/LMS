@@ -21,6 +21,7 @@
 
 require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../config/constants.php';
+require_once __DIR__ . '/../helpers/LeaveCalculator.php';
 
 $commit  = in_array('--commit', $argv, true);
 // --reissue gives a fresh temporary password to every account that is still
@@ -129,7 +130,10 @@ $maxEmp = (int)$db->query("
 ")->fetchColumn();
 $nextSeq = max($maxEmp, 1000) + 1;
 
-$leaveTypes = $db->query("SELECT id, max_days_per_year FROM leave_types")->fetchAll();
+// Categories that spend another's balance are skipped: emergency leave comes
+// off annual leave, so seeding a row for it would give every new starter a
+// permanent zero-day tile for days they do in fact have.
+$leaveTypes = (new LeaveCalculator($db))->allocatableTypes();
 
 $stmtExists = $db->prepare("SELECT id FROM users WHERE email = :email");
 $stmtInsert = $db->prepare("

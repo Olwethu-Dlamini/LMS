@@ -158,6 +158,38 @@ class LeaveCalculator {
     }
 
     /**
+     * The categories that hold a balance of their own, and so the ones an
+     * entitlement row should be created for.
+     *
+     * A category that spends another's balance is skipped. Seeding it would put
+     * a second row against every member of staff - always zero, because it has
+     * no allowance - which would render as a leave tile with nothing in it and
+     * would never be the row the workflow actually touches. The days come off
+     * the category it points at, and that is where they should be seen.
+     *
+     * Falls back to every category until migration 008 has run, which is what
+     * those installations did already.
+     *
+     * @param bool $activeOnly exclude retired categories
+     * @return array<int, array<string, mixed>> id and max_days_per_year
+     */
+    public function allocatableTypes(bool $activeOnly = false): array {
+        $conditions = [];
+        if ($activeOnly) {
+            $conditions[] = 'is_active = 1';
+        }
+        if ($this->sourcingAvailable()) {
+            $conditions[] = 'deducts_from_type_id IS NULL';
+        }
+
+        $sql = 'SELECT id, name, max_days_per_year FROM leave_types'
+             . ($conditions ? ' WHERE ' . implode(' AND ', $conditions) : '')
+             . ' ORDER BY name ASC';
+
+        return $this->db->query($sql)->fetchAll();
+    }
+
+    /**
      * Whether a request against this category may take the balance below zero.
      *
      * True for emergency leave and nothing else by default. An emergency has

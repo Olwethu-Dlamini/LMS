@@ -1,8 +1,10 @@
 <?php
 require_once __DIR__ . '/../../includes/functions.php';
+require_once __DIR__ . '/../../helpers/LeaveCalculator.php';
 require_role([ROLE_HR, ROLE_ADMIN]);
 
 $db = getDBConnection();
+$calculator = new LeaveCalculator($db);
 $error = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -18,7 +20,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } else {
             try {
                 $users = $db->query("SELECT id FROM users WHERE status = 'active'")->fetchAll(PDO::FETCH_COLUMN);
-                $types = $db->query("SELECT id, max_days_per_year FROM leave_types")->fetchAll();
+                // Categories that spend another's balance are not allocated:
+                // emergency leave comes off annual leave, so initialising it
+                // would give everybody a second row that is always zero and is
+                // never the row a request touches.
+                $types = $calculator->allocatableTypes();
                 
                 $stmtBulk = $db->prepare("
                     INSERT INTO leave_entitlements (user_id, leave_type_id, year, total_days, used_days, pending_days)
@@ -79,7 +85,9 @@ $allocations = $stmt->fetchAll();
 
 // Fetch Users & Leave Types for dropdown
 $users = $db->query("SELECT id, emp_id, first_name, last_name FROM users ORDER BY first_name ASC")->fetchAll();
-$leaveTypes = $db->query("SELECT id, name FROM leave_types ORDER BY name ASC")->fetchAll();
+// Only categories that hold their own balance can be allocated by hand, for the
+// same reason they are not bulk initialised.
+$leaveTypes = $calculator->allocatableTypes();
 
 ob_start();
 ?>

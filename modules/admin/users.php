@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/../../includes/functions.php';
+require_once __DIR__ . '/../../helpers/LeaveCalculator.php';
 require_role(ROLE_ADMIN);
 
 $db = getDBConnection();
@@ -61,16 +62,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
 
                 // Seed leave entitlements for the current leave year. Retired
-                // leave types are skipped so archived policies are not allocated.
+                // leave types are skipped so archived policies are not
+                // allocated, and so are categories that spend another
+                // category's balance: emergency leave comes off annual leave,
+                // so a row of its own would be a permanent zero on this
+                // person's dashboard.
                 $year = (int)date('Y');
-                $stmtTypes = $db->query("SELECT id, max_days_per_year FROM leave_types WHERE is_active = 1");
+                $seedTypes = (new LeaveCalculator($db))->allocatableTypes(true);
                 $stmtEntSeed = $db->prepare("
                     INSERT INTO leave_entitlements (user_id, leave_type_id, year, total_days, used_days, pending_days)
                     VALUES (:user_id, :type_id, :year, :total_days, 0, 0)
                     ON DUPLICATE KEY UPDATE total_days = VALUES(total_days)
                 ");
                 $seeded = 0;
-                while ($lt = $stmtTypes->fetch()) {
+                foreach ($seedTypes as $lt) {
                     $stmtEntSeed->execute([
                         'user_id' => $newUserId,
                         'type_id' => $lt['id'],
