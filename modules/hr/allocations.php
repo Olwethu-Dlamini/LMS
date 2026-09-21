@@ -342,15 +342,27 @@ ob_start();
         $primaryTypeId   = array_key_first($columns);
         $primaryTypeName = $columns[$primaryTypeId] ?? 'Leave';
 
-        /** A day count, plain, and a link because clicking it edits the allocation. */
+        /**
+         * The days available, as one of the theme's pills.
+         *
+         * Off-blue for a balance somebody can spend, grey once it is used up or
+         * was never allocated, red for a negative - which emergency leave can
+         * now produce. Clicking it opens the allocation form, the same as the
+         * Change pill in the drop-down.
+         */
         $figure = function (?array $cell, int $userId, int $typeId, string $typeName): void {
-            $label = $cell === null ? '&mdash;' : number_format($cell['available'], 1);
-            $tone  = '';
-            if ($cell === null)                { $tone = 'text-muted'; }
-            elseif ($cell['available'] < 0)    { $tone = 'text-danger'; }
-            elseif ($cell['available'] == 0.0) { $tone = 'text-muted'; }
+            if ($cell === null) {
+                $variant = 'btn-outline-secondary';
+                $label   = 'Not allocated';
+            } else {
+                $available = (float)$cell['available'];
+                $variant   = 'btn-outline-info';
+                if ($available < 0)        { $variant = 'btn-outline-danger'; }
+                elseif ($available == 0.0) { $variant = 'btn-outline-secondary'; }
+                $label = number_format($available, 1) . (abs($available) == 1.0 ? ' day' : ' days');
+            }
             ?>
-            <button type="button" class="ri-alloc-figure <?php echo $tone; ?>" data-alloc-open
+            <button type="button" class="btn btn-xs <?php echo $variant; ?> ri-alloc-figure" data-alloc-open
                     data-user="<?php echo $userId; ?>" data-type="<?php echo $typeId; ?>"
                     data-total="<?php echo $cell === null ? '' : number_format($cell['total'], 1, '.', ''); ?>"
                     title="<?php echo htmlspecialchars($cell === null
@@ -391,11 +403,9 @@ ob_start();
                         </td>
 
                         <td class="ri-alloc-main">
-                            <span class="ri-alloc-avail">
-                                <?php $figure($primary, (int)$userId, (int)$primaryTypeId, $primaryTypeName); ?>
-                            </span>
+                            <?php $figure($primary, (int)$userId, (int)$primaryTypeId, $primaryTypeName); ?>
                             <?php if ($primary !== null): ?>
-                                <span class="text-muted">of <?php echo number_format($primary['total'], 1); ?></span>
+                                <span class="text-muted small">of <?php echo number_format($primary['total'], 1); ?></span>
                                 <small class="d-block text-muted">
                                     <?php if ($primary['used'] > 0 || $primary['pending'] > 0): ?>
                                         <?php echo number_format($primary['used'], 1); ?> taken<?php

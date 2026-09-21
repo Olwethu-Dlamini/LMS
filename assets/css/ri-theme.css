@@ -730,16 +730,9 @@ hr { border-top: 1px solid var(--ri-grey-line); }
 .ri-alloc-main { white-space: nowrap; }
 .ri-alloc-rest { line-height: 1.7; }
 
-/* A day count. Plain text that happens to be clickable, so the table reads as
-   data; the pill buttons are the visible way to act on it. */
-.ri-alloc-figure {
-  border: none; background: none; padding: 0; font-family: inherit; cursor: pointer;
-  font-size: 15px; font-weight: 700; color: var(--ri-navy);
-  font-variant-numeric: tabular-nums;
-}
-.ri-alloc-figure:hover { color: var(--ri-teal); }
-.ri-alloc-figure:focus-visible { outline: 2px solid var(--ri-blue); outline-offset: 2px; }
-.ri-alloc-avail .ri-alloc-figure { font-size: 17px; }
+/* The days available is one of the theme's pills, like every other action in
+   the app, so nothing on this page has styling of its own invented for it. */
+.ri-alloc-figure { font-variant-numeric: tabular-nums; }
 
 /* The row's drop-down toggle is one of the theme's pill buttons; only the
    chevron needs saying, because .btn puts its icon spacing on the left. */
