@@ -255,6 +255,16 @@ document.addEventListener("DOMContentLoaded", function () {
                         if (!data.valid && data.errors.length > 0) {
                             errorBox.style.display = "block";
                             errorBox.innerHTML = data.errors.join("<br>");
+                        } else if (data.valid && data.working_days > data.available_balance) {
+                            // Only a category allowed to overdraw can be valid and
+                            // still exceed the balance. Say so plainly rather than
+                            // leaving somebody to discover it on their dashboard.
+                            const over = (data.working_days - data.available_balance).toFixed(1);
+                            errorBox.style.display = "block";
+                            errorBox.innerHTML = "This is " + over + " day(s) more than you have left"
+                                + (data.balance_from ? " of your " + data.balance_from : "")
+                                + ", so the balance will go negative. Allowed for this category - "
+                                + "HR can correct it afterwards.";
                         }
 
                         showCoverage(data.coverage);

@@ -211,7 +211,12 @@ class ApprovalWorkflow {
             $available = (float)$entitlement['total_days']
                        - (float)$entitlement['used_days']
                        - (float)$entitlement['pending_days'];
-            if ($totalDays > $available) {
+            // Emergency leave is allowed past this, because the absence has
+            // already happened. The row is still read FOR UPDATE above either
+            // way: two emergencies submitted at once must queue rather than
+            // interleave their arithmetic, or the reservation is wrong however
+            // much slack the balance had.
+            if ($totalDays > $available && !$this->calculator->mayOverdraw($leaveTypeId)) {
                 throw new Exception(
                     "Insufficient balance. Requested: {$totalDays} days, Available: {$available} days."
                 );

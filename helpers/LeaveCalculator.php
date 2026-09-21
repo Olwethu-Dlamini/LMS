@@ -158,6 +158,23 @@ class LeaveCalculator {
     }
 
     /**
+     * Whether a request against this category may take the balance below zero.
+     *
+     * True for emergency leave and nothing else by default. An emergency has
+     * already happened by the time somebody records it, so refusing it because
+     * the annual allowance is spent would not protect the balance - it would
+     * leave the register denying an absence that took place. The negative is
+     * visible on the dashboard and in HR's reports, which is where a shortfall
+     * belongs: in front of the people who can correct it.
+     *
+     * Defaults to false on an installation that has not run migration 008.
+     */
+    public function mayOverdraw(int $leaveTypeId): bool {
+        $leaveType = $this->getLeaveType($leaveTypeId);
+        return $leaveType !== null && (int)($leaveType['allow_negative_balance'] ?? 0) === 1;
+    }
+
+    /**
      * The same answer for a caller that has only an id, which is what the
      * workflow holds when it reserves, deducts or releases days.
      */
@@ -284,7 +301,11 @@ class LeaveCalculator {
         }
 
         $available = (float)$entitlement['total_days'] - (float)$entitlement['used_days'] - (float)$entitlement['pending_days'];
-        if ($workingDays > $available) {
+        // A category that may overdraw is not checked against the balance at
+        // all. Note that a missing allocation row above is still refused: a
+        // zero balance is something to go past, but no allocation at all means
+        // there is nothing to deduct from and nowhere to record the days.
+        if ($workingDays > $available && (int)($leaveType['allow_negative_balance'] ?? 0) !== 1) {
             $shortfall = $spendsAnother ? $balanceType['name'] . ' ' : '';
             $errors[] = "Insufficient {$shortfall}balance. Requested: {$workingDays} days, Available: {$available} days.";
         }
