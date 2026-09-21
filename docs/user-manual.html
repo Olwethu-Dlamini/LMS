@@ -280,7 +280,7 @@ footer.end{
     <div class="facts">
       <span>Staff Leave Portal</span>
       <span>Five roles</span>
-      <span>Three approval stages</span>
+      <span>One approval decides</span>
     </div>
   </div>
 </header>
@@ -400,8 +400,8 @@ footer.end{
       <p>You are told when:</p>
       <dl class="rows">
         <div><dt>You submitted</dt><dd>Confirmation that the request was received, with its reference number.</dd></div>
-        <div><dt>It moved</dt><dd>Each stage cleared, so you can see it travelling rather than guess.</dd></div>
-        <div><dt>It was decided</dt><dd>Fully approved, or declined, with whatever remarks the approver left.</dd></div>
+        <div><dt>Who decides it</dt><dd>Named in the confirmation, so you know where the request has gone.</dd></div>
+        <div><dt>It was decided</dt><dd>Approved, or declined, with whatever remarks the approver left. One approval settles it.</dd></div>
         <div><dt>It was cancelled</dt><dd>When HR or an administrator cancels a request of yours.</dd></div>
         <div><dt>Somebody needs you</dt><dd>If you approve leave: a request has reached your queue, or one waiting in it has been withdrawn.</dd></div>
       </dl>
@@ -410,6 +410,7 @@ footer.end{
         <span class="tag">The same news by email</span>
         <p>Every one of those also arrives at your work address, from <span class="mono">lms@realnet.co.sz</span>, so you hear about a decision without being signed in. The message carries the outcome, the dates and the approver's remarks: the link is there if you want the full record, not because you need it to find out what happened.</p>
         <p><strong>Do not reply to that address</strong>, because nobody reads it. Replies are directed to <a href="mailto:info@realnet.co.sz">info@realnet.co.sz</a>, and anything about a specific request is better raised with your line manager or HR.</p>
+        <p><strong>If you are in HR or an executive</strong>, one kind of message is deliberately not emailed to you: the notice that a request needs your approval. You decide leave for managers, executives or HR, and one message per request would bury the mail that genuinely needs you. Those appear in the <strong>Alerts</strong> bell, in your queue and on the company overview on your dashboard. Everything about your own leave still arrives by email.</p>
       </div>
 
       <p>Email can trail the bell by a minute or so. The bell is immediate; mail is sent in batches shortly after. Nothing is lost if the mail server is briefly unavailable, it is delivered once the server is back.</p>
@@ -419,37 +420,39 @@ footer.end{
     <section id="pipeline">
       <p class="eyebrow">The workflow</p>
       <h2 class="head">How a request travels</h2>
-      <p class="lede">Every application passes through the same three stages, in order. It only becomes approved leave after the third.</p>
+      <p class="lede">One approval decides your request. There is no second stage behind it: the approval that arrives is the one that books the leave and takes the days off your balance. Who gives it depends on your own role, because nobody approves their own leave.</p>
 
       <div class="pipe">
         <div class="stage">
-          <span class="n">Stage 1</span>
-          <strong>Line Manager</strong>
-          <p>Your own manager checks the request against team cover.</p>
+          <span class="n">You are an employee</span>
+          <strong>Your line manager decides</strong>
+          <p>Or the head of your department, if no manager is named against your account.</p>
         </div>
         <div class="stage">
-          <span class="n">Stage 2</span>
-          <strong>HR Manager</strong>
-          <p>HR verifies entitlement, balance and policy.</p>
+          <span class="n">You manage, or you are an executive</span>
+          <strong>HR decides</strong>
+          <p>You cannot approve your own leave, so it goes to HR instead of into your own queue.</p>
         </div>
         <div class="stage final">
-          <span class="n">Stage 3</span>
-          <strong>Executive</strong>
-          <p>Final sign-off. Only now are the days deducted.</p>
+          <span class="n">You are in HR</span>
+          <strong>The executive decides</strong>
+          <p>For the same reason: HR decides everybody else's, so somebody else decides HR's.</p>
         </div>
       </div>
 
-      <p>A rejection at <em>any</em> stage ends the request there and returns the held days to you. It does not carry on to the next approver.</p>
+      <p>A rejection ends the request and returns the held days to you. The apply form names your approver before you submit, and the confirmation afterwards says who it has gone to.</p>
+
+      <p>An administrator can also approve when the person who should decide is away, so nothing waits on somebody who is themselves on leave. That is recorded in the audit log against the administrator.</p>
 
       <h3>What the statuses mean</h3>
       <div class="scroll">
         <table>
           <thead><tr><th>You will see</th><th>It means</th><th>Days are</th></tr></thead>
           <tbody>
-            <tr><td><span class="status wait">Pending Line Manager</span></td><td>Waiting on Stage 1.</td><td>Held</td></tr>
-            <tr><td><span class="status mid">Pending HR Review</span></td><td>Cleared Stage 1, waiting on HR.</td><td>Held</td></tr>
-            <tr><td><span class="status mid">Pending Executive Approval</span></td><td>Cleared HR, waiting on final sign-off.</td><td>Held</td></tr>
-            <tr><td><span class="status go">Approved</span></td><td>Fully approved. The leave is yours.</td><td>Deducted</td></tr>
+            <tr><td><span class="status wait">Pending Line Manager</span></td><td>Waiting on your line manager, who decides it.</td><td>Held</td></tr>
+            <tr><td><span class="status mid">Pending HR Approval</span></td><td>Waiting on HR, who decides it. What a manager's or an executive's own request shows.</td><td>Held</td></tr>
+            <tr><td><span class="status mid">Pending Executive Approval</span></td><td>Waiting on the executive, who decides it. What an HR manager's own request shows.</td><td>Held</td></tr>
+            <tr><td><span class="status go">Approved</span></td><td>Approved. The leave is yours.</td><td>Deducted</td></tr>
             <tr><td><span class="status no">Rejected</span></td><td>Declined. The reason is in View Details.</td><td>Returned</td></tr>
             <tr><td><span class="status no">Cancelled</span></td><td>Withdrawn by you, HR or an administrator.</td><td>Returned</td></tr>
           </tbody>
@@ -470,7 +473,7 @@ footer.end{
           <ul>
             <li>See your balances for every category you hold</li>
             <li>Apply for leave and preview the day count live</li>
-            <li>Track each request through all three stages</li>
+            <li>Track each request until it is decided</li>
             <li>Read approver remarks on your requests</li>
             <li>Cancel a request you no longer need</li>
             <li>Change your own password</li>
@@ -489,7 +492,7 @@ footer.end{
 
       <div class="note warn">
         <span class="tag">If you have no manager yet</span>
-        <p>Your request needs a line manager to clear Stage&nbsp;1. If nobody is set as your manager, it will sit unactioned. Ask an administrator to set your reporting manager in User Management.</p>
+        <p>Your request needs a line manager, or the head of your department, to decide it. With neither, it will sit unactioned. Ask an administrator to set your reporting manager in User Management.</p>
       </div>
     </section>
 
@@ -498,15 +501,15 @@ footer.end{
       <p class="eyebrow">Role guide</p>
       <span class="chip">Line Manager</span>
       <h2 class="head">Line Manager</h2>
-      <p class="lede">Stage 1. You are the first decision on your team's leave, and the gate before HR ever sees it.</p>
+      <p class="lede">You decide your team's leave. Not the first of three signatures - the decision. Approving books the leave and deducts the days, and nobody reviews it after you.</p>
 
       <h3>Clearing your queue</h3>
       <ol class="steps">
-        <li>Go to <strong>Approvals → Stage 1 · Line Manager</strong>. The heading shows how many requests are waiting.</li>
+        <li>Go to <strong>Approvals → My team's leave</strong>. The heading shows how many requests are waiting on you.</li>
         <li>Read the row: who, which category, the dates, the working days it costs, their stated reason, and a <strong>File</strong> link if they attached a document.</li>
-        <li>Select <strong>Review / Action</strong> to open the request.</li>
+        <li>Select <strong>Review / Action</strong> to open the request. A category marked urgent, such as emergency leave, says so in the notification that brought you here.</li>
         <li>Add remarks. Do this especially when rejecting. Your note is what the employee sees as the explanation.</li>
-        <li>Choose <strong>Approve Stage 1</strong> to pass it to HR, or <strong>Reject Request</strong> to decline it and release the days.</li>
+        <li>Choose <strong>Approve &amp; Book Leave</strong> to approve it, or <strong>Reject Request</strong> to decline it and release the days.</li>
       </ol>
 
       <h3>Whose leave you see</h3>
@@ -514,7 +517,7 @@ footer.end{
 
       <div class="note stop">
         <span class="tag">You cannot approve your own leave</span>
-        <p>The system blocks self-approval outright. Your own requests go to whoever manages you, exactly like anyone else's.</p>
+        <p>The system blocks self-approval outright, which is why your own requests go to <strong>HR</strong> rather than into the queue you clear. HR's decision on them is final in the same way yours is on your team's.</p>
       </div>
 
       <p>Everything in <a href="#everyone">What everyone can do</a> applies to you as well: you still apply for your own leave through the same form.</p>
@@ -525,10 +528,16 @@ footer.end{
       <p class="eyebrow">Role guide</p>
       <span class="chip">HR Manager</span>
       <h2 class="head">HR Manager</h2>
-      <p class="lede">Stage 2, plus ownership of what everyone is entitled to and all company-wide reporting.</p>
+      <p class="lede">You decide leave for the people whose requests cannot go to a line manager - line managers and executives - and you own what everyone is entitled to and all company-wide reporting.</p>
 
-      <h3>Stage 2 approvals</h3>
-      <p><strong>Approvals → Stage 2 · HR Review</strong> holds everything a line manager has already cleared. The queue works exactly like Stage 1: review, add remarks, then approve to send it to the Executive, or reject to end it. Approving here does <em>not</em> deduct days. Only the final stage does.</p>
+      <h3>Your approvals</h3>
+      <p><strong>Approvals → Manager &amp; executive leave</strong> holds requests from line managers and executives. Each row says which of the two it is, because that is the useful distinction now: everything here is yours to decide and nothing behind you reviews it. Review, add remarks, then <strong>Approve &amp; Book Leave</strong> - which deducts the days there and then - or reject to end it and release them.</p>
+      <p>Employees' leave does not appear here. Their own line manager decides it, and it is approved or declined without reaching you.</p>
+
+      <div class="note">
+        <span class="tag">You are not emailed about this queue</span>
+        <p>Every manager's and every executive's request would otherwise be one message each, which buries the mail that genuinely needs reading. They appear in the <strong>Alerts</strong> bell and in the queue itself, and the company-wide <em>Away This Week</em> overview on your dashboard is there so leave can be watched without an inbox. Your own leave is still emailed to you.</p>
+      </div>
 
       <h3>Leave allocations</h3>
       <p><strong>HR Management → Leave Allocations</strong> is where balances are set.</p>
@@ -552,19 +561,20 @@ footer.end{
       <p class="eyebrow">Role guide</p>
       <span class="chip">Executive</span>
       <h2 class="head">Executive</h2>
-      <p class="lede">Stage 3, the final authority. Nothing becomes approved leave without you.</p>
+      <p class="lede">You decide HR's leave, and you have the company-wide view of everyone else's.</p>
 
-      <h3>Final sign-off</h3>
-      <p><strong>Approvals → Stage 3 · Executive Sign-Off</strong> lists requests that both the line manager and HR have already backed. Your decision is the last one.</p>
+      <h3>Your approvals</h3>
+      <p><strong>Approvals → HR leave</strong> lists requests from HR managers, who cannot approve their own. Yours is the only decision on them.</p>
       <ul>
-        <li><strong>Approve.</strong> The request becomes <span class="status go">Approved</span> and, at this moment, the days move out of the employee's balance for real.</li>
-        <li><strong>Reject.</strong> The request ends and the held days go straight back, even though two approvers had already agreed.</li>
+        <li><strong>Approve &amp; Book Leave.</strong> The request becomes <span class="status go">Approved</span> and the days come out of that person's balance at that moment.</li>
+        <li><strong>Reject.</strong> The request ends and the held days go straight back.</li>
       </ul>
-      <p>Your dashboard shows how many requests are waiting on you, so the count is visible the moment you sign in.</p>
+      <p>Your own leave goes to HR, for the same reason theirs comes to you.</p>
+      <p>Your dashboard shows how many requests are waiting on you, and the <em>Away This Week</em> strip covers <strong>every department in the company</strong> with a count of how many people are off today. Like HR, you are not emailed about the queue: the overview and the <strong>Alerts</strong> bell are the intended way to keep track, and your own leave still arrives by email.</p>
 
       <div class="note">
         <span class="tag">Worth knowing</span>
-        <p>Because the deduction happens here, a balance only changes when you act. Anything sitting in earlier stages is held, not spent, which is why an employee's available days can look lower than their used days suggest.</p>
+        <p>Every approval deducts days, whoever gives it. An employee's leave is deducted when their line manager approves it, not when it reaches you - it never reaches you. Anything still waiting is held rather than spent, which is why somebody's available days can look lower than their used days suggest.</p>
       </div>
     </section>
 
@@ -591,7 +601,7 @@ footer.end{
       <ol class="steps">
         <li><strong>Users → Create New User</strong>.</li>
         <li>Fill in employee ID, name, work email and a starting password.</li>
-        <li>Set their <strong>role</strong>, <strong>department</strong> and <strong>reporting manager</strong>. The manager matters most: without one, that person's Stage&nbsp;1 can only be cleared by an administrator.</li>
+        <li>Set their <strong>role</strong>, <strong>department</strong> and <strong>reporting manager</strong>. The manager matters most: with neither a reporting manager nor a department head, nobody can approve their leave except an administrator.</li>
         <li>Save. Their standard allocations for the current year are created automatically from the leave categories.</li>
         <li>Give them the starting password. They will be forced to replace it when they first sign in.</li>
       </ol>
@@ -627,8 +637,8 @@ footer.end{
       <p>A department cannot be deleted while people still belong to it. Move them first. Holidays can be added, edited and removed freely, but a change only affects <strong>future</strong> calculations; leave that has already been submitted keeps the day count it was approved with.</p>
 
       <div class="note">
-        <span class="tag">Administrators can approve at any stage</span>
-        <p>An administrator can act on Stage 1, 2 or 3. Use it to unblock a queue when an approver is away, but the audit log records that it was you.</p>
+        <span class="tag">Administrators can approve on any queue</span>
+        <p>Use it when the person who should decide is away, so nothing waits on somebody who is themselves on leave. The audit log records that it was you.</p>
       </div>
     </section>
 
@@ -653,10 +663,18 @@ footer.end{
             <tr><td><span class="mono">CSL</span></td><td>Casual Leave</td><td class="num">5</td><td class="num">0.5</td><td class="num">3</td><td>Allowed</td><td class="num">1 day</td><td>Not needed</td><td>Paid</td></tr>
             <tr><td><span class="mono">MAT</span></td><td>Maternity / Paternity</td><td class="num">90</td><td class="num">1</td><td class="num">None</td><td>Whole days only</td><td class="num">None</td><td>Always</td><td>Paid</td></tr>
             <tr><td><span class="mono">UNP</span></td><td>Unpaid Leave</td><td class="num">30</td><td class="num">1</td><td class="num">None</td><td>Whole days only</td><td class="num">14 days</td><td>Not needed</td><td>Unpaid</td></tr>
+            <tr><td><span class="mono">EMG</span></td><td>Emergency Leave</td><td class="num">&mdash;</td><td class="num">0.5</td><td class="num">None</td><td>Allowed</td><td class="num">None</td><td>Not needed</td><td>Paid</td></tr>
           </tbody>
-          <caption>Min and Max are working days in a single request. A dash means no limit.</caption>
+          <caption>Min and Max are working days in a single request. A dash means no limit. The Sick and Unpaid allowances above are the shipped defaults; both were withdrawn as a policy decision, so on a fully migrated database they read 0 &mdash; the portal is the authority.</caption>
         </table>
       </div>
+
+      <h3>Emergency Leave</h3>
+      <p>Emergency Leave has no allowance of its own: <strong>the days come off your Annual Leave</strong>. There is no notice period, no limit on how long a single request can be, and it can be dated in the past, so it covers something that has already happened rather than something you are planning.</p>
+      <ul>
+        <li><strong>It still needs its one approval.</strong> It is instant in what it allows, not in bypassing your approver. The days are held against your annual balance until they decide, and their notification says the request is an emergency.</li>
+        <li><strong>It can take your annual balance below zero.</strong> That is deliberate &mdash; the absence happened, so the system records it rather than refusing it &mdash; and your dashboard will show a negative figure until HR corrects the allocation.</li>
+      </ul>
 
       <p>In practice that means annual leave needs planning a week ahead, casual leave is for short notice but capped at three days at a time, sick leave can be logged for days already past, and unpaid leave needs a fortnight's warning.</p>
     </section>
@@ -751,7 +769,7 @@ footer.end{
         </div>
         <div>
           <dt>My request has sat unapproved for days</dt>
-          <dd>Check whose stage it is in under View Details. If nobody is set as your reporting manager it will never reach a Stage 1 queue. Ask an administrator to set one.</dd>
+          <dd><strong>View Details</strong> says who it is waiting on. With neither a reporting manager nor a department head there is no queue for it to appear in, so ask an administrator to fix your reporting line. An administrator can also approve it if the person who should decide is away.</dd>
         </div>
         <div>
           <dt>My balance looks wrong</dt>

@@ -25,8 +25,11 @@ Each user has a leave entitlement record per leave type per year:
 
 $$\text{Available Balance} = \text{total\_days} - \text{used\_days} - \text{pending\_days}$$
 
-- **Rule BR-BAL-01**: A leave request is **REJECTED AT SUBMISSION** if $\text{Net Working Days} > \text{Available Balance}$.
+- **Rule BR-BAL-01**: A leave request is **REJECTED AT SUBMISSION** if $\text{Net Working Days} > \text{Available Balance}$, unless the category carries `allow_negative_balance`.
 - **Rule BR-BAL-02**: Pending requests immediately reserve days by adding to `pending_days` to prevent double-booking balance.
+- **Rule BR-BAL-03**: The entitlement row read, reserved, deducted, released and restored is the one named by `deducts_from_type_id` when the category has it, resolved in a single hop. Emergency Leave therefore spends Annual Leave, while the application still records Emergency Leave as the category requested. A category pointing at itself, or at a row that no longer exists, falls back to its own balance.
+- **Rule BR-BAL-04**: `allow_negative_balance` exempts a category from BR-BAL-01 only. A **missing** entitlement row is still refused, because there is no row to reserve against and nowhere to record the days. The refusal names the category the days would have come from.
+- **Rule BR-BAL-05**: The balance is re-checked inside the submitting transaction with the entitlement row held `FOR UPDATE`, whether or not the category may overdraw, so two requests submitted at once cannot both reserve against the same snapshot.
 
 ### 2.3 Date Overlap Rule
 A leave request is invalid if the requested date range overlaps with any existing request for the same user with status `pending_manager`, `pending_hr`, `pending_executive`, or `approved`:
@@ -34,11 +37,18 @@ A leave request is invalid if the requested date range overlaps with any existin
 $$\neg \exists R \in \text{Applications} : \left( R.\text{user\_id} = U \land R.\text{status} \notin \{\text{'rejected'}, \text{'cancelled'}\} \land R.\text{start\_date} \le \text{end\_date} \land R.\text{end\_date} \ge \text{start\_date} \right)$$
 
 ### 2.4 Attachment Requirements Rule
-- **Rule BR-ATT-01**: If `leave_type` = 'Sick' (Code: `SCK`) AND $\text{Net Working Days} > 2.0$, a file attachment (PDF/PNG/JPG max 5MB) is strictly required.
+- **Rule BR-ATT-01**: If the category carries `requires_attachment` AND $\text{Net Working Days} > \text{attachment\_threshold\_days}$, a file attachment (PDF/PNG/JPG max 5MB) is strictly required. Shipped configuration puts Sick Leave at a threshold of 2 days and Maternity / Paternity at 0, i.e. always. This replaced a hardcoded rule naming the `SCK` code.
+- **Rule BR-ATT-02**: A document that fails to store fails the whole submission, rather than leaving a request in a queue that looks complete without the certificate it depends on.
 
 ---
 
 ## 3. Leave Calculator Pseudo-Code (`LeaveCalculator.php`)
+
+> **Illustrative only, and now behind the implementation.** The real
+> `validateEligibility()` also enforces duration limits, notice periods, half-day
+> rules and the attachment threshold per category, resolves the balance category
+> per BR-BAL-03, and returns half-days as a float. Read the file for the
+> authority; this block is kept to show the shape.
 
 ```php
 class LeaveCalculator {

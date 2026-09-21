@@ -391,7 +391,37 @@ while one that is down for the afternoon is not hammered every minute.
 Failed rows are **never** pruned automatically. They are the ones somebody still
 has to read.
 
-### 4.6 What cannot break an approval
+### 4.6 Who gets email, and who does not
+
+One rule, in `Notifier::shouldEmail()`:
+
+> **Email is for news about you. The bell and the screens are for work waiting
+> on you.**
+
+| Recipient | "Awaiting your approval" | Their own leave | Bell |
+|---|---|---|---|
+| Employee | n/a | email | yes |
+| Line Manager | **email** | email | yes |
+| HR | **no email** | email | yes |
+| Executive | **no email** | email | yes |
+
+HR decides every line manager's and every executive's leave, and the executive
+decides HR's. A message per waiting request would fill the mailboxes of the two
+roles who can least afford to start ignoring their mail, and it would say
+nothing their own queue and the company-wide *Away This Week* overview on their
+dashboard do not already show. Their own leave is different: that is news they
+cannot get by opening a screen they had no reason to open, so it is emailed.
+
+Two consequences worth knowing before reading `--status`:
+
+- **A suppressed notice leaves no trace in the outbox**, because nothing was
+  queued. A `notifications` row with no `email_outbox` row is the rule applying,
+  not the queue failing.
+- **Withdrawal notices still email them.** "A leave request in your queue was
+  withdrawn" is a `leave_cancelled` type rather than `leave_awaiting_you`, and
+  it is rare, so it was left alone.
+
+### 4.7 What cannot break an approval
 
 - Queueing sits in its own `try`/`catch`, after the notification row is written.
 - A missing `email_outbox` table (migration 005 not run) is logged and swallowed.
@@ -556,9 +586,11 @@ mail is rejected outright.
 | To change | Edit |
 |---|---|
 | Which events send email | `helpers/Notifier.php`, the three event methods |
+| Which roles are emailed which kinds | `Notifier::shouldEmail()` |
 | Who receives an event | `Notifier::approversFor()` |
 | Wording of titles | `Notifier::awaitingTitle()`, `outcomeFor()` |
 | The detail rows | `Notifier::detailsFor()` |
+| Whether a category reads as urgent | `leave_types.notify_as_urgent`, in the admin console |
 | Layout, colours, button | `helpers/EmailTemplate.php` |
 | Subject prefix | `EmailTemplate::subject()` |
 

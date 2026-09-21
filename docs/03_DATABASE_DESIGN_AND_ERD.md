@@ -50,6 +50,15 @@ erDiagram
         int max_days_per_year
         boolean requires_attachment
         boolean is_paid
+        decimal min_days_per_request
+        decimal max_days_per_request
+        boolean allow_half_day
+        int min_notice_days
+        decimal attachment_threshold_days
+        boolean is_active
+        int deducts_from_type_id FK
+        boolean allow_negative_balance
+        boolean notify_as_urgent
     }
 
     LEAVE_ENTITLEMENTS {
@@ -139,9 +148,18 @@ Available categories of leave.
 | `id` | INT | PK, AUTO_INCREMENT | Unique Leave Type ID |
 | `name` | VARCHAR(50) | NOT NULL | Leave name (Annual, Sick, Casual, etc.) |
 | `code` | VARCHAR(10) | UNIQUE, NOT NULL | Short code (ANN, SCK, CSL, MAT) |
-| `max_days_per_year` | INT | NOT NULL, DEFAULT 0 | Default annual day allocation |
+| `max_days_per_year` | INT | NOT NULL, DEFAULT 0 | Default annual day allocation. 0 for a category that spends another's balance |
 | `requires_attachment` | TINYINT(1) | NOT NULL, DEFAULT 0 | 1 if medical certificate needed |
 | `is_paid` | TINYINT(1) | NOT NULL, DEFAULT 1 | 1 if paid leave, 0 if unpaid |
+| `min_days_per_request` | DECIMAL(4,1) | NOT NULL, DEFAULT 0.5 | Smallest bookable request |
+| `max_days_per_request` | DECIMAL(5,1) | NULL | Longest single request. NULL means no cap |
+| `allow_half_day` | TINYINT(1) | NOT NULL, DEFAULT 1 | Whether half-day options are offered |
+| `min_notice_days` | INT | NOT NULL, DEFAULT 0 | Days of notice required. 0 also permits backdating |
+| `attachment_threshold_days` | DECIMAL(4,1) | NOT NULL, DEFAULT 0.0 | A document is demanded only past this length |
+| `is_active` | TINYINT(1) | NOT NULL, DEFAULT 1 | Retired categories stay for reporting and leave the apply form |
+| `deducts_from_type_id` | INT | FK to `leave_types(id)`, NULL | The category whose entitlement row this one spends. NULL means it holds its own. Emergency Leave points at Annual Leave |
+| `allow_negative_balance` | TINYINT(1) | NOT NULL, DEFAULT 0 | 1 if a request may pass a balance it exceeds. A *missing* allocation row is still refused |
+| `notify_as_urgent` | TINYINT(1) | NOT NULL, DEFAULT 0 | 1 if approvers are told about it as urgent |
 
 ### 2.5 Table: `leave_entitlements`
 Yearly leave balance allocations per user per leave type.

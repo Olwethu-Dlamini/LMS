@@ -94,10 +94,19 @@ solid for days taken, amber for days still awaiting approval.
 Above the tiles:
 
 - **Your Next Leave.** Your next approved dates and how long until they start.
-- **Away This Week.** The coming seven working days for your department, with the
-  initials of whoever is off and a count of how many that is out of the team.
-  Amber means the department has reached the number it is allowed to have away at
-  once; red means it has gone past it.
+- **Away This Week.** The coming seven working days, with the initials of whoever
+  is off and a count of how many that is out of the team. The count is people
+  **approved** off; anyone who has merely asked is shown separately as `+n` and
+  never counted, because a request nobody has decided is not something to plan
+  around. Amber means the department has reached the number it is allowed to have
+  away at once; red means it has gone past it.
+
+  How much you see depends on your role. An employee sees their own department. A
+  line manager sees every department they approve for, one row each, so heading
+  two teams shows both. **HR, executives and administrators see every department
+  in the company**, with a count of how many people are away today out of the
+  whole staff. That overview is the intended way for those roles to keep an eye
+  on leave, which is why they are not emailed about every request.
 
 Managers, HR and executives also get **Annual Leave Utilisation**: how much of the
 year's allocation each of their departments has committed, flagging staff who have
@@ -110,9 +119,9 @@ annual entitlement.
 The **Alerts** bell in the navigation bar carries a red count of anything you have
 not read yet. You are notified when:
 
-- your request is submitted, so you have confirmation it was received;
-- it clears a stage, is fully approved, or is declined, with the approver's
-  remarks;
+- your request is submitted, so you have confirmation it was received, and who
+  is going to decide it;
+- it is approved or declined, with the approver's remarks;
 - a request needs *your* approval;
 - a request in your queue is withdrawn by the person who made it;
 - HR or an administrator cancels a request of yours.
@@ -141,6 +150,13 @@ unavailable, it is delivered once the server is back.
 > **Do not reply to that address.** Nobody reads `lms@realnet.co.sz`. Replies are
 > directed to info@realnet.co.sz instead, and anything about a specific request is
 > better raised with your line manager or HR.
+
+**If you are in HR or an executive**, one kind of message is deliberately not
+emailed to you: the "a request needs your approval" notice. You decide leave for
+managers and executives, or for HR, and a message for every request would bury
+the mail that actually needs you. Those requests appear in the **Alerts** bell,
+in your queue, and on the company overview on your dashboard. Everything about
+*your own* leave still reaches you by email.
 
 If notices are not arriving, check your junk folder first: a new sending address
 is often filtered the first few times, and marking one message as not junk
@@ -255,44 +271,43 @@ ask HR. They can correct it, and the correction is recorded in the audit log.
 
 ## 3. How a request travels
 
-Every application passes through the same three stages, in order. It only becomes
-approved leave after the third.
+**One approval decides your request.** There is no second stage behind it: the
+approval that arrives is the one that books the leave and takes the days off
+your balance.
+
+Who gives it depends on your own role, because nobody approves their own leave:
 
 ```
-  [ You submit ]
-        │
-        ▼
-  Stage 1 · Line Manager ──(reject)──► Rejected, days returned
-        │ approve
-        ▼
-  Stage 2 · HR Manager ────(reject)──► Rejected, days returned
-        │ approve
-        ▼
-  Stage 3 · Executive ─────(reject)──► Rejected, days returned
-        │ approve
-        ▼
-  APPROVED: days deducted
+  You are an employee      ──►  your line manager decides
+  You are a line manager   ──►  HR decides
+  You are an executive     ──►  HR decides
+  You are in HR            ──►  the executive decides
+
+        approved  ──►  the leave is booked and the days are deducted
+        declined  ──►  the request ends and the held days come back
 ```
 
-| Stage | Who | What they check |
-|---|---|---|
-| **1** | Line Manager | Your own manager checks the request against team cover. |
-| **2** | HR Manager | HR verifies entitlement, balance and policy. |
-| **3** | Executive | Final sign-off. **Only now are the days deducted.** |
+The apply form tells you which of these applies to you before you submit, and
+the confirmation afterwards says who it has gone to.
 
-A rejection at *any* stage ends the request there and returns the held days to
-you. It does not carry on to the next approver.
+An administrator can also approve when the person who should decide is away, so
+a request is never stuck because somebody is on leave themselves. That is
+recorded in the audit log against the administrator.
 
 ### What the statuses mean
 
 | You will see | It means | Days are |
 |---|---|---|
-| Pending Line Manager | Waiting on Stage 1. | Held |
-| Pending HR Review | Cleared Stage 1, waiting on HR. | Held |
-| Pending Executive Approval | Cleared HR, waiting on final sign-off. | Held |
-| Approved | Fully approved. The leave is yours. | **Deducted** |
+| Pending Line Manager | Waiting on your line manager, who decides it. | Held |
+| Pending HR Approval | Waiting on HR, who decides it. This is what a manager's or an executive's own request shows. | Held |
+| Pending Executive Approval | Waiting on the executive, who decides it. This is what an HR manager's own request shows. | Held |
+| Approved | Approved. The leave is yours. | **Deducted** |
 | Rejected | Declined. The reason is in View Details. | Returned |
 | Cancelled | Withdrawn by you, HR or an administrator. | Returned |
+
+Held days are already out of your available balance even though they have not
+been deducted: that is what stops you booking the same days twice while a
+request is waiting.
 
 ---
 
@@ -324,20 +339,21 @@ The standard account. You request your own leave and follow its progress.
 
 ## 5. Line Manager
 
-Stage 1. You are the first decision on your team's leave, and the gate before HR
-ever sees it.
+You decide your team's leave. Not the first of three signatures - the decision.
+Approving books the leave and deducts the days, and nobody reviews it after you.
 
 ### Clearing your queue
 
-1. Go to **Approvals → Stage 1 · Line Manager**. The heading shows how many
-   requests are waiting.
+1. Go to **Approvals → My team's leave**. The heading shows how many requests
+   are waiting on you.
 2. Read the row: who, which category, the dates, the working days it costs, their
    stated reason, and a **File** link if they attached a document.
-3. Select **Review / Action** to open the request.
+3. Select **Review / Action** to open the request. A category marked urgent, such
+   as emergency leave, says so in the notification that brought you here.
 4. Add remarks. Do this especially when rejecting. Your note is what the
    employee sees as the explanation.
-5. Choose **Approve Stage 1** to pass it to HR, or **Reject Request** to decline
-   it and release the days.
+5. Choose **Approve & Book Leave** to approve it, or **Reject Request** to
+   decline it and release the days.
 
 ### Protecting your cover
 
@@ -370,8 +386,10 @@ of their department. You will never see another manager's team. The team calenda
 follows the same boundary, so you can see cover for every department you approve
 for, including a second department if you head more than one.
 
-> **You cannot approve your own leave.** The system blocks self-approval outright.
-> Your own requests go to whoever manages you, exactly like anyone else's.
+> **You cannot approve your own leave.** The system blocks self-approval
+> outright, which is why your own requests go to **HR** rather than into the
+> queue you clear. HR's decision on them is final in the same way yours is on
+> your team's.
 
 Everything in [What everyone can do](#2-what-everyone-can-do) applies to you as
 well: you still apply for your own leave through the same form.
@@ -380,15 +398,27 @@ well: you still apply for your own leave through the same form.
 
 ## 6. HR Manager
 
-Stage 2, plus ownership of what everyone is entitled to and all company-wide
-reporting.
+You decide leave for the people who cannot have it decided by a line manager -
+line managers and executives - and you own what everyone is entitled to and all
+company-wide reporting.
 
-### Stage 2 approvals
+### Your approvals
 
-**Approvals → Stage 2 · HR Review** holds everything a line manager has already
-cleared. The queue works exactly like Stage 1: review, add remarks, then approve
-to send it to the Executive, or reject to end it. Approving here does *not*
-deduct days. Only the final stage does.
+**Approvals → Manager & executive leave** holds requests from line managers and
+executives. Each row says which of the two it is, because that is the useful
+distinction now: everything in this queue is yours to decide and nothing behind
+you reviews it. Review, add remarks, then **Approve & Book Leave** - which
+deducts the days there and then - or reject to end it and release them.
+
+Employees' leave does not appear here. Their own line manager decides it, and it
+is approved or declined without reaching you.
+
+> **You are not emailed about this queue.** Every manager's and every
+> executive's request would otherwise be one message each, which buries the mail
+> that genuinely needs reading. They appear in the **Alerts** bell and in the
+> queue itself, and the company-wide *Away This Week* overview on your dashboard
+> is there so leave can be watched without an inbox. Your own leave is still
+> emailed to you.
 
 ### Leave allocations
 
@@ -416,24 +446,30 @@ you see is what you get. The file opens in Excel and is intended for payroll.
 
 ## 7. Executive
 
-Stage 3, the final authority. Nothing becomes approved leave without you.
+You decide HR's leave, and you have the company-wide view of everyone else's.
 
-### Final sign-off
+### Your approvals
 
-**Approvals → Stage 3 · Executive Sign-Off** lists requests that both the line
-manager and HR have already backed. Your decision is the last one.
+**Approvals → HR leave** lists requests from HR managers, who cannot approve
+their own. Yours is the only decision on them.
 
-- **Approve.** The request becomes *Approved* and, at this moment, the days move
-  out of the employee's balance for real.
-- **Reject.** The request ends and the held days go straight back, even though
-  two approvers had already agreed.
+- **Approve & Book Leave.** The request becomes *Approved* and the days come out
+  of that person's balance at that moment.
+- **Reject.** The request ends and the held days go straight back.
 
-Your dashboard shows how many requests are waiting on you, so the count is
-visible the moment you sign in.
+Your own leave goes to HR, for the same reason theirs comes to you.
 
-> **Worth knowing.** Because the deduction happens here, a balance only changes
-> when you act. Anything sitting in earlier stages is held, not spent, which is
-> why an employee's available days can look lower than their used days suggest.
+Your dashboard shows how many requests are waiting on you, and the *Away This
+Week* strip covers **every department in the company** with a count of how many
+people are off today. Like HR, you are not emailed about the queue: the overview
+and the **Alerts** bell are the intended way to keep track, and your own leave
+still arrives by email.
+
+> **Worth knowing.** Every approval deducts days, whoever gives it. An
+> employee's leave is deducted when their line manager approves it, not when it
+> reaches you - it never reaches you. Anything still waiting is held rather than
+> spent, which is why somebody's available days can look lower than their used
+> days suggest.
 
 ---
 
@@ -463,8 +499,8 @@ right takes you back, and you keep your own leave account.
 1. **Users → Create New User**.
 2. Fill in employee ID, name, work email and a starting password.
 3. Set their **role**, **department** and **reporting manager**. The manager
-   matters most: without one, that person's Stage 1 can only be cleared by an
-   administrator.
+   matters most: with neither a reporting manager nor a department head, nobody
+   can approve their leave except an administrator.
 4. Save. Their standard allocations for the current year are created
    automatically from the leave categories.
 5. Give them the starting password. They will be forced to replace it when they
@@ -503,6 +539,9 @@ category, and every one is enforced when somebody applies:
 | **Requires a document** | Combined with a threshold, so you can demand a certificate only once a request passes a certain length. |
 | **Paid** | Whether the category is paid or unpaid. |
 | **Available on the apply form** | Clear this to retire a category. It vanishes from the form but stays in historical reports. |
+| **Deducted from** | Spend another category's balance instead of having one. Emergency Leave is set to Annual Leave, so an emergency costs annual days. A category set this way is never given an allowance of its own and cannot be allocated by hand. |
+| **May go negative** | Let a request through even when the balance will not cover it. Emergency Leave may, because the absence has already happened by the time it is recorded. The balance then shows a minus until HR corrects it. |
+| **Notify as urgent** | Approvers see the category's name at the front of the notification and an urgent colour in the email, so it is not lost among ordinary requests. |
 
 Deleting a category follows the same principle as users: one that no application
 has ever used is removed, and one that is in use is **retired** instead so past
@@ -529,8 +568,8 @@ notice approvers see before they sign off.
 Set it below the headcount by the number of people the team can actually spare. A
 team of six that needs four on the floor has a limit of two.
 
-> **Administrators can approve at any stage.** An administrator can act on
-> Stage 1, 2 or 3. Use it to unblock a queue when an approver is away, but the
+> **Administrators can approve on any queue.** Use it when the person who should
+> decide is away, so nothing waits on somebody who is themselves on leave. The
 > audit log records that it was you.
 
 ---
@@ -547,12 +586,33 @@ in the Admin Console, so treat the portal as the authority.
 | `CSL` | Casual Leave | 5 | 0.5 | 3 | Allowed | 1 day | Not needed | Paid |
 | `MAT` | Maternity / Paternity | 90 | 1 | None | Whole days only | None | Always | Paid |
 | `UNP` | Unpaid Leave | 30 | 1 | None | Whole days only | 14 days | Not needed | Unpaid |
+| `EMG` | Emergency Leave | — | 0.5 | None | Allowed | None | Not needed | Paid |
 
 *Min and Max are working days in a single request. A dash means no limit.*
+
+*The Sick and Unpaid allowances above are the shipped defaults. Both were
+withdrawn as a policy decision, so on a database with every migration applied
+they read 0 - the portal is the authority.*
 
 In practice that means annual leave needs planning a week ahead, casual leave is
 for short notice but capped at three days at a time, sick leave can be logged for
 days already past, and unpaid leave needs a fortnight's warning.
+
+### Emergency Leave
+
+Emergency Leave has no allowance of its own: **the days come off your Annual
+Leave**. There is no notice period, no limit on how long a single request can
+be, and it can be dated in the past, so it covers something that has already
+happened rather than something you are planning.
+
+Two things to know before using it:
+
+- **It still needs its one approval.** It is instant in what it allows, not in
+  bypassing your approver. The days are held against your annual balance until
+  they decide, and their notification says the request is an emergency.
+- **It can take your annual balance below zero.** That is deliberate - the
+  absence happened, so the system records it rather than refusing it - and your
+  dashboard will show a negative figure until HR corrects the allocation.
 
 ---
 
@@ -596,6 +656,7 @@ the apply form warns you about all of them before you submit.
 | **Cancelling leave you are already taking** | Approved leave can be cancelled up to the day before it starts. From the first day onward only HR can correct it. |
 | **No working days in range** | A range covering only a weekend or only public holidays costs nothing, so there is nothing to approve. |
 | **Not enough left** | Remember that pending requests are already holding days. Your available figure is total minus used *minus pending*. |
+| **A negative balance after emergency leave** | Emergency leave comes off your annual leave and is allowed to go past it, so the available figure can show a minus. Nothing is broken and no other request will pass a zero balance; ask HR if the allocation needs correcting. |
 
 ---
 
@@ -605,7 +666,7 @@ the apply form warns you about all of them before you submit.
 |---|---|
 | **I forgot my password** | There is no self-service reset. Contact IT and an administrator will issue you a temporary one, which you will replace at your next sign-in. |
 | **The portal keeps sending me to the password page** | Your account is still on a temporary password. Set your own and you will be let through. This is working as intended. |
-| **My request has sat unapproved for days** | Check whose stage it is in under View Details. If nobody is set as your reporting manager it will never reach a Stage 1 queue. Ask an administrator to set one. |
+| **My request has sat unapproved for days** | **View Details** says who it is waiting on. If you have neither a reporting manager nor a department head there is no queue for it to appear in, so ask an administrator to fix your reporting line. An administrator can also approve it if the person who should decide is away. |
 | **My balance looks wrong** | Check the pending figure first; days on requests in progress are held, not lost. If it is still wrong, HR can correct your allocation. |
 | **A category has disappeared from the form** | It has been retired by an administrator. Requests you already made under it are unaffected. |
 | **I cannot sign in at all** | Your account may have been archived, which blocks sign-in. Contact IT. |

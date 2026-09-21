@@ -3,88 +3,148 @@
 
 ---
 
-## 1. 3-Stage Sequential Approval Flow
+## 1. One approval decides a request
 
-The application follows a strict 3-tier approval hierarchy before a leave application reaches final authorization:
+A leave request is decided by a single approver, and that decision is final.
+There is no second stage and no escalation: the approval that arrives is the one
+that books the leave and deducts the days.
+
+Who that approver is depends on the applicant's own role, because nobody signs
+off on their own leave:
 
 ```mermaid
 stateDiagram-v2
-    [*] --> Draft: User Fills Form
-    Draft --> Pending_Manager: Submit Application
-    
-    state Pending_Manager {
-        [*] --> Manager_Review
-        Manager_Review --> Stage1_Approved: Line Manager Approves
-        Manager_Review --> Rejected: Line Manager Rejects
+    [*] --> Submitted: employee submits
+
+    state Submitted {
+        [*] --> pending_manager: applicant is an employee
+        [*] --> pending_hr: applicant is a line manager or an executive
+        [*] --> pending_executive: applicant is HR
     }
 
-    Stage1_Approved --> Pending_HR: Transition to HR Stage
+    pending_manager --> Approved: line manager approves
+    pending_manager --> Rejected: line manager rejects
 
-    state Pending_HR {
-        [*] --> HR_Review
-        HR_Review --> Stage2_Approved: HR Approves
-        HR_Review --> Rejected: HR Rejects
-    }
+    pending_hr --> Approved: HR approves
+    pending_hr --> Rejected: HR rejects
 
-    Stage2_Approved --> Pending_Executive: Transition to Boss/Executive Stage
+    pending_executive --> Approved: executive approves
+    pending_executive --> Rejected: executive rejects
 
-    state Pending_Executive {
-        [*] --> Exec_Review
-        Exec_Review --> Final_Approved: Executive/Boss Approves
-        Exec_Review --> Rejected: Executive/Boss Rejects
-    }
-
-    Final_Approved --> [*]: Days Deducted from Used Balance
-    Rejected --> [*]: Pending Reserved Days Released
+    Approved --> [*]: days moved from pending to used
+    Rejected --> [*]: reserved days released
+    Submitted --> Cancelled: withdrawn by the applicant, HR or an admin
+    Cancelled --> [*]: reserved or deducted days released
 ```
+
+| Applicant | Enters at | Decided by | Stages after |
+|---|---|---|---|
+| Employee | `pending_manager` | Their line manager, or the head of their department | none |
+| Line Manager | `pending_hr` | HR | none |
+| Executive | `pending_hr` | HR | none |
+| HR | `pending_executive` | The executive | none |
+| System Admin | — | Cannot apply: holds no leave entitlement | — |
+
+The three statuses are therefore **three queues holding three kinds of
+applicant**, not three stages of one request. All three screens remain, named
+for whose leave each one holds.
+
+An administrator may act on any of the three as a break-glass override when the
+designated approver is unavailable. The screens warn when an admin is the one
+acting, and the audit log records it against their account.
 
 ---
 
-## 2. State Transition Matrix
+## 2. State transition matrix
 
-| Initial Status | Trigger Action | Required Role | Next Status | Side Effects on Entitlement Balance |
+| Initial status | Trigger | Required role | Next status | Effect on the entitlement |
 |---|---|---|---|---|
-| **Draft** | `submit()` | Employee | `pending_manager` | Total requested days added to `pending_days`. Available balance reduced. |
-| `pending_manager` | `approve()` | Line Manager / Admin | `pending_hr` | `current_approver_role` updated to `'hr'`. `pending_days` maintained. Log written to `leave_approval_logs`. |
-| `pending_manager` | `reject()` | Line Manager / Admin | `rejected` | Workflow terminates. `pending_days` reduced by requested amount. Available balance restored. |
-| `pending_hr` | `approve()` | HR / Admin | `pending_executive` | `current_approver_role` updated to `'executive'`. Log written to `leave_approval_logs`. |
-| `pending_hr` | `reject()` | HR / Admin | `rejected` | Workflow terminates. `pending_days` released back to available. Log written. |
-| `pending_executive` | `approve()` | Executive / Admin | `approved` | Application marked `approved`. `pending_days` subtracted, `used_days` increased by requested amount. |
-| `pending_executive` | `reject()` | Executive / Admin | `rejected` | Workflow terminates. `pending_days` released back to available. Log written. |
-| `pending_*` | `cancel()` | Employee (Owner) | `cancelled` | Allowed only before Stage 1 review. `pending_days` released back to available balance. |
+| — | `submit()` | Any staff role | `pending_manager`, `pending_hr` or `pending_executive` by applicant role | Requested days added to `pending_days`. Available balance falls |
+| `pending_manager` | `approve()` | Line Manager / Admin | `approved` | `pending_days` reduced, `used_days` increased. Log written |
+| `pending_hr` | `approve()` | HR / Admin | `approved` | `pending_days` reduced, `used_days` increased. Log written |
+| `pending_executive` | `approve()` | Executive / Admin | `approved` | `pending_days` reduced, `used_days` increased. Log written |
+| any pending | `reject()` | The role that decides it, or Admin | `rejected` | `pending_days` released. Available balance restored. Log written |
+| any pending | `cancel()` | Applicant, HR or Admin | `cancelled` | `pending_days` released |
+| `approved` | `cancel()` | Applicant before it starts; HR or Admin at any time | `cancelled` | `used_days` restored |
+| `approved` | `approve()` | — | refused | Nothing. `nextStageFor()` throws, which is what stops a second approval deducting twice |
+
+The entitlement row touched is not always the one named on the request: a
+category may spend another category's balance. See section 5.
 
 ---
 
-## 3. Detailed Stage Specifications
+## 3. Who may act on each queue
 
-### Stage 1: Line Manager Review (`pending_manager`)
-- **Assigned Approver**: Direct `manager_id` assigned to the applicant's user record (or System Admin).
-- **Authorized Actions**: `Approve`, `Reject`.
-- **Validation**: Cannot review own leave application.
+Enforced in `ApprovalWorkflow::processAction()`, in this order: the application
+is locked `FOR UPDATE`, self-approval is refused outright, then the acting role
+is checked against the status.
 
-### Stage 2: HR Review (`pending_HR`)
-- **Assigned Approver**: Any user with `role_id` = **HR Manager** (or System Admin).
-- **Authorized Actions**: `Approve`, `Reject`.
-- **Validation**: Verifies compliance with corporate policy, medical certificate validity, and statutory limits.
+### `pending_manager` — an employee's own leave
+- **Line Manager**, but only for their own people: the applicant's `manager_id`
+  must be them, or they must be the `line_manager_id` of the applicant's
+  department. A manager elsewhere in the organisation is refused.
+- **Admin**, as break-glass.
 
-### Stage 3: Executive / Boss Review (`pending_executive`)
-- **Assigned Approver**: Any user with `role_id` = **Executive / Boss** (or System Admin).
-- **Authorized Actions**: `Approve`, `Reject`.
-- **Validation**: Final operational sign-off.
+### `pending_hr` — a line manager's or an executive's own leave
+- **HR**, any active holder of the role.
+- **Admin**, as break-glass.
+
+### `pending_executive` — HR's own leave
+- **Executive**, any active holder of the role.
+- **Admin**, as break-glass.
+
+> **Self-approval is refused before the role is even considered.** An HR manager
+> cannot approve their own request by virtue of being HR, which is exactly why
+> their leave routes to the executive instead.
 
 ---
 
-## 4. UI Approval Progress Tracker Component
+## 4. What the approver is told
 
-When viewing a leave application detail page, the system renders a visual timeline tracker:
+The change that matters most to an approver is not on the queue screen but in
+what it now means to press Approve. Under the old chain a line manager was one
+signature of three, with HR and an executive behind them. They are now the whole
+decision.
+
+So the review modal carries the sentence "Your decision is final. Approving
+books the leave and deducts the days; nobody reviews it after you", the button
+reads **Approve & Book Leave**, and the notification and email carry the same
+line - in the email as its own labelled row, because the prose body is not
+rendered once there is a detail table.
+
+---
+
+## 5. Balance sourcing
+
+A leave category may hold no allowance of its own and spend another's, which is
+how Emergency Leave works: the days come off Annual Leave.
+
+`leave_types.deducts_from_type_id` names the category whose
+`leave_entitlements` row is reserved against, deducted from, released and
+restored. It is resolved in one hop by `LeaveCalculator::balanceTypeFor()`, and
+every balance operation in the workflow follows it. The application row still
+records the category that was asked for, so an emergency is emergency leave in
+every report while the days come from where they actually came from.
+
+`leave_types.allow_negative_balance` lets such a request pass a balance it
+exceeds. Emergency leave may: the absence has already happened by the time
+anybody records it, so refusing it would not protect the balance, it would leave
+the register denying an absence that took place. A **missing allocation row** is
+still refused, because there would be no row to deduct from at all.
+
+---
+
+## 6. Progress display
+
+A request has two steps, and the detail screen draws exactly those:
 
 ```
-[ Stage 1: Manager ] ====> [ Stage 2: HR ] ====> [ Stage 3: Boss ] ====> [ Status: APPROVED ]
-   (Completed)                 (Completed)           (Active)                 (Pending)
+[ Submitted 14 Oct ] ────► [ Approved - the days have been deducted ]
+                           [ Declined - the days were returned      ]
+                           [ With your line manager, awaiting a decision ]
 ```
 
-### Component Status Classes:
-- **Completed**: Green checkmark icon with approver name & date.
-- **Active**: Pulsing blue highlight indicating active queue.
-- **Pending**: Muted gray step.
-- **Rejected**: Solid red cross badge with rejection comments modal link.
+The audit trail beneath it lists every action with the approver, their role, the
+status the request was in when they acted, and their remarks. Rows written
+before this change carry the same values and read correctly: the stage column is
+simply who decided it.

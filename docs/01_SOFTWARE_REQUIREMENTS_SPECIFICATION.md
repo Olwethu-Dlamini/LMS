@@ -13,7 +13,7 @@ The LMS is a web-based PHP application built with a modular component-based arch
 
 ### 1.3 Key Objectives
 - Automate leave application submission, tracking, and balance management.
-- Enforce a 3-tier approval hierarchy (**Line Manager** ➔ **HR** ➔ **Executive / Boss**).
+- Route every request to a single approver by the applicant's own role, so nobody approves their own leave and no request waits on a second signature.
 - Exclude weekends and public holidays automatically during leave day calculations.
 - Support role-based access control (RBAC) with granular permissions across 5 distinct user roles.
 - Provide responsive, modular Bootstrap-themed interfaces.
@@ -46,16 +46,19 @@ The system defines 5 primary user roles:
 - **FR-LEAVE-02**: System must calculate **net working days** excluding Saturdays, Sundays, and official public holidays.
 - **FR-LEAVE-03**: System must validate requested days against the employee's available leave entitlement.
 - **FR-LEAVE-04**: System must prevent submission if dates overlap with existing pending or approved requests.
-- **FR-LEAVE-05**: System must require file attachment (medical certificate) if Sick Leave exceeds specified threshold (e.g. > 2 days).
+- **FR-LEAVE-05**: System must require file attachment (medical certificate) if a leave category exceeds its configured attachment threshold (e.g. Sick Leave over 2 days).
+- **FR-LEAVE-06**: A leave category may spend another category's entitlement rather than holding one of its own (Emergency Leave is deducted from Annual Leave), and may be configured to pass a balance it exceeds so an absence that has already happened can still be recorded.
 
 ### 3.3 Multi-Level Approval Workflow Engine
-- **FR-WF-01**: 3-Stage Approval Sequence:
-  - **Stage 1 (Pending Line Manager)**: Assigned to the applicant's direct manager.
-  - **Stage 2 (Pending HR)**: Triggered after Line Manager approval.
-  - **Stage 3 (Pending Executive/Boss)**: Final sign-off required for request completion.
+- **FR-WF-01**: Single-approval routing, decided by the applicant's role:
+  - **Employee** ➔ their line manager, or the head of their department.
+  - **Line Manager** and **Executive** ➔ HR.
+  - **HR** ➔ the executive.
+  - **System Admin** holds no entitlement and cannot apply, but may approve on any queue as a break-glass override.
 - **FR-WF-02**: Approvers can accept or reject requests with mandatory/optional comments.
-- **FR-WF-03**: Rejection at any stage immediately halts the workflow, sets status to `Rejected`, and releases reserved pending days back to the employee's balance.
-- **FR-WF-04**: Final approval at Stage 3 deducts days from `used_days` and marks status as `Approved`.
+- **FR-WF-03**: Rejection halts the request, sets status to `Rejected`, and releases reserved pending days back to the employee's balance.
+- **FR-WF-04**: Approval deducts days from `used_days`, marks status as `Approved`, and is final: a second approval on a decided request is refused rather than deducting twice.
+- **FR-WF-05**: Self-approval is refused before the acting role is considered, which is why senior roles route away from the queue they own.
 
 ### 3.4 Dashboards & Reporting
 - **FR-DASH-01**: Employee Dashboard displaying balance breakdown (Annual, Sick, Casual, etc.) and application timeline.

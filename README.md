@@ -1,6 +1,6 @@
 # Leave Management System (LMS)
 
-A robust, multi-role PHP Leave Management System built with a modular component architecture (Header, Navbar, Sidebar, Footer, Layout), automated working days calculation engine, and a 3-tier sequential approval workflow (**Line Manager**, then **HR**, then **Executive / Boss**).
+A robust, multi-role PHP Leave Management System built with a modular component architecture (Header, Navbar, Sidebar, Footer, Layout), an automated working-days calculation engine, and a single-approval workflow: one approver decides a request and that decision is final, routed by the applicant's own role so nobody signs off on their own leave.
 
 ---
 
@@ -51,29 +51,29 @@ mv docs/manual.docx docs/08_USER_MANUAL.docx
 
 ## Supported Roles & Approval Pipeline
 
+One approval decides a request. Who gives it depends on who is asking, because
+nobody approves their own leave:
+
 ```
-[ Employee Applies ]
-        │
-        ▼
-[ Stage 1: Line Manager Review ] ──(Rejection)──► [ Rejected & Released ]
-        │ (Approved)
-        ▼
-[ Stage 2: HR Manager Review ]  ──(Rejection)──► [ Rejected & Released ]
-        │ (Approved)
-        ▼
-[ Stage 3: Executive / Boss Sign-Off ] ──(Rejection)──► [ Rejected & Released ]
-        │ (Approved)
-        ▼
-[ Status: APPROVED & Days Deducted ]
+[ Employee applies ]      ──►  Line manager decides   ──►  APPROVED, days deducted
+[ Line manager applies ]  ──►  HR decides             ──►  APPROVED, days deducted
+[ Executive applies ]     ──►  HR decides             ──►  APPROVED, days deducted
+[ HR applies ]            ──►  Executive decides      ──►  APPROVED, days deducted
+
+        any of them, rejected  ──►  REJECTED, reserved days released
 ```
+
+So the three approval screens are three queues holding three kinds of
+applicant, not three stages of one request. An administrator can act on any of
+them as a break-glass override, and the audit log records that it was them.
 
 | Role | Primary Responsibilities |
 |---|---|
 | **Employee** | Applies for leave, views personal entitlement balance, tracks live application progress. |
-| **Line Manager** | Reviews team leave applications, approves/rejects Stage 1 requests, views team calendar. |
-| **HR Manager** | Approves/rejects Stage 2 requests, manages employee leave allocations and public holiday calendar. |
-| **Executive / Boss** | Final authority for Stage 3 approvals, views high-level dashboard and company-wide reports. |
-| **System Admin** | Manages user accounts, departments, leave types, and audit logs. |
+| **Line Manager** | Decides their own team's leave - the whole decision, with nothing behind it - and sees the calendar for every department they approve for. |
+| **HR Manager** | Decides line managers' and executives' leave, manages allocations and the holiday calendar, and works from a company-wide overview rather than an inbox. |
+| **Executive / Boss** | Decides HR's leave, and has the same company-wide overview and reporting. |
+| **System Admin** | Manages user accounts, departments, leave types, and audit logs. Break-glass approver on any queue. |
 
 ---
 
@@ -107,24 +107,42 @@ request would take the team past its limit. Same wording as the approval queues,
 given to the person who can still move the dates. Nothing is blocked.
 
 **Notifications.** A bell with an unread count in both navigation bars.
-Applicants hear about submission, each stage cleared, approval, rejection (with
-remarks) and cancellation; approvers hear when a request reaches their queue or is
-withdrawn from it. Recipients are derived from the workflow, so reassigning a
-department's head redirects future notices. Notices are raised after each commit
-and every write is guarded, so a notification problem can never roll back an
-approval.
+Applicants hear about submission, the decision (with the approver's remarks) and
+cancellation, and are told who decides their request and that the decision is
+final; approvers hear when a request reaches their queue or is withdrawn from
+it, and are told that approving books the leave. Recipients are derived from the
+workflow, so reassigning a department's head redirects future notices. Notices
+are raised after each commit and every write is guarded, so a notification
+problem can never roll back an approval.
+
+**Who is away, company-wide.** The dashboard's *Away This Week* strip follows
+the scope each role already has elsewhere: an employee sees their own
+department, a line manager sees every department they approve for - one row each,
+so heading two teams shows both - and HR, executives and administrators see every
+department in the company with an away-today count. Only approved leave is
+counted; requests still awaiting a decision are shown apart as `+n`, the same
+distinction the calendar draws, because a day with one person off and two who
+have merely asked is not a day with three people away.
 
 The bell keeps itself current, polling `api/notifications_poll.php` once a minute
 so an approver sitting on their queue sees a request arrive without reloading. It
 stops while the tab is in the background, and never rearranges the list while the
 dropdown is open.
 
-**Email.** Every one of those notifications is also sent to the recipient's work
-address, which is the half that reaches people who are not signed in. Mail is
-queued rather than sent during the request: an approver pressing **Approve**
-should not wait on a mail server, and must not wait out a socket timeout when it
-cannot be reached. A worker drains the queue on a cron. See
-[Outgoing email](#outgoing-email) for setting it up; it is off until configured.
+**Email.** Notifications are also sent to the recipient's work address, which is
+the half that reaches people who are not signed in. Mail is queued rather than
+sent during the request: an approver pressing **Approve** should not wait on a
+mail server, and must not wait out a socket timeout when it cannot be reached. A
+worker drains the queue on a cron. See [Outgoing email](#outgoing-email) for
+setting it up; it is off until configured.
+
+One rule splits the channels: **email is for news about you, the bell and the
+screens are for work waiting on you.** HR decides every manager's and every
+executive's leave and the executive decides HR's, so a message per waiting
+request would fill the mailboxes of the two roles who can least afford to start
+ignoring their mail - to say something their queue and their company overview
+already show. Those two roles get no "awaiting your approval" email; everything
+about their own leave still reaches them, and line managers keep both.
 
 The shared engines are `helpers/LeaveCapacity.php` (who is away, and does that
 break cover), `helpers/Notifier.php` (who to tell, and what to say),
@@ -184,6 +202,8 @@ mysql -u root -p lms_db < migrations/003-decode-double-escaped-text.sql
 mysql -u root -p lms_db < migrations/004-login-attempts.sql
 mysql -u root -p lms_db < migrations/005-email-outbox.sql
 mysql -u root -p lms_db < migrations/006-zero-sick-and-unpaid-leave.sql
+mysql -u root -p lms_db < migrations/007-single-stage-approval.sql
+mysql -u root -p lms_db < migrations/008-emergency-leave.sql
 ```
 
 Each is safe to re-run and ends with a check query you can read to confirm it took.
@@ -196,12 +216,26 @@ Each is safe to re-run and ends with a check query you can read to confirm it to
 | `004-login-attempts` | Adds the `login_attempts` table behind the sign-in rate limit. |
 | `005-email-outbox` | Adds the `email_outbox` table that outgoing notification email is queued in. |
 | `006-zero-sick-and-unpaid-leave` | Withdraws the sick and unpaid leave allowance from everybody, and from the policy. A decision, not a repair - see below. |
+| `007-single-stage-approval` | Settles applications left in an HR or executive queue by the move to one approval. No schema change; see below. |
+| `008-emergency-leave` | Adds the Emergency Leave category, and the three `leave_types` columns behind it: which category's balance it spends, whether it may overdraw, and whether approvers are told it is urgent. |
 
 The portal keeps working ahead of each of these rather than failing. Until `002`
 the notification bell stays hidden and the calendar shows no coverage limits;
 until `004` sign-in simply is not rate limited; until `005` notifications appear
-in the bell and no email is queued. An installation is never locked out of itself
-because a migration has not run yet.
+in the bell and no email is queued; until `008` there is no emergency leave
+category and every category holds a balance of its own. An installation is never
+locked out of itself because a migration has not run yet.
+
+`007` is the one to read before applying, because it is the only migration that
+changes the state of leave people have already asked for. It approves the
+requests whose one remaining approver has already signed - an employee's request
+waiting at HR has had its line manager's decision, which is now the only one
+needed - and moves those days from pending to used. It prints exactly which
+applications that is before it writes anything. Take a dump first:
+
+```bash
+./tools/export_database.sh --dump-only
+```
 
 ### Local UAT environment
 
@@ -604,10 +638,21 @@ Each leave type carries its own policy, enforced server-side in
 | `requires_attachment` + `attachment_threshold_days` | Demand a document only once a request exceeds N working days. This replaces what was a hardcoded "sick leave over 2 days" rule |
 | `is_paid` | Paid or unpaid |
 | `is_active` | Retired types vanish from the apply form but stay in reports |
+| `deducts_from_type_id` | Spend another category's balance instead of holding one. Emergency Leave points at Annual Leave, so no separate allowance has to be allocated, watched or reconciled. Such a category is never seeded an entitlement row and cannot be allocated by hand |
+| `allow_negative_balance` | Let a request pass a balance it exceeds. Emergency leave may: the absence has already happened, so refusing it would make the register wrong rather than the balance right. A *missing* allocation is still refused - there would be nothing to deduct from |
+| `notify_as_urgent` | Lead the approver's notice and email with the category name, in the urgent colour, so an emergency is not lost among ordinary requests |
 
 Shipped defaults: Annual 7 days notice; Casual max 3 days per request with
 1 day notice; Sick no notice with a document over 2 days; Maternity and Unpaid
 whole days only, Unpaid needing 14 days notice.
+
+**Emergency Leave** is the one category with no allowance of its own. No notice
+is required, there is no cap on a single request and it may be backdated, so it
+can be used for something that has already happened; the days come off the
+person's Annual Leave and may take that balance negative, which the dashboard
+and HR's reports then show. It still needs its one approval - it is instant in
+what it permits, not in bypassing the approver - so the days sit as pending
+until then, and the approver's notice says it is an emergency.
 
 ### Withdrawing an allowance from everybody at once
 

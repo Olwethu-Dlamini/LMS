@@ -304,6 +304,104 @@ outbox safe to prune, and if the two ever disagree the outbox is the record.
 
 ---
 
+## 13. Collapsing the approval chain, and splitting the channels
+
+Added later, and the second entry of the kind section 12 describes: a decision
+recorded while the reasoning was still available rather than a mistake recovered
+from.
+
+Three approval stages became one. An employee's leave is decided by their line
+manager, a manager's and an executive's by HR, HR's by the executive, and that
+decision is final.
+
+### 13.1 Removing a stage is mostly a documentation problem
+
+The engine change was one function. `nextStageFor()` used to escalate and now
+returns approved, and because `processAction()` already settled the entitlement
+whenever the new status was approved, the deduction moved to the first approval
+on its own. Nothing else in the workflow needed touching.
+
+Everything else was words. Two navigation bars, three queue screens, the apply
+form, the history timeline, the dashboard cards, the audit log's stage labels,
+six notification titles, five documents and a user manual in three formats all
+described a request climbing three stages. None of it was wrong when it was
+written and all of it was wrong the moment the function changed.
+
+**The lesson is about where behaviour gets restated.** The routing rule lived in
+one place, which is why changing it was cheap; the *explanation* of the routing
+rule lived in about forty, which is what made the change expensive. Copy is
+duplicated logic that no test fails on.
+
+### 13.2 The migration that settles what the old rule left behind
+
+Changing a rule does not change the rows already under it. Applications sitting
+in an HR or executive queue had, under the new rule, already had their only
+approval - an employee's request at HR has its line manager's decision - so
+`007` approves them and moves their days from pending to used.
+
+Two things worth keeping from writing it. It prints exactly which applications
+it will settle **before** it writes anything, because "one morning of a live
+system" in this document is what a migration nobody read looks like. And it
+writes no audit log rows: `approver_id` is `NOT NULL`, there is no system
+account, and attributing a settlement to a person who did not decide it would
+put a false entry in the one table meant to be trustworthy. A gap in the trail
+is better than a lie in it.
+
+### 13.3 An approver who was one of three is now the whole decision
+
+The technical change is subtractive and the human change is not. A line manager
+who has been approving for months on the understanding that HR would catch
+anything wrong now books the leave outright.
+
+Nothing in the old screens said so, because there was nothing to say. So the
+review modal, the button, the notification and the email all now say it: your
+decision is final, approving books the leave and deducts the days. **When you
+remove a safety net, say so to the person who was standing on it.**
+
+### 13.4 Email is for news; screens are for queues
+
+HR decides every manager's and every executive's leave, and the executive
+decides HR's. Under the old chain both roles received queue mail in proportion
+to how much leave the *whole company* took, which is exactly the shape that
+teaches somebody to stop reading their mail.
+
+So those two roles stopped being emailed queue notices, and the dashboard grew
+the company-wide view they should have had all along - previously they saw one
+department, and an HR manager with no department saw the words "you are not
+assigned to a department", which is the emptiest screen in the system shown to
+the person most responsible for leave.
+
+The rule is one line - email is for news about you, the bell and the screens are
+for work waiting on you - and it lives in the single function both channels pass
+through, so it cannot be true of one and not the other.
+
+The cost is honest and worth writing down: **a suppressed notice leaves no
+trace.** Nothing is queued, so nothing appears in `email_outbox`, and "why did
+HR not get an email" is answerable only from the rule. A notification row with
+no outbox row is the evidence.
+
+### 13.5 A category that spends another category's balance
+
+Emergency leave has no allowance. Giving it one would have meant a second
+balance per person to allocate, watch and reconcile, and a dashboard tile that
+always read zero; instead `deducts_from_type_id` points it at annual leave and
+every reservation, deduction, release and restoration follows the pointer.
+
+It is also allowed to take that balance negative, which sounds like a bug and is
+the point: the absence has already happened by the time anybody records it, so
+refusing the request does not protect the balance, it makes the register deny
+something that took place. A *missing* allocation is still refused, because
+there is then no row to deduct from at all.
+
+The decision that keeps it honest is that both behaviours are columns on
+`leave_types`, edited in the admin console, rather than a check for the code
+`EMG` in PHP. Policy on this system lives in the database. A hardcoded code
+would have been the one category whose rules nobody could see where every other
+category's rules are, and it would have silently stopped working the day
+somebody renamed it.
+
+---
+
 ## What this cost
 
 One morning of a live system serving redirects to `localhost`, and a rate limiter

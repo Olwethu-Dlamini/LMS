@@ -225,6 +225,23 @@ Every notification passes through `Notifier::push()`, which writes the bell row
 and queues the email. Because there is exactly one such place, the two channels
 cannot drift apart and start telling different stories.
 
+That one place is also where they are allowed to differ, by a single rule:
+
+> **Email is for news about you. The bell and the screens are for work waiting
+> on you.**
+
+`Notifier::shouldEmail()` is that rule, pure and asserted in the test suite. HR
+decides every line manager's and every executive's leave, and the executive
+decides HR's, so a message per waiting request would fill the mailboxes of the
+two roles least able to start ignoring their mail - to say what their queue and
+the company-wide overview on their dashboard already show. Those two roles get
+no `leave_awaiting_you` email. Everything about their own leave still reaches
+them, and line managers keep both channels, because employee leave is the bulk
+of all requests and nothing else would push them.
+
+A suppressed notice writes no `email_outbox` row at all, so a bell row with no
+outbox row is evidence the rule applied rather than that the queue is broken.
+
 The channels differ only in format, and for a reason. The bell gets a single
 short line, because the navbar dropdown has room for two rows of small text. The
 email gets the same facts as a labelled table, because an approver working
@@ -267,6 +284,8 @@ twice.
 | Failure | Effect |
 |---|---|
 | Migration 005 not applied | Notifications work, nothing is queued. Logged |
+| Migration 008 not applied | Every category holds its own balance, nothing may overdraw, no category is urgent. `getLeaveType()` defaults the three columns and `sourcingAvailable()` keeps the apply form and the seeding filters off them |
+| Recipient is HR or an executive | Queue notices reach the bell and the screens, not their inbox. By design, not a failure |
 | `MAIL_ENABLED` false | Nothing queued. Bell unaffected |
 | Recipient has no usable address | That one skipped and logged |
 | Mail server unreachable | Messages delayed and retried, never lost |

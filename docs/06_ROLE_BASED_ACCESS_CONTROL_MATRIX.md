@@ -11,16 +11,17 @@ The table below details permissions granted to each of the 5 roles across system
 |---|---|:---:|:---:|:---:|:---:|:---:|
 | **Authentication** | Login / Logout | ✅ | ✅ | ✅ | ✅ | ✅ |
 | | Edit Own Profile | ✅ | ✅ | ✅ | ✅ | ✅ |
-| **Leave Request** | View Own Balance | ✅ | ✅ | ✅ | ✅ | ✅ |
-| | Apply for Leave | ✅ | ✅ | ✅ | ✅ | ✅ |
+| **Leave Request** | View Own Balance | ✅ | ✅ | ✅ | ✅ | ❌ |
+| | Apply for Leave | ✅ | ✅ | ✅ | ✅ | ❌ |
 | | Cancel Pending Request | ✅ | ✅ | ✅ | ✅ | ✅ |
 | | View Own Application History | ✅ | ✅ | ✅ | ✅ | ✅ |
-| **Stage 1 Approval** | View Direct Team Requests | ❌ | ✅ | ❌ | ❌ | ✅ |
-| | Approve / Reject Stage 1 | ❌ | ✅ | ❌ | ❌ | ✅ |
-| **Stage 2 Approval** | View All Company Requests | ❌ | ❌ | ✅ | ❌ | ✅ |
-| | Approve / Reject Stage 2 | ❌ | ❌ | ✅ | ❌ | ✅ |
-| **Stage 3 Approval** | View Executive Queue | ❌ | ❌ | ❌ | ✅ | ✅ |
-| | Approve / Reject Stage 3 | ❌ | ❌ | ❌ | ✅ | ✅ |
+| **Employees' leave** | View own team's requests | ❌ | ✅ | ❌ | ❌ | ✅ |
+| | Decide them (final) | ❌ | ✅ | ❌ | ❌ | ✅ |
+| **Managers' & executives' leave** | View that queue | ❌ | ❌ | ✅ | ❌ | ✅ |
+| | Decide them (final) | ❌ | ❌ | ✅ | ❌ | ✅ |
+| **HR's own leave** | View that queue | ❌ | ❌ | ❌ | ✅ | ✅ |
+| | Decide them (final) | ❌ | ❌ | ❌ | ✅ | ✅ |
+| **Company leave overview** | Every department's absences | ❌ | Own scope | ✅ | ✅ | ✅ |
 | **HR Management** | Manage Leave Allocations | ❌ | ❌ | ✅ | ❌ | ✅ |
 | | Manage Holiday Calendar | ❌ | ❌ | ✅ | ❌ | ✅ |
 | | Generate Payroll Reports | ❌ | ❌ | ✅ | ✅ | ✅ |
@@ -34,6 +35,10 @@ The table below details permissions granted to each of the 5 roles across system
 ## 2. Session Authorization Middleware Specification
 
 All protected routes execute RBAC validation functions defined in `includes/functions.php`:
+
+Note that an administrator holds no leave entitlement and cannot apply, which is
+why the two rows above are ❌ for that role: `require_staff()` sends them to the
+admin console instead of the leave screens.
 
 ```php
 function check_auth(): void {
