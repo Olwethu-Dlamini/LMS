@@ -730,25 +730,25 @@ hr { border-top: 1px solid var(--ri-grey-line); }
 .ri-alloc-main { white-space: nowrap; }
 .ri-alloc-rest { line-height: 1.7; }
 
-/* a day count: a number you can click, not a control you have to find */
+/* A day count. Plain text that happens to be clickable, so the table reads as
+   data; the pill buttons are the visible way to act on it. */
 .ri-alloc-figure {
   border: none; background: none; padding: 0; font-family: inherit; cursor: pointer;
   font-size: 15px; font-weight: 700; color: var(--ri-navy);
-  font-variant-numeric: tabular-nums; border-bottom: 1px dotted transparent;
+  font-variant-numeric: tabular-nums;
 }
-.ri-alloc-figure:hover { color: var(--ri-teal); border-bottom-color: currentColor; }
+.ri-alloc-figure:hover { color: var(--ri-teal); }
 .ri-alloc-figure:focus-visible { outline: 2px solid var(--ri-blue); outline-offset: 2px; }
 .ri-alloc-avail .ri-alloc-figure { font-size: 17px; }
 
-.ri-alloc-togglecell { white-space: nowrap; width: 150px; }
-.ri-alloc-toggle {
-  border: none; background: none; padding: 2px 0; font-family: inherit; cursor: pointer;
-  font-size: 12px; font-weight: 600; color: var(--ri-teal);
+/* The row's drop-down toggle is one of the theme's pill buttons; only the
+   chevron needs saying, because .btn puts its icon spacing on the left. */
+.ri-alloc-togglecell { white-space: nowrap; width: 160px; }
+.ri-alloc-toggle i {
+  margin-right: 0; margin-left: 6px; font-size: 9px;
+  display: inline-block; transition: transform .15s;
 }
-.ri-alloc-toggle:hover { color: var(--ri-navy); text-decoration: underline; }
-.ri-alloc-toggle i { margin-left: 5px; font-size: 9px; display: inline-block; transition: transform .15s; }
 .ri-alloc-toggle.ri-alloc-open i { transform: rotate(180deg); }
-.ri-alloc-toggle:focus-visible { outline: 2px solid var(--ri-blue); outline-offset: 2px; }
 
 /* the drop-down: the same figures as the original page, for one person only */
 .ri-alloc-detailrow > td { padding: 0 0 0 26px !important; border-top: none !important; }
@@ -760,12 +760,6 @@ hr { border-top: 1px solid var(--ri-grey-line); }
 }
 .ri-alloc-sub td { border-top: none; color: var(--ri-navy); font-variant-numeric: tabular-nums; }
 .ri-alloc-sub tr:last-child td { padding-bottom: 12px; }
-.ri-alloc-change {
-  border: none; background: none; padding: 0; font-family: inherit; cursor: pointer;
-  font-size: 12px; font-weight: 600; color: var(--ri-blue);
-}
-.ri-alloc-change:hover { color: var(--ri-teal); text-decoration: underline; }
-.ri-alloc-change:focus-visible { outline: 2px solid var(--ri-blue); outline-offset: 2px; }
 
 /* per-department utilisation rows */
 .ri-util-row { padding: 10px 0; border-bottom: 1px solid var(--ri-grey-line); }

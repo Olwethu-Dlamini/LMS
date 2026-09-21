@@ -430,7 +430,7 @@ ob_start();
                         </td>
 
                         <td class="text-right ri-alloc-togglecell">
-                            <button type="button" class="ri-alloc-toggle"
+                            <button type="button" class="btn btn-xs btn-outline-secondary ri-alloc-toggle"
                                     data-alloc-toggle="<?php echo $detailId; ?>"
                                     aria-expanded="false" aria-controls="<?php echo $detailId; ?>">
                                 <span class="ri-alloc-toggle-label">All categories</span>
@@ -465,10 +465,13 @@ ob_start();
                                         <td class="text-right"><?php echo $cell === null ? '&mdash;' : number_format($cell['used'], 1); ?></td>
                                         <td class="text-right"><?php echo $cell === null ? '&mdash;' : number_format($cell['pending'], 1); ?></td>
                                         <td class="text-right">
-                                            <button type="button" class="ri-alloc-change" data-alloc-open
+                                            <button type="button"
+                                                    class="btn btn-xs <?php echo $cell === null ? 'btn-outline-info' : 'btn-outline-primary'; ?> font-weight-bold"
+                                                    data-alloc-open
                                                     data-user="<?php echo (int)$userId; ?>"
                                                     data-type="<?php echo (int)$typeId; ?>"
                                                     data-total="<?php echo $cell === null ? '' : number_format($cell['total'], 1, '.', ''); ?>">
+                                                <i class="<?php echo $cell === null ? 'ti-plus' : 'ti-pencil'; ?>"></i>
                                                 <?php echo $cell === null ? 'Allocate' : 'Change'; ?>
                                             </button>
                                         </td>
