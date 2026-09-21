@@ -98,10 +98,16 @@ if ($weekDept !== null) {
         $weekWarnings[$warning['date']] = $warning['state'];
     }
     foreach ($weekAbsences as $date => $absences) {
+        // Approved and requested are counted apart, the way the team calendar
+        // has always counted them. This widget used to fold them together, so a
+        // day with one person off and two who had only asked read as "3 away"
+        // here and "1/8" on the calendar, from the same rows.
+        [$dayApproved, $dayPending] = LeaveCapacity::splitByStatus($absences);
         $weekDays[] = [
-            'date'      => $date,
-            'absences'  => $absences,
-            'state'     => $weekWarnings[$date] ?? null,
+            'date'     => $date,
+            'approved' => $dayApproved,
+            'pending'  => $dayPending,
+            'state'    => $weekWarnings[$date] ?? null,
         ];
     }
 }
@@ -250,10 +256,22 @@ ob_start();
                                     <span><?php echo htmlspecialchars(date('j', strtotime($day['date']))); ?></span>
                                 </div>
                                 <div class="ri-week-count">
-                                    <?php echo count($day['absences']); ?>/<?php echo (int)$weekHeadcount; ?>
+                                    <?php echo count($day['approved']); ?>/<?php echo (int)$weekHeadcount; ?>
+                                    <?php if (!empty($day['pending'])): ?>
+                                        <span class="ri-week-pending"
+                                              title="<?php echo count($day['pending']); ?> awaiting a decision, not counted">
+                                            +<?php echo count($day['pending']); ?>
+                                        </span>
+                                    <?php endif; ?>
                                 </div>
-                                <?php foreach ($day['absences'] as $absence): ?>
-                                    <div class="ri-week-who" title="<?php echo htmlspecialchars($absence['name']); ?>">
+                                <?php foreach ($day['approved'] as $absence): ?>
+                                    <div class="ri-week-who" title="<?php echo htmlspecialchars($absence['name']); ?> - approved">
+                                        <?php echo htmlspecialchars($absence['initials']); ?>
+                                    </div>
+                                <?php endforeach; ?>
+                                <?php foreach ($day['pending'] as $absence): ?>
+                                    <div class="ri-week-who ri-week-who-pending"
+                                         title="<?php echo htmlspecialchars($absence['name']); ?> - requested, not yet approved">
                                         <?php echo htmlspecialchars($absence['initials']); ?>
                                     </div>
                                 <?php endforeach; ?>
@@ -261,10 +279,14 @@ ob_start();
                         <?php endforeach; ?>
                     </div>
                     <div class="small text-muted mt-2">
+                        The count is people <strong>approved</strong> off out of the team;
+                        <span class="ri-week-pending">+n</span> is requests still awaiting a decision,
+                        which are never counted.
                         <?php if ($weekLimit === null): ?>
                             No absence limit is configured for this department.
                         <?php else: ?>
-                            Limit <?php echo (int)$weekLimit; ?> away at a time. Amber days sit on it, red days pass it.
+                            Limit <?php echo (int)$weekLimit; ?> away at a time, counting requests too:
+                            amber days sit on it, red days pass it.
                         <?php endif; ?>
                     </div>
                 <?php endif; ?>

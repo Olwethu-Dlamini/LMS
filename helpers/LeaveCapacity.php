@@ -193,6 +193,38 @@ class LeaveCapacity {
     }
 
     /**
+     * Split a day's absences into settled and still to be decided.
+     *
+     * Shared rather than private to one screen, because the calendar and the
+     * dashboard were drawing the same day from the same data and disagreeing
+     * about it: the calendar counted only approved leave, the dashboard counted
+     * everything, and the same Tuesday read "1/8" on one page and "3 away" on
+     * the other. A rota cannot be planned from a number that might be one
+     * person off and two who have merely asked.
+     *
+     * Note this is not the rule the coverage warnings use. Those deliberately
+     * count pending requests too, because an approver deciding today needs to
+     * see what is already in the queue. What is booked and what is proposed are
+     * told apart for display; for judging cover they both count.
+     *
+     * Pure.
+     *
+     * @return array{0:array, 1:array} [approved, awaiting a decision]
+     */
+    public static function splitByStatus(array $absences): array {
+        $approved = [];
+        $pending  = [];
+        foreach ($absences as $absence) {
+            if (($absence['status'] ?? '') === STATUS_APPROVED) {
+                $approved[] = $absence;
+            } else {
+                $pending[] = $absence;
+            }
+        }
+        return [$approved, $pending];
+    }
+
+    /**
      * The warnings from capacityWarnings() that are outright breaches.
      */
     public static function breachesOnly(array $warnings): array {

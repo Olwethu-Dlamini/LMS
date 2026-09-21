@@ -75,32 +75,15 @@ if ($selectedDept !== null) {
     $headcount = $capacity->headcounts([$selectedDept])[$selectedDept] ?? 0;
 }
 
-/**
- * Split a day's absences into settled and still-to-be-decided.
- *
- * The two were counted as one, so a day showing "3 away" might have been one
- * person actually off and two who had merely asked. A rota cannot be read that
- * way: what is booked and what is proposed have to be told apart at a glance.
- */
-function split_by_status(array $absences): array {
-    $approved = [];
-    $pending  = [];
-    foreach ($absences as $absence) {
-        if (($absence['status'] ?? '') === STATUS_APPROVED) {
-            $approved[] = $absence;
-        } else {
-            $pending[] = $absence;
-        }
-    }
-    return [$approved, $pending];
-}
-
+// The approved/pending split lives in LeaveCapacity, so this page and the
+// dashboard cannot disagree about what "away" means.
+//
 // Month totals for the summary strip, counting people rather than requests -
 // somebody off twice in a month is still one person short from the rota.
 $peopleApproved = [];
 $peoplePending  = [];
 foreach ($byDay as $absences) {
-    [$approved, $pending] = split_by_status($absences);
+    [$approved, $pending] = LeaveCapacity::splitByStatus($absences);
     foreach ($approved as $a) { $peopleApproved[(int)$a['user_id']] = true; }
     foreach ($pending as $p)  { $peoplePending[(int)$p['user_id']]  = true; }
 }
@@ -236,7 +219,7 @@ ob_start();
                         $isHoliday  = isset($holidays[$date]);
                         $isWorkday  = !$isWeekend && !$isHoliday;
                         $absences   = $byDay[$date] ?? [];
-                        [$dayApproved, $dayPending] = split_by_status($absences);
+                        [$dayApproved, $dayPending] = LeaveCapacity::splitByStatus($absences);
                         $awayCount    = count($dayApproved);
                         $pendingCount = count($dayPending);
 

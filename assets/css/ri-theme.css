@@ -696,6 +696,14 @@ hr { border-top: 1px solid var(--ri-grey-line); }
   background: var(--ri-teal); border-radius: var(--ri-pill);
   padding: 1px 6px; margin: 0 3px 3px 0;
 }
+/* Requested, not yet approved: outlined rather than filled, so a glance tells
+   what is booked from what is only asked for - the same distinction the team
+   calendar draws with its dashed chips. */
+.ri-week-who-pending {
+  background: transparent; color: var(--ri-warning);
+  border: 1px dashed #d8b271; font-style: italic;
+}
+.ri-week-pending { color: var(--ri-warning); font-weight: 700; }
 
 /* per-department utilisation rows */
 .ri-util-row { padding: 10px 0; border-bottom: 1px solid var(--ri-grey-line); }
