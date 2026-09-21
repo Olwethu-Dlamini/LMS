@@ -714,6 +714,37 @@ hr { border-top: 1px solid var(--ri-grey-line); }
   gap: 10px; flex-wrap: wrap; margin-bottom: 6px;
 }
 
+/* ---------- HR allocations: one row per person, one column per category ---- */
+.ri-alloc-toolbar {
+  display: flex; justify-content: space-between; align-items: center;
+  gap: 14px; flex-wrap: wrap;
+}
+.ri-alloc-controls { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.ri-alloc-controls input[type="search"] { min-width: 230px; }
+
+.ri-alloc th { white-space: nowrap; }
+.ri-alloc-who { min-width: 190px; }
+.ri-alloc-cell { vertical-align: middle; padding: 6px 10px !important; }
+
+/* Each figure is a button, because every one of them is an edit waiting to
+   happen: clicking it opens the allocation form already filled in. Styled flat
+   so the table still reads as a table rather than a wall of controls. */
+.ri-alloc-figure, .ri-alloc-none {
+  display: block; width: 100%; border: 1px solid transparent; border-radius: 8px;
+  background: transparent; padding: 5px 8px; cursor: pointer; text-align: center;
+  font-family: inherit; transition: background .12s, border-color .12s;
+}
+.ri-alloc-figure:hover, .ri-alloc-none:hover { background: #f2f6fa; border-color: var(--ri-grey-line); }
+.ri-alloc-avail { display: block; font-size: 16px; font-weight: 700; line-height: 1.15; }
+.ri-alloc-detail { display: block; font-size: 10.5px; color: var(--ri-muted); }
+
+.ri-alloc-ok    .ri-alloc-avail { color: var(--ri-teal); }
+.ri-alloc-spent .ri-alloc-avail { color: var(--ri-warning); }
+.ri-alloc-zero  .ri-alloc-avail { color: var(--ri-muted-soft); }
+.ri-alloc-neg   .ri-alloc-avail { color: var(--ri-danger); }
+.ri-alloc-neg { background: var(--ri-danger-bg); border-color: #f2c4c0; }
+.ri-alloc-none { color: var(--ri-muted-soft); font-size: 15px; }
+
 /* per-department utilisation rows */
 .ri-util-row { padding: 10px 0; border-bottom: 1px solid var(--ri-grey-line); }
 .ri-util-row:last-of-type { border-bottom: none; }
