@@ -145,7 +145,7 @@ try {
         $userId,
         null,
         Notifier::TYPE_AWAITING,
-        '[outbox test] Leave request awaiting your Stage 1 approval',
+        '[outbox test] Leave request awaiting your approval',
         'A colleague - LR-TEST, 3 working day(s)',
         'http://localhost:8000/modules/manager/approvals.php'
     );

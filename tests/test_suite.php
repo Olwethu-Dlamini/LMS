@@ -71,6 +71,12 @@ class ArrayMockPDO extends PDO {
         'attachment_threshold_days' => 0.0,
         'is_active'                 => 1,
     ];
+    /**
+     * Extra leave types, by id, for the tests that exercise one category
+     * spending another's balance. Anything not listed here falls back to
+     * $leaveType, which is what every other test expects to be handed.
+     */
+    public array $leaveTypes = [];
     /** user_id => role name, mirroring the seeded accounts in schema.sql */
     public array $roles = [
         1 => 'admin',
@@ -216,13 +222,17 @@ class ArrayMockPDO extends PDO {
                     if (!$app) {
                         return false;
                     }
+                    $type = $this->pdo->leaveTypes[(int)($app['leave_type_id'] ?? 0)]
+                        ?? $this->pdo->leaveType;
                     return $app + [
-                        'leave_name'      => 'Annual Leave',
+                        'leave_name'      => (string)($type['name'] ?? 'Annual Leave'),
                         'first_name'      => 'Test',
                         'last_name'       => 'Applicant',
                         'manager_id'      => 4,
                         'department_id'   => 1,
                         'line_manager_id' => 4,
+                        // Notifier reads this to say who decides the request.
+                        'applicant_role'  => $this->pdo->roles[(int)($app['user_id'] ?? 0)] ?? ROLE_EMPLOYEE,
                     ];
                 }
                 if (stripos($this->query, 'FROM leave_applications') !== false) {
@@ -234,7 +244,8 @@ class ArrayMockPDO extends PDO {
                     return $this->pdo->entitlements[$key] ?? false;
                 }
                 if (stripos($this->query, 'FROM leave_types') !== false) {
-                    return $this->pdo->leaveType;
+                    $typeId = (int)($this->lastParams['id'] ?? 0);
+                    return $this->pdo->leaveTypes[$typeId] ?? $this->pdo->leaveType;
                 }
                 if (stripos($this->query, 'JOIN roles') !== false) {
                     $uid = (int)($this->lastParams['id'] ?? 0);
@@ -423,7 +434,7 @@ $tester->assert(
 
 $mockDb->leaveType = $noticeType;
 
-echo "\n--- 3. Testing 3-Tier Approval Workflow Engine ---\n";
+echo "\n--- 3. Testing Single-Stage Approval Workflow ---\n";
 $workflow = new ApprovalWorkflow($mockDb);
 
 // A. Submit Application
@@ -457,17 +468,22 @@ $mockDb->entitlements[$raceKey] = ['total_days' => 20.0, 'used_days' => 0.0, 'pe
 $selfApproveRes = $workflow->processAction($appId, 5, 'manager', 'approve', 'Self approve attempt');
 $tester->assert($selfApproveRes['success'] === false && strpos($selfApproveRes['error'], 'Self-approval') !== false, "Self Approval Restriction Blocked", "Got " . ($selfApproveRes['error'] ?? 'success'));
 
-// C. Stage 1 Approval by Line Manager (User 4 - David)
-$stage1 = $workflow->processAction($appId, 4, 'manager', 'approve', 'Manager approved');
-$tester->assert($stage1['success'] === true && $stage1['new_status'] === STATUS_PENDING_HR, "Stage 1 Manager Approval -> Transition to pending_hr");
+// C. The line manager's approval is the whole decision.
+$decision = $workflow->processAction($appId, 4, 'manager', 'approve', 'Manager approved');
+$tester->assert(
+    $decision['success'] === true && $decision['new_status'] === STATUS_APPROVED,
+    "A line manager's approval approves an employee's request outright",
+    "Got " . ($decision['new_status'] ?? $decision['error'])
+);
 
-// D. Stage 2 Approval by HR (User 3 - Sarah)
-$stage2 = $workflow->processAction($appId, 3, 'hr', 'approve', 'HR approved');
-$tester->assert($stage2['success'] === true && $stage2['new_status'] === STATUS_PENDING_EXECUTIVE, "Stage 2 HR Approval -> Transition to pending_executive");
-
-// E. Stage 3 Approval by Executive (User 2 - Boss)
-$stage3 = $workflow->processAction($appId, 2, 'executive', 'approve', 'Final boss signoff');
-$tester->assert($stage3['success'] === true && $stage3['new_status'] === STATUS_APPROVED, "Stage 3 Executive Approval -> Status APPROVED");
+// D. And there is nothing left for anybody else to act on. This is what stops
+//    a second approval deducting the days twice.
+$second = $workflow->processAction($appId, 3, 'hr', 'approve', 'A second opinion nobody asked for');
+$tester->assert(
+    $second['success'] === false && strpos($second['error'], 'already finalized') !== false,
+    "A second approval on a decided request is refused, not counted again",
+    $second['error'] ?? 'succeeded'
+);
 
 // Check finalized entitlement balance (pending_days = 0, used_days = 5)
 $entFinal = $mockDb->entitlements[$entKey];
@@ -560,17 +576,23 @@ try {
 }
 $tester->assert($adminBlocked, "Admin cannot apply for leave");
 
-// HR sign-off is terminal for an executive, intermediate for everyone else.
-$tester->assert(
-    ApprovalWorkflow::nextStageFor(ROLE_EXECUTIVE, STATUS_PENDING_HR) === [STATUS_APPROVED, 'none'],
-    "HR approval is FINAL on an executive's own leave"
-);
-$tester->assert(
-    ApprovalWorkflow::nextStageFor(ROLE_MANAGER, STATUS_PENDING_HR) === [STATUS_PENDING_EXECUTIVE, ROLE_EXECUTIVE],
-    "HR approval escalates a manager's leave to Stage 3"
-);
+// Every approval is terminal, whoever gave it and whichever queue it sat in.
+foreach ([STATUS_PENDING_MANAGER, STATUS_PENDING_HR, STATUS_PENDING_EXECUTIVE] as $pendingStatus) {
+    $tester->assert(
+        ApprovalWorkflow::nextStageFor($pendingStatus) === [STATUS_APPROVED, 'none'],
+        "An approval at {$pendingStatus} approves the request outright"
+    );
+}
 
-echo "\n--- 6. Manager Leave End-to-End (deadlock regression) ---\n";
+$refusedTwice = false;
+try {
+    ApprovalWorkflow::nextStageFor(STATUS_APPROVED);
+} catch (Exception $e) {
+    $refusedTwice = strpos($e->getMessage(), 'already finalized') !== false;
+}
+$tester->assert($refusedTwice, "A decided request cannot be approved a second time");
+
+echo "\n--- 6. Manager Leave End-to-End (never queues behind itself) ---\n";
 $mgrStart = date('Y-m-d', strtotime('monday +9 weeks'));
 $mgrEnd   = date('Y-m-d', strtotime($mgrStart . ' +2 days'));
 $mgrKey   = '4_1_' . date('Y', strtotime($mgrStart));
@@ -584,18 +606,11 @@ $tester->assert(
     "Got " . ($mgrSub['status'] ?? 'n/a')
 );
 
-$mgrStage2 = $workflow->processAction($mgrAppId, 3, 'hr', 'approve', 'HR ok');
+$mgrDecision = $workflow->processAction($mgrAppId, 3, 'hr', 'approve', 'HR ok');
 $tester->assert(
-    $mgrStage2['success'] === true && $mgrStage2['new_status'] === STATUS_PENDING_EXECUTIVE,
-    "Manager leave: HR approval -> Stage 3 Executive",
-    "Got " . ($mgrStage2['new_status'] ?? $mgrStage2['error'])
-);
-
-$mgrStage3 = $workflow->processAction($mgrAppId, 2, 'executive', 'approve', 'Boss ok');
-$tester->assert(
-    $mgrStage3['success'] === true && $mgrStage3['new_status'] === STATUS_APPROVED,
-    "Manager leave: Executive approval -> APPROVED",
-    "Got " . ($mgrStage3['new_status'] ?? $mgrStage3['error'])
+    $mgrDecision['success'] === true && $mgrDecision['new_status'] === STATUS_APPROVED,
+    "Manager leave: HR's approval decides it, with no executive stage behind it",
+    "Got " . ($mgrDecision['new_status'] ?? $mgrDecision['error'])
 );
 $tester->assert(
     (float)$mockDb->entitlements[$mgrKey]['used_days'] === 3.0
@@ -631,14 +646,25 @@ $tester->assert(
     "Used: {$mockDb->entitlements[$exKey]['used_days']}, Pending: {$mockDb->entitlements[$exKey]['pending_days']}"
 );
 
-echo "\n--- 8. Testing Skipped-Stage Notices ---\n";
+echo "\n--- 8. Testing Who Decides A Request ---\n";
 $tester->assert(
-    ApprovalWorkflow::skippedStagesFor(ROLE_EMPLOYEE) === [],
-    "Employees skip no stages"
+    ApprovalWorkflow::deciderLabelFor(ROLE_EMPLOYEE) === 'your line manager',
+    "An employee is told their line manager decides it",
+    ApprovalWorkflow::deciderLabelFor(ROLE_EMPLOYEE)
 );
 $tester->assert(
-    count(ApprovalWorkflow::skippedStagesFor(ROLE_HR)) === 2,
-    "HR is shown two skipped stages"
+    ApprovalWorkflow::deciderLabelFor(ROLE_MANAGER) === 'HR'
+    && ApprovalWorkflow::deciderLabelFor(ROLE_EXECUTIVE) === 'HR',
+    "A manager's and an executive's own leave is decided by HR"
+);
+$tester->assert(
+    ApprovalWorkflow::deciderLabelFor(ROLE_HR) === 'the Executive',
+    "HR's own leave is decided by the executive",
+    ApprovalWorkflow::deciderLabelFor(ROLE_HR)
+);
+$tester->assert(
+    ApprovalWorkflow::deciderLabelFor('something-unknown') === 'your line manager',
+    "An unknown role falls back to the line manager route, as the routing does"
 );
 
 echo "\n--- 9. Testing Auto-Assigned Employee IDs ---\n";
@@ -787,17 +813,26 @@ $tester->assert(
     "A rejection is reported as a rejection"
 );
 $tester->assert(
-    Notifier::outcomeFor('approve', STATUS_APPROVED)[1] === 'Your leave request is fully approved',
-    "Final approval is announced as fully approved"
+    Notifier::outcomeFor('approve', STATUS_APPROVED)[1] === 'Your leave request is approved',
+    "An approval is announced as approved, without the 'fully' that meant nothing once there is one stage",
+    Notifier::outcomeFor('approve', STATUS_APPROVED)[1]
 );
 $tester->assert(
-    Notifier::outcomeFor('approve', STATUS_PENDING_HR)[0] === Notifier::TYPE_ADVANCED,
-    "A Stage 1 approval reads as progress, not as approval"
-);
-$tester->assert(
-    strpos(Notifier::awaitingTitle(STATUS_PENDING_EXECUTIVE), 'Stage 3') !== false,
-    "An approver is told which stage is waiting on them",
+    Notifier::awaitingTitle(STATUS_PENDING_MANAGER) === 'Leave request awaiting your approval'
+    && strpos(Notifier::awaitingTitle(STATUS_PENDING_EXECUTIVE), 'sign-off') !== false,
+    "An approver is told a request waits on them, with no stage number",
     Notifier::awaitingTitle(STATUS_PENDING_EXECUTIVE)
+);
+$tester->assert(
+    Notifier::awaitingTitle(STATUS_PENDING_MANAGER, 'Emergency Leave')
+        === 'Emergency Leave request awaiting your approval',
+    "An urgent category leads the title, so a queue can be triaged from the bell",
+    Notifier::awaitingTitle(STATUS_PENDING_MANAGER, 'Emergency Leave')
+);
+$tester->assert(
+    Notifier::TYPE_ADVANCED === 'leave_advanced'
+    && Notifier::outcomeFor('approve', 'something_unexpected')[0] === Notifier::TYPE_ADVANCED,
+    "The retired stage-transition type is kept, so notifications stored under it still render"
 );
 $tester->assert(
     strpos(Notifier::describe([
@@ -820,8 +855,8 @@ $tester->assert(
     "A single half-day reads as one date, not a range"
 );
 
-// End to end: an employee's request notifies the applicant and the Stage 1
-// approver, and the Stage 1 approval then notifies HR.
+// End to end: an employee's request notifies the applicant and the approver who
+// decides it, and the approval then notifies the applicant and nobody else.
 $notifyDb = new ArrayMockPDO();
 $notifyFlow = new ApprovalWorkflow($notifyDb);
 $notifyDb->entitlements['5_1_2026'] = ['total_days' => 20.0, 'used_days' => 0.0, 'pending_days' => 0.0];
@@ -837,8 +872,19 @@ $tester->assert(
 );
 $tester->assert(
     in_array(4, $recipients, true) && in_array(Notifier::TYPE_AWAITING, $types, true),
-    "Submitting puts the request in front of the Stage 1 approver",
+    "Submitting puts the request in front of the approver who decides it",
     json_encode($recipients)
+);
+$approverToldItIsFinal = false;
+foreach ($notifyDb->notifications as $notice) {
+    if ((int)$notice['user_id'] === 4 && strpos((string)$notice['body'], 'final') !== false) {
+        $approverToldItIsFinal = true;
+    }
+}
+$tester->assert(
+    $approverToldItIsFinal,
+    "The approver is told their decision is final, which is what changed for them",
+    json_encode(array_column($notifyDb->notifications, 'body'))
 );
 $tester->assert(
     !in_array(3, $recipients, true) && !in_array(2, $recipients, true),
@@ -852,18 +898,29 @@ $afterRecipients = array_column($notifyDb->notifications, 'user_id');
 $afterTitles = array_column($notifyDb->notifications, 'title');
 $tester->assert(
     $stage1['success'] === true && in_array(5, $afterRecipients, true),
-    "An approval tells the applicant their request moved",
+    "An approval tells the applicant the decision",
     json_encode($afterTitles)
 );
 $tester->assert(
-    in_array(3, $afterRecipients, true),
-    "An approval tells the next stage the request has arrived",
+    !in_array(3, $afterRecipients, true) && !in_array(2, $afterRecipients, true),
+    "An approval tells nobody downstream, because there is no downstream",
     json_encode($afterRecipients)
 );
 $tester->assert(
     !in_array(4, $afterRecipients, true),
     "The approver who just acted is not notified about their own decision",
     json_encode($afterRecipients)
+);
+$deductionMentioned = false;
+foreach ($notifyDb->notifications as $notice) {
+    if ((int)$notice['user_id'] === 5 && strpos((string)$notice['body'], 'deducted') !== false) {
+        $deductionMentioned = true;
+    }
+}
+$tester->assert(
+    $deductionMentioned,
+    "The applicant is told the days have left their balance, which now happens on the first approval",
+    json_encode(array_column($notifyDb->notifications, 'body'))
 );
 $remarksCarried = false;
 foreach ($notifyDb->notifications as $n) {
@@ -1202,7 +1259,7 @@ $tester->assert(
 
 $tester->assert(
     strpos(EmailTemplate::subject(Notifier::TYPE_AWAITING, Notifier::awaitingTitle(STATUS_PENDING_HR)), APP_SHORT_NAME) === 0
-    && strpos(EmailTemplate::subject(Notifier::TYPE_AWAITING, Notifier::awaitingTitle(STATUS_PENDING_HR)), 'Stage 2 HR review') !== false,
+    && strpos(EmailTemplate::subject(Notifier::TYPE_AWAITING, Notifier::awaitingTitle(STATUS_PENDING_HR)), 'your HR approval') !== false,
     "A subject says which system it came from, then what happened"
 );
 
@@ -1413,6 +1470,385 @@ $tester->assert(
     EmailTemplate::preheader('A title', 'a body', []) === 'a body'
     && EmailTemplate::preheader('A title', null, []) === 'A title',
     "With no details it falls back to the body, then to the title"
+);
+
+/* ============================================================
+ * EMERGENCY LEAVE: a category that spends another's balance
+ * ============================================================ */
+echo "\n--- 14. Testing Emergency Leave ---\n";
+
+$emgDb = new ArrayMockPDO();
+$emgDb->leaveTypes = [
+    1 => $emgDb->leaveType,
+    9 => [
+        'id'                        => 9,
+        'name'                      => 'Emergency Leave',
+        'code'                      => 'EMG',
+        'max_days_per_year'         => 0,
+        'requires_attachment'       => 0,
+        'is_paid'                   => 1,
+        'min_days_per_request'      => 0.5,
+        'max_days_per_request'      => null,
+        'allow_half_day'            => 1,
+        'min_notice_days'           => 0,
+        'attachment_threshold_days' => 0.0,
+        'is_active'                 => 1,
+        'deducts_from_type_id'      => 1,
+        'allow_negative_balance'    => 1,
+        'notify_as_urgent'          => 1,
+    ],
+];
+$emgCalc = new LeaveCalculator($emgDb);
+
+$tester->assert(
+    $emgCalc->balanceTypeIdFor(9) === 1,
+    "Emergency leave spends the annual entitlement, not one of its own",
+    (string)$emgCalc->balanceTypeIdFor(9)
+);
+$tester->assert(
+    $emgCalc->balanceTypeIdFor(1) === 1,
+    "A category with its own allowance spends its own"
+);
+$tester->assert(
+    $emgCalc->balanceTypeFor($emgDb->leaveTypes[9])['name'] === 'Annual Leave',
+    "The category holding the days can be named, for the form and the email"
+);
+$tester->assert(
+    $emgCalc->mayOverdraw(9) === true && $emgCalc->mayOverdraw(1) === false,
+    "Only a category configured for it may overdraw"
+);
+
+// A category pointing at itself, and one pointing at nothing, both fall back to
+// their own balance rather than looping or spending a row that does not exist.
+$tester->assert(
+    $emgCalc->balanceTypeFor(['id' => 9, 'name' => 'Self', 'deducts_from_type_id' => 9])['id'] === 9,
+    "A category pointing at itself spends its own balance"
+);
+$tester->assert(
+    $emgCalc->balanceTypeFor(['id' => 1, 'name' => 'Plain', 'deducts_from_type_id' => null])['id'] === 1,
+    "A null pointer means the category holds its own balance"
+);
+
+$emgStart = date('Y-m-d', strtotime('monday +2 weeks'));
+$emgEnd   = date('Y-m-d', strtotime($emgStart . ' +2 days'));   // Mon-Wed = 3 days
+$emgKey   = '5_1_' . date('Y', strtotime($emgStart));
+
+// One annual day left, three days of emergency asked for.
+$emgDb->entitlements = [$emgKey => ['total_days' => 20.0, 'used_days' => 19.0, 'pending_days' => 0.0]];
+
+$emgVal = $emgCalc->validateEligibility(5, 9, $emgStart, $emgEnd);
+$tester->assert(
+    $emgVal['valid'] === true,
+    "Emergency leave is accepted with less annual leave left than it costs",
+    implode(' | ', $emgVal['errors'])
+);
+$tester->assert(
+    $emgVal['balance_from'] === 'Annual Leave',
+    "The form is told whose balance the figure it shows belongs to",
+    (string)$emgVal['balance_from']
+);
+$tester->assert(
+    (float)$emgVal['available_balance'] === 1.0,
+    "The balance reported is the annual one, not an invented emergency allowance",
+    (string)$emgVal['available_balance']
+);
+
+$annVal = $emgCalc->validateEligibility(5, 1, $emgStart, $emgEnd);
+$tester->assert(
+    $annVal['valid'] === false && $annVal['balance_from'] === null,
+    "The same three days as ordinary annual leave are refused for want of balance",
+    implode(' | ', $annVal['errors'])
+);
+
+// No notice period, so it can be recorded after the fact.
+$emgPast = date('Y-m-d', strtotime('last monday -1 week'));
+$emgDb->entitlements['5_1_' . date('Y', strtotime($emgPast))] =
+    ['total_days' => 20.0, 'used_days' => 0.0, 'pending_days' => 0.0];
+$emgBack = $emgCalc->validateEligibility(5, 9, $emgPast, $emgPast);
+$tester->assert(
+    $emgBack['valid'] === true,
+    "Emergency leave may be recorded for a date that has already passed",
+    implode(' | ', $emgBack['errors'])
+);
+
+// End to end, from an exhausted annual balance into a negative one.
+$emgFlow = new ApprovalWorkflow($emgDb);
+$emgDb->entitlements[$emgKey] = ['total_days' => 20.0, 'used_days' => 20.0, 'pending_days' => 0.0];
+
+$emgSub = $emgFlow->submitApplication(5, 9, $emgStart, $emgEnd, 3.0, 'Family emergency', null);
+$tester->assert(
+    $emgSub['success'] === true,
+    "An emergency is submitted with the annual balance already spent",
+    $emgSub['error'] ?? ''
+);
+$tester->assert(
+    (float)$emgDb->entitlements[$emgKey]['pending_days'] === 3.0,
+    "It reserves against the annual row",
+    (string)$emgDb->entitlements[$emgKey]['pending_days']
+);
+
+$emgUrgentTitles = array_column($emgDb->notifications, 'title');
+$tester->assert(
+    in_array('Emergency Leave request awaiting your approval', $emgUrgentTitles, true),
+    "The approver's notice names the emergency rather than reading like any other request",
+    json_encode($emgUrgentTitles)
+);
+
+$emgDecision = $emgFlow->processAction((int)$emgSub['id'], 4, ROLE_MANAGER, 'approve', 'Go');
+$tester->assert(
+    $emgDecision['success'] === true && $emgDecision['new_status'] === STATUS_APPROVED,
+    "One approval decides an emergency too",
+    $emgDecision['error'] ?? ''
+);
+$tester->assert(
+    (float)$emgDb->entitlements[$emgKey]['used_days'] === 23.0
+    && (float)$emgDb->entitlements[$emgKey]['pending_days'] === 0.0,
+    "Approving it takes the annual balance negative rather than refusing the absence",
+    "Used: {$emgDb->entitlements[$emgKey]['used_days']}, Pending: {$emgDb->entitlements[$emgKey]['pending_days']}"
+);
+
+// Cancelling gives the days back to the category they came from.
+$emgCancelDb = new ArrayMockPDO();
+$emgCancelDb->leaveTypes = $emgDb->leaveTypes;
+$emgCancelKey = '5_1_' . date('Y', strtotime($emgStart));
+$emgCancelDb->entitlements = [$emgCancelKey => ['total_days' => 20.0, 'used_days' => 0.0, 'pending_days' => 0.0]];
+$emgCancelFlow = new ApprovalWorkflow($emgCancelDb);
+$emgToCancel = $emgCancelFlow->submitApplication(5, 9, $emgStart, $emgEnd, 3.0, 'Called away', null);
+$emgCancelFlow->cancelApplication((int)$emgToCancel['id'], 5, ROLE_EMPLOYEE, 'Sorted itself out');
+$tester->assert(
+    (float)$emgCancelDb->entitlements[$emgCancelKey]['pending_days'] === 0.0,
+    "Withdrawing an emergency releases the annual days it was holding",
+    (string)$emgCancelDb->entitlements[$emgCancelKey]['pending_days']
+);
+
+// The email has to say where the days went, or it names a category the
+// recipient holds no balance for.
+$tester->assert(
+    Notifier::detailsFor([
+        'application_no' => 'LV-2026-EMG001',
+        'leave_name'     => 'Emergency Leave',
+        'start_date'     => '2026-10-05',
+        'end_date'       => '2026-10-05',
+        'total_days'     => '1.0',
+        'balance_from'   => 'Annual Leave',
+    ])['Deducted from'] === 'Annual Leave',
+    "An email names the balance a sourced category spends"
+);
+$tester->assert(
+    !isset(Notifier::detailsFor([
+        'application_no' => 'LV-2026-ANN001',
+        'leave_name'     => 'Annual Leave',
+        'start_date'     => '2026-10-05',
+        'end_date'       => '2026-10-05',
+        'total_days'     => '1.0',
+    ])['Deducted from']),
+    "An ordinary category adds no such row"
+);
+
+$approverDetails = Notifier::detailsFor([
+    'application_no' => 'LV-2026-FIN001',
+    'leave_name'     => 'Annual Leave',
+    'start_date'     => '2026-10-05',
+    'end_date'       => '2026-10-05',
+    'total_days'     => '1.0',
+], 'Thandi Mndzebele', true);
+$tester->assert(
+    isset($approverDetails['Decision']),
+    "An approver's email carries the row saying the decision is theirs and final",
+    implode(',', array_keys($approverDetails))
+);
+$tester->assert(
+    !isset(Notifier::detailsFor([
+        'application_no' => 'LV-2026-FIN002',
+        'leave_name'     => 'Annual Leave',
+        'start_date'     => '2026-10-05',
+        'end_date'       => '2026-10-05',
+        'total_days'     => '1.0',
+    ], 'Thandi Mndzebele')['Decision']),
+    "A withdrawal notice to that same approver does not, because there is nothing to decide"
+);
+
+$tester->assert(
+    EmailTemplate::accent(Notifier::TYPE_AWAITING, true) !== EmailTemplate::accent(Notifier::TYPE_AWAITING, false),
+    "An urgent request does not look like an ordinary one"
+);
+$tester->assert(
+    EmailTemplate::statusLabel(Notifier::TYPE_AWAITING, true) === 'Urgent',
+    "The pill says Urgent",
+    EmailTemplate::statusLabel(Notifier::TYPE_AWAITING, true)
+);
+$tester->assert(
+    strpos(EmailTemplate::renderText(Notifier::TYPE_AWAITING, 'T', null, null, 'A', [], null, true), 'marked urgent') !== false,
+    "The plain-text part says it in words, having no colour to carry it"
+);
+
+/* ============================================================
+ * NOTIFICATION CHANNELS BY ROLE
+ * ============================================================ */
+echo "\n--- 15. Testing Notification Channels By Role ---\n";
+
+$tester->assert(
+    Notifier::shouldEmail(Notifier::TYPE_AWAITING, ROLE_MANAGER) === true,
+    "A line manager is emailed about leave waiting on them"
+);
+$tester->assert(
+    Notifier::shouldEmail(Notifier::TYPE_AWAITING, ROLE_EMPLOYEE) === true,
+    "So is anybody else who somehow holds a queue"
+);
+$tester->assert(
+    Notifier::shouldEmail(Notifier::TYPE_AWAITING, ROLE_HR) === false
+    && Notifier::shouldEmail(Notifier::TYPE_AWAITING, ROLE_EXECUTIVE) === false,
+    "HR and executives get no queue email: they work from the overview"
+);
+$tester->assert(
+    Notifier::shouldEmail(Notifier::TYPE_APPROVED, ROLE_HR) === true
+    && Notifier::shouldEmail(Notifier::TYPE_REJECTED, ROLE_EXECUTIVE) === true
+    && Notifier::shouldEmail(Notifier::TYPE_SUBMITTED, ROLE_HR) === true,
+    "News about their own leave still reaches them, because they cannot look that up"
+);
+$tester->assert(
+    Notifier::shouldEmail(Notifier::TYPE_AWAITING, 'HR') === false,
+    "The rule is not case-sensitive, since roles arrive from the session"
+);
+
+/**
+ * An outbox that records instead of queueing, so the channel rule can be driven
+ * end to end without a database or a mail server.
+ */
+class RecordingEmailQueue extends EmailQueue {
+    public array $queued = [];
+
+    public function enqueueNotification(
+        int $userId,
+        ?int $notificationId,
+        string $type,
+        string $title,
+        ?string $body = null,
+        ?string $link = null,
+        array $details = [],
+        ?string $remarks = null,
+        bool $urgent = false
+    ): bool {
+        $this->queued[] = $userId . ':' . $type . ($urgent ? ':urgent' : '');
+        return true;
+    }
+}
+
+$chanDb       = new ArrayMockPDO();
+$chanRecorder = new RecordingEmailQueue($chanDb);
+$chanNotifier = new Notifier($chanDb, $chanRecorder);
+
+$chanNotifier->push(4, Notifier::TYPE_AWAITING, 'Waiting on a line manager');
+$chanNotifier->push(3, Notifier::TYPE_AWAITING, 'Waiting on HR');
+$chanNotifier->push(2, Notifier::TYPE_AWAITING, 'Waiting on an executive');
+$chanNotifier->push(3, Notifier::TYPE_APPROVED, "HR's own leave approved");
+$chanNotifier->push(5, Notifier::TYPE_AWAITING, 'Waiting on an employee', null, null, null, ['urgent' => true]);
+
+$tester->assert(
+    in_array('4:leave_awaiting_you', $chanRecorder->queued, true),
+    "A manager's queue notice is emailed",
+    json_encode($chanRecorder->queued)
+);
+$tester->assert(
+    !in_array('3:leave_awaiting_you', $chanRecorder->queued, true)
+    && !in_array('2:leave_awaiting_you', $chanRecorder->queued, true),
+    "HR's and the executive's are not",
+    json_encode($chanRecorder->queued)
+);
+$tester->assert(
+    in_array('3:leave_approved', $chanRecorder->queued, true),
+    "HR is still emailed the outcome of their own request",
+    json_encode($chanRecorder->queued)
+);
+$tester->assert(
+    in_array('5:leave_awaiting_you:urgent', $chanRecorder->queued, true),
+    "Urgency reaches the outbox rather than stopping at the bell",
+    json_encode($chanRecorder->queued)
+);
+$tester->assert(
+    count($chanDb->notifications) === 5,
+    "Every notice is written to the bell whether or not it is emailed",
+    (string)count($chanDb->notifications)
+);
+
+/* ============================================================
+ * THE COMPANY OVERVIEW
+ * ============================================================ */
+echo "\n--- 16. Testing The Company Leave Overview ---\n";
+
+[$splitApproved, $splitPending] = LeaveCapacity::splitByStatus([
+    ['status' => STATUS_APPROVED],
+    ['status' => STATUS_PENDING_HR],
+    ['status' => STATUS_PENDING_MANAGER],
+]);
+$tester->assert(
+    count($splitApproved) === 1 && count($splitPending) === 2,
+    "Settled leave is told apart from requests nobody has decided",
+    count($splitApproved) . '/' . count($splitPending)
+);
+
+$overviewDates = LeaveCapacity::workingDatesBetween('2026-08-17', '2026-08-21');
+$overviewByDay = LeaveCapacity::spreadAcrossDays([
+    ['application_id' => 1, 'department_id' => 1, 'user_id' => 5, 'name' => 'A', 'initials' => 'A',
+     'start_date' => '2026-08-17', 'end_date' => '2026-08-18', 'status' => STATUS_APPROVED],
+    ['application_id' => 2, 'department_id' => 1, 'user_id' => 6, 'name' => 'B', 'initials' => 'B',
+     'start_date' => '2026-08-18', 'end_date' => '2026-08-18', 'status' => STATUS_PENDING_MANAGER],
+    ['application_id' => 3, 'department_id' => 2, 'user_id' => 7, 'name' => 'C', 'initials' => 'C',
+     'start_date' => '2026-08-20', 'end_date' => '2026-08-20', 'status' => STATUS_APPROVED],
+], $overviewDates);
+
+$overview = LeaveCapacity::weekByDepartment(
+    $overviewByDay,
+    [1 => ['name' => 'NOC', 'limit' => 1], 2 => ['name' => 'Sales', 'limit' => null], 3 => ['name' => 'Finance', 'limit' => 2]],
+    [1 => 8, 2 => 4, 3 => 6]
+);
+
+$tester->assert(
+    array_keys($overview) === [1, 2, 3],
+    "Every department in scope gets a row, in the order it was given",
+    json_encode(array_keys($overview))
+);
+$tester->assert(
+    $overview[1]['has_absence'] === true && $overview[3]['has_absence'] === false,
+    "A department with nobody away is marked quiet rather than dropped, so it can be listed by name"
+);
+$tester->assert(
+    $overview[1]['headcount'] === 8 && $overview[2]['headcount'] === 4,
+    "Each row carries its own headcount, since teams do not share a denominator"
+);
+$tester->assert(
+    count($overview[1]['days'][0]['approved']) === 1 && count($overview[1]['days'][0]['pending']) === 0,
+    "Monday in NOC is one person approved off",
+    json_encode($overview[1]['days'][0])
+);
+$tester->assert(
+    count($overview[1]['days'][1]['approved']) === 1 && count($overview[1]['days'][1]['pending']) === 1,
+    "Tuesday is one approved and one merely asked for, counted apart"
+);
+$tester->assert(
+    count($overview[2]['days'][1]['approved']) === 0,
+    "Another department's absence is not counted against this one"
+);
+$tester->assert(
+    $overview[1]['days'][0]['state'] === LeaveCapacity::AT_LIMIT,
+    "A day sitting on the department's limit is flagged",
+    (string)$overview[1]['days'][0]['state']
+);
+$tester->assert(
+    $overview[1]['days'][1]['state'] === LeaveCapacity::OVER_LIMIT,
+    "Cover state counts requests too, so approved plus requested goes over a limit of one"
+);
+$tester->assert(
+    $overview[2]['days'][0]['state'] === null && $overview[3]['days'][0]['state'] === null,
+    "No configured limit, or nobody away, means no state to colour"
+);
+$tester->assert(
+    LeaveCapacity::weekByDepartment([], [1 => ['name' => 'NOC', 'limit' => 1]], [1 => 8])[1]['days'] === [],
+    "A window with no working days produces a row with no days rather than an error"
+);
+$tester->assert(
+    LeaveCapacity::weekByDepartment($overviewByDay, [], []) === [],
+    "A viewer with no departments in scope gets no rows"
 );
 
 exit($tester->summary());
