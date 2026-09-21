@@ -714,7 +714,11 @@ hr { border-top: 1px solid var(--ri-grey-line); }
   gap: 10px; flex-wrap: wrap; margin-bottom: 6px;
 }
 
-/* ---------- HR allocations: one row per person, one column per category ---- */
+/* ---------- HR allocations ----------------------------------------------- *
+   Deliberately plain: the ordinary table this page has always used, with the
+   repetition solved by a drop-down per person rather than by boxes, cards or
+   tinted panels. The only custom pieces are the figures, which are links
+   because clicking one edits that allocation, and the row's toggle.          */
 .ri-alloc-toolbar {
   display: flex; justify-content: space-between; align-items: center;
   gap: 14px; flex-wrap: wrap;
@@ -722,95 +726,46 @@ hr { border-top: 1px solid var(--ri-grey-line); }
 .ri-alloc-controls { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .ri-alloc-controls input[type="search"] { min-width: 230px; }
 
-.ri-alloc { border-collapse: separate; border-spacing: 0; }
-.ri-alloc thead th {
-  background: #f7f9fc; border-bottom: 2px solid var(--ri-grey-line); border-top: none;
-  font-size: 10.5px; font-weight: 700; letter-spacing: .7px; text-transform: uppercase;
-  color: var(--ri-muted); padding: 11px 14px; white-space: nowrap;
-}
-.ri-alloc tbody tr { transition: background .12s; }
-.ri-alloc tbody tr:hover { background: #fbfcfe; }
-.ri-alloc tbody td { border-top: 1px solid var(--ri-grey-line); padding: 8px 10px; vertical-align: middle; }
+.ri-alloc td { vertical-align: middle; }
+.ri-alloc-main { white-space: nowrap; }
+.ri-alloc-rest { line-height: 1.7; }
 
-.ri-alloc-who { min-width: 200px; padding-left: 14px !important; }
-.ri-alloc-name { display: block; font-weight: 700; color: var(--ri-navy); font-size: 14px; line-height: 1.25; }
-.ri-alloc-emp  { display: block; font-size: 11.5px; color: var(--ri-muted); }
-.ri-alloc-tag {
-  display: inline-block; font-size: 9.5px; font-weight: 700; letter-spacing: .4px;
-  text-transform: uppercase; border-radius: var(--ri-pill); padding: 1px 7px; margin-left: 4px;
+/* a day count: a number you can click, not a control you have to find */
+.ri-alloc-figure {
+  border: none; background: none; padding: 0; font-family: inherit; cursor: pointer;
+  font-size: 15px; font-weight: 700; color: var(--ri-navy);
+  font-variant-numeric: tabular-nums; border-bottom: 1px dotted transparent;
 }
-.ri-alloc-tag-muted { background: var(--ri-grey); color: var(--ri-muted); }
-.ri-alloc-tag-bad   { background: var(--ri-danger-bg); color: var(--ri-danger); }
+.ri-alloc-figure:hover { color: var(--ri-teal); border-bottom-color: currentColor; }
+.ri-alloc-figure:focus-visible { outline: 2px solid var(--ri-blue); outline-offset: 2px; }
+.ri-alloc-avail .ri-alloc-figure { font-size: 17px; }
 
-/* Every figure is an edit waiting to happen, so every figure is a button. Flat
-   until hovered, so the table still reads as a table and not as a toolbar. */
-.ri-alloc-cell { width: 190px; }
-.ri-alloc-box {
-  display: block; width: 100%; text-align: left; font-family: inherit;
-  border: 1px solid transparent; border-radius: 10px; background: transparent;
-  padding: 7px 11px; cursor: pointer;
-  transition: background .12s, border-color .12s, box-shadow .12s;
+.ri-alloc-togglecell { white-space: nowrap; width: 150px; }
+.ri-alloc-toggle {
+  border: none; background: none; padding: 2px 0; font-family: inherit; cursor: pointer;
+  font-size: 12px; font-weight: 600; color: var(--ri-teal);
 }
-.ri-alloc-box:hover {
-  background: var(--ri-white); border-color: var(--ri-grey-line); box-shadow: var(--ri-shadow);
-}
-.ri-alloc-box:focus-visible { outline: 2px solid var(--ri-blue); outline-offset: 1px; }
-.ri-alloc-top { display: flex; align-items: baseline; gap: 6px; }
-.ri-alloc-avail {
-  font-size: 19px; font-weight: 700; line-height: 1.1; letter-spacing: -.3px;
-  font-variant-numeric: tabular-nums;
-}
-.ri-alloc-of     { font-size: 11px; color: var(--ri-muted-soft); font-variant-numeric: tabular-nums; }
-.ri-alloc-detail { display: block; font-size: 10.5px; color: var(--ri-muted); margin-top: 3px; }
-.ri-alloc-box .ri-usebar { height: 5px; margin-top: 6px; }
+.ri-alloc-toggle:hover { color: var(--ri-navy); text-decoration: underline; }
+.ri-alloc-toggle i { margin-left: 5px; font-size: 9px; display: inline-block; transition: transform .15s; }
+.ri-alloc-toggle.ri-alloc-open i { transform: rotate(180deg); }
+.ri-alloc-toggle:focus-visible { outline: 2px solid var(--ri-blue); outline-offset: 2px; }
 
-.ri-alloc-ok    .ri-alloc-avail { color: var(--ri-teal); }
-.ri-alloc-spent .ri-alloc-avail { color: var(--ri-warning); }
-.ri-alloc-zero  .ri-alloc-avail { color: var(--ri-muted-soft); }
-.ri-alloc-none  .ri-alloc-avail { color: var(--ri-muted-soft); font-weight: 400; }
-.ri-alloc-neg   .ri-alloc-avail { color: var(--ri-danger); }
-.ri-alloc-neg {
-  background: var(--ri-danger-bg); border-color: #f2c4c0;
+/* the drop-down: the same figures as the original page, for one person only */
+.ri-alloc-detailrow > td { padding: 0 0 0 26px !important; border-top: none !important; }
+.ri-alloc-sub { font-size: 13px; }
+.ri-alloc-sub th {
+  border-top: none; border-bottom: 1px solid var(--ri-grey-line);
+  font-size: 10.5px; font-weight: 700; letter-spacing: .5px; text-transform: uppercase;
+  color: var(--ri-muted-soft); padding-bottom: 4px;
 }
-.ri-alloc-neg:hover { background: #fce4e1; border-color: #eab0aa; }
-
-/* other categories, summarised on the row */
-.ri-alloc-rest { line-height: 2; }
-.ri-alloc-chip {
-  display: inline-block; font-size: 11px; border-radius: var(--ri-pill);
-  padding: 2px 10px; margin: 0 4px 2px 0; border: 1px solid var(--ri-grey-line);
-  background: #fbfcfe; color: var(--ri-muted); white-space: nowrap;
+.ri-alloc-sub td { border-top: none; color: var(--ri-navy); font-variant-numeric: tabular-nums; }
+.ri-alloc-sub tr:last-child td { padding-bottom: 12px; }
+.ri-alloc-change {
+  border: none; background: none; padding: 0; font-family: inherit; cursor: pointer;
+  font-size: 12px; font-weight: 600; color: var(--ri-blue);
 }
-.ri-alloc-chip strong { font-variant-numeric: tabular-nums; margin-left: 3px; }
-.ri-alloc-chip-ok   { color: var(--ri-teal); border-color: #cfe0e9; }
-.ri-alloc-chip-zero { color: var(--ri-muted); }
-.ri-alloc-chip-none { color: var(--ri-muted-soft); border-style: dashed; }
-.ri-alloc-chip-neg  { color: var(--ri-danger); background: var(--ri-danger-bg); border-color: #f2c4c0; }
-
-/* the row's drop-down */
-.ri-alloc-expandhead { width: 150px; }
-.ri-alloc-expandcell { text-align: right; white-space: nowrap; }
-.ri-alloc-expand {
-  border: 1px solid var(--ri-grey-line); background: var(--ri-white);
-  border-radius: var(--ri-pill); padding: 4px 13px; cursor: pointer;
-  font-family: inherit; font-size: 11.5px; font-weight: 600; color: var(--ri-teal);
-  transition: background .12s, border-color .12s;
-}
-.ri-alloc-expand:hover { background: #f0f5f9; border-color: #cfe0e9; }
-.ri-alloc-expand i { margin-right: 5px; font-size: 10px; display: inline-block; transition: transform .15s; }
-.ri-alloc-expand.ri-alloc-expanded i { transform: rotate(180deg); }
-.ri-alloc-expand:focus-visible { outline: 2px solid var(--ri-blue); outline-offset: 1px; }
-
-.ri-alloc-detailrow > td { background: #f7f9fc; border-top: none !important; padding: 4px 14px 14px !important; }
-.ri-alloc-grid {
-  display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 10px;
-}
-.ri-alloc-grid .ri-alloc-box { background: var(--ri-white); border-color: var(--ri-grey-line); }
-.ri-alloc-grid .ri-alloc-box:hover { box-shadow: var(--ri-shadow-lift); }
-.ri-alloc-cat {
-  display: block; font-size: 10px; font-weight: 700; letter-spacing: .6px;
-  text-transform: uppercase; color: var(--ri-muted); margin-bottom: 3px;
-}
+.ri-alloc-change:hover { color: var(--ri-teal); text-decoration: underline; }
+.ri-alloc-change:focus-visible { outline: 2px solid var(--ri-blue); outline-offset: 2px; }
 
 /* per-department utilisation rows */
 .ri-util-row { padding: 10px 0; border-bottom: 1px solid var(--ri-grey-line); }

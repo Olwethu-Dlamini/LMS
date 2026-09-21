@@ -336,85 +336,37 @@ ob_start();
             </div>
         <?php else: ?>
         <?php
-        // The category people actually draw on sits on the row; every other
-        // category is one click away, in the row's own drop-down, instead of
-        // being a second and third row for the same person.
+        // The category people actually draw on sits on the row; the rest are in
+        // the row's drop-down, which is the only thing this page needed that
+        // the original did not have.
         $primaryTypeId   = array_key_first($columns);
         $primaryTypeName = $columns[$primaryTypeId] ?? 'Leave';
 
-        /** One figure, as the clickable cell that opens the allocation form. */
-        $allocFigure = function (?array $cell, int $userId, int $typeId, string $typeName, bool $withCategory = false): void {
-            if ($cell === null) {
-                ?>
-                <button type="button" class="ri-alloc-box ri-alloc-none" data-alloc-open
-                        data-user="<?php echo $userId; ?>" data-type="<?php echo $typeId; ?>"
-                        title="No <?php echo htmlspecialchars($typeName); ?> allocation. Click to set one.">
-                    <?php if ($withCategory): ?>
-                        <span class="ri-alloc-cat"><?php echo htmlspecialchars($typeName); ?></span>
-                    <?php endif; ?>
-                    <span class="ri-alloc-top"><span class="ri-alloc-avail">&mdash;</span></span>
-                    <span class="ri-alloc-detail">not allocated</span>
-                </button>
-                <?php
-                return;
-            }
-
-            $tone = 'ri-alloc-ok';
-            if ($cell['available'] < 0)        { $tone = 'ri-alloc-neg'; }
-            elseif ($cell['total'] <= 0)       { $tone = 'ri-alloc-zero'; }
-            elseif ($cell['available'] == 0.0) { $tone = 'ri-alloc-spent'; }
-
-            // The same used/pending bar the dashboard draws, so a balance reads
-            // the same way wherever it appears.
-            $usedPct    = $cell['total'] > 0 ? min(100, ($cell['used'] / $cell['total']) * 100) : 0;
-            $pendingPct = $cell['total'] > 0 ? min(100 - $usedPct, ($cell['pending'] / $cell['total']) * 100) : 0;
+        /** A day count, plain, and a link because clicking it edits the allocation. */
+        $figure = function (?array $cell, int $userId, int $typeId, string $typeName): void {
+            $label = $cell === null ? '&mdash;' : number_format($cell['available'], 1);
+            $tone  = '';
+            if ($cell === null)                { $tone = 'text-muted'; }
+            elseif ($cell['available'] < 0)    { $tone = 'text-danger'; }
+            elseif ($cell['available'] == 0.0) { $tone = 'text-muted'; }
             ?>
-            <button type="button" class="ri-alloc-box <?php echo $tone; ?>" data-alloc-open
+            <button type="button" class="ri-alloc-figure <?php echo $tone; ?>" data-alloc-open
                     data-user="<?php echo $userId; ?>" data-type="<?php echo $typeId; ?>"
-                    data-total="<?php echo number_format($cell['total'], 1, '.', ''); ?>"
-                    title="<?php echo htmlspecialchars(sprintf(
-                        '%s available of %s allocated. %s taken, %s awaiting approval. Click to change the allocation.',
-                        number_format($cell['available'], 1), number_format($cell['total'], 1),
-                        number_format($cell['used'], 1), number_format($cell['pending'], 1)
-                    )); ?>">
-                <?php if ($withCategory): ?>
-                    <span class="ri-alloc-cat"><?php echo htmlspecialchars($typeName); ?></span>
-                <?php endif; ?>
-                <span class="ri-alloc-top">
-                    <span class="ri-alloc-avail"><?php echo number_format($cell['available'], 1); ?></span>
-                    <span class="ri-alloc-of">of <?php echo number_format($cell['total'], 1); ?></span>
-                </span>
-                <?php if ($cell['total'] > 0): ?>
-                    <span class="ri-usebar">
-                        <span class="ri-usebar-used" style="width: <?php echo round($usedPct, 1); ?>%"></span>
-                        <span class="ri-usebar-pending" style="width: <?php echo round($pendingPct, 1); ?>%"></span>
-                    </span>
-                <?php endif; ?>
-                <span class="ri-alloc-detail">
-                    <?php if ($cell['used'] > 0 || $cell['pending'] > 0): ?>
-                        <?php echo number_format($cell['used'], 1); ?> taken<?php
-                            if ($cell['pending'] > 0) {
-                                echo ' &middot; ' . number_format($cell['pending'], 1) . ' pending';
-                            }
-                        ?>
-                    <?php elseif ($cell['total'] <= 0): ?>
-                        no days allocated
-                    <?php else: ?>
-                        nothing booked
-                    <?php endif; ?>
-                </span>
-            </button>
+                    data-total="<?php echo $cell === null ? '' : number_format($cell['total'], 1, '.', ''); ?>"
+                    title="<?php echo htmlspecialchars($cell === null
+                        ? 'No ' . $typeName . ' allocation. Click to set one.'
+                        : 'Click to change the ' . $typeName . ' allocation.'); ?>"><?php echo $label; ?></button>
             <?php
         };
         ?>
         <div class="table-responsive">
-            <table class="table mb-0 ri-alloc">
-                <thead>
+            <table class="table table-hover mb-0 ri-alloc">
+                <thead class="thead-light">
                     <tr>
                         <th>Employee</th>
                         <th><?php echo htmlspecialchars($primaryTypeName); ?></th>
                         <th>Other categories</th>
-                        <th class="ri-alloc-expandhead"></th>
+                        <th></th>
                     </tr>
                 </thead>
                 <tbody>
@@ -422,51 +374,67 @@ ob_start();
                     <?php
                     $key      = strtolower($person['name'] . ' ' . $person['emp_id']);
                     $detailId = 'alloc-detail-' . (int)$userId;
+                    $primary  = $person['cells'][$primaryTypeId] ?? null;
                     ?>
                     <tr data-alloc-row="<?php echo htmlspecialchars($key); ?>">
-                        <td class="ri-alloc-who">
-                            <span class="ri-alloc-name"><?php echo htmlspecialchars($person['name']); ?></span>
-                            <span class="ri-alloc-emp">
+                        <td>
+                            <strong class="text-dark"><?php echo htmlspecialchars($person['name']); ?></strong>
+                            <small class="d-block text-muted">
                                 <?php echo htmlspecialchars($person['emp_id']); ?>
                                 <?php if ($person['archived']): ?>
-                                    <span class="ri-alloc-tag ri-alloc-tag-muted">Archived</span>
+                                    &middot; archived
                                 <?php endif; ?>
                                 <?php if (empty($person['cells'])): ?>
-                                    <span class="ri-alloc-tag ri-alloc-tag-bad">No allocation &middot; cannot apply</span>
+                                    &middot; <span class="text-danger">no allocation, cannot apply</span>
                                 <?php endif; ?>
+                            </small>
+                        </td>
+
+                        <td class="ri-alloc-main">
+                            <span class="ri-alloc-avail">
+                                <?php $figure($primary, (int)$userId, (int)$primaryTypeId, $primaryTypeName); ?>
                             </span>
-                        </td>
-
-                        <td class="ri-alloc-cell">
-                            <?php $allocFigure($person['cells'][$primaryTypeId] ?? null, (int)$userId, (int)$primaryTypeId, $primaryTypeName); ?>
-                        </td>
-
-                        <td class="ri-alloc-rest">
-                            <?php foreach ($columns as $typeId => $typeName): ?>
-                                <?php if ($typeId === $primaryTypeId) { continue; } ?>
-                                <?php
-                                $other = $person['cells'][$typeId] ?? null;
-                                $chipTone = 'ri-alloc-chip-zero';
-                                if ($other === null)                  { $chipTone = 'ri-alloc-chip-none'; }
-                                elseif ($other['available'] < 0)      { $chipTone = 'ri-alloc-chip-neg'; }
-                                elseif ($other['available'] > 0)      { $chipTone = 'ri-alloc-chip-ok'; }
-                                ?>
-                                <span class="ri-alloc-chip <?php echo $chipTone; ?>">
-                                    <?php echo htmlspecialchars($typeName); ?>
-                                    <strong><?php echo $other === null ? '&mdash;' : number_format($other['available'], 1); ?></strong>
-                                </span>
-                            <?php endforeach; ?>
-                            <?php if (count($columns) <= 1): ?>
-                                <span class="text-muted small">No other categories</span>
+                            <?php if ($primary !== null): ?>
+                                <span class="text-muted">of <?php echo number_format($primary['total'], 1); ?></span>
+                                <small class="d-block text-muted">
+                                    <?php if ($primary['used'] > 0 || $primary['pending'] > 0): ?>
+                                        <?php echo number_format($primary['used'], 1); ?> taken<?php
+                                            if ($primary['pending'] > 0) {
+                                                echo ' &middot; ' . number_format($primary['pending'], 1) . ' pending';
+                                            }
+                                        ?>
+                                    <?php elseif ($primary['total'] <= 0): ?>
+                                        no days allocated
+                                    <?php else: ?>
+                                        nothing booked
+                                    <?php endif; ?>
+                                </small>
+                            <?php else: ?>
+                                <small class="d-block text-muted">not allocated</small>
                             <?php endif; ?>
                         </td>
 
-                        <td class="ri-alloc-expandcell">
-                            <button type="button" class="ri-alloc-expand"
+                        <td class="small text-muted ri-alloc-rest">
+                            <?php
+                            $others = [];
+                            foreach ($columns as $typeId => $typeName) {
+                                if ($typeId === $primaryTypeId) {
+                                    continue;
+                                }
+                                $cell = $person['cells'][$typeId] ?? null;
+                                $value = $cell === null ? '&mdash;' : number_format($cell['available'], 1);
+                                $others[] = htmlspecialchars($typeName) . ' ' . $value;
+                            }
+                            echo $others ? implode(' &nbsp;&middot;&nbsp; ', $others) : 'none';
+                            ?>
+                        </td>
+
+                        <td class="text-right ri-alloc-togglecell">
+                            <button type="button" class="ri-alloc-toggle"
                                     data-alloc-toggle="<?php echo $detailId; ?>"
                                     aria-expanded="false" aria-controls="<?php echo $detailId; ?>">
+                                <span class="ri-alloc-toggle-label">All categories</span>
                                 <i class="ti-angle-down" aria-hidden="true"></i>
-                                <span class="ri-alloc-expand-label">All categories</span>
                             </button>
                         </td>
                     </tr>
@@ -474,11 +442,40 @@ ob_start();
                     <tr class="ri-alloc-detailrow" id="<?php echo $detailId; ?>"
                         data-alloc-detail="<?php echo htmlspecialchars($key); ?>" data-expanded="0" hidden>
                         <td colspan="4">
-                            <div class="ri-alloc-grid">
+                            <table class="table table-sm mb-0 ri-alloc-sub">
+                                <thead>
+                                    <tr>
+                                        <th>Category</th>
+                                        <th class="text-right">Available</th>
+                                        <th class="text-right">Allocated</th>
+                                        <th class="text-right">Taken</th>
+                                        <th class="text-right">Pending</th>
+                                        <th></th>
+                                    </tr>
+                                </thead>
+                                <tbody>
                                 <?php foreach ($columns as $typeId => $typeName): ?>
-                                    <?php $allocFigure($person['cells'][$typeId] ?? null, (int)$userId, (int)$typeId, $typeName, true); ?>
+                                    <?php $cell = $person['cells'][$typeId] ?? null; ?>
+                                    <tr>
+                                        <td><?php echo htmlspecialchars($typeName); ?></td>
+                                        <td class="text-right">
+                                            <?php $figure($cell, (int)$userId, (int)$typeId, $typeName); ?>
+                                        </td>
+                                        <td class="text-right"><?php echo $cell === null ? '&mdash;' : number_format($cell['total'], 1); ?></td>
+                                        <td class="text-right"><?php echo $cell === null ? '&mdash;' : number_format($cell['used'], 1); ?></td>
+                                        <td class="text-right"><?php echo $cell === null ? '&mdash;' : number_format($cell['pending'], 1); ?></td>
+                                        <td class="text-right">
+                                            <button type="button" class="ri-alloc-change" data-alloc-open
+                                                    data-user="<?php echo (int)$userId; ?>"
+                                                    data-type="<?php echo (int)$typeId; ?>"
+                                                    data-total="<?php echo $cell === null ? '' : number_format($cell['total'], 1, '.', ''); ?>">
+                                                <?php echo $cell === null ? 'Allocate' : 'Change'; ?>
+                                            </button>
+                                        </td>
+                                    </tr>
                                 <?php endforeach; ?>
-                            </div>
+                                </tbody>
+                            </table>
                         </td>
                     </tr>
                 <?php endforeach; ?>
@@ -489,11 +486,10 @@ ob_start();
     </div>
 
     <div class="card-footer bg-white small text-muted">
-        One row per person. The figure on the row is <strong><?php echo htmlspecialchars($primaryTypeName ?? 'Leave'); ?></strong>
-        days available - allocated, minus taken, minus awaiting approval - and the bar is how
-        much of it is committed. <strong>All categories</strong> opens the rest for that person.
-        Click any figure to change that allocation.
-        Emergency leave has no figure of its own: it is deducted from Annual Leave.
+        One row per person. The figure is days <strong>available</strong>: allocated, minus taken,
+        minus awaiting approval. <strong>All categories</strong> opens the rest for that person,
+        and any figure can be clicked to change that allocation.
+        Emergency leave has no figure of its own - it is deducted from Annual Leave.
     </div>
 </div>
 
@@ -548,9 +544,9 @@ ob_start();
             detail.dataset.expanded = open ? '0' : '1';
             detail.hidden = open;
             button.setAttribute('aria-expanded', open ? 'false' : 'true');
-            button.classList.toggle('ri-alloc-expanded', !open);
+            button.classList.toggle('ri-alloc-open', !open);
 
-            var label = button.querySelector('.ri-alloc-expand-label');
+            var label = button.querySelector('.ri-alloc-toggle-label');
             if (label) { label.textContent = open ? 'All categories' : 'Hide'; }
         });
     });
