@@ -129,7 +129,20 @@ CREATE TABLE IF NOT EXISTS `leave_types` (
     -- request exceeds this many working days
     `attachment_threshold_days` DECIMAL(4,1) NOT NULL DEFAULT 0.0,
     -- Retired types stay for historical reporting but disappear from the form
-    `is_active` TINYINT(1) NOT NULL DEFAULT 1
+    `is_active` TINYINT(1) NOT NULL DEFAULT 1,
+    -- The category whose leave_entitlements row this one spends, instead of
+    -- holding an allowance of its own. NULL for every category but Emergency
+    -- Leave, which comes off Annual Leave. See migrations/008.
+    `deducts_from_type_id` INT NULL DEFAULT NULL,
+    -- Whether a request may take that balance below zero. Emergency leave may:
+    -- the absence has already happened by the time it is recorded, and refusing
+    -- it makes the register wrong rather than the balance right.
+    `allow_negative_balance` TINYINT(1) NOT NULL DEFAULT 0,
+    -- Whether approvers are told about it as urgent, in the bell and in the
+    -- accent colour of the email
+    `notify_as_urgent` TINYINT(1) NOT NULL DEFAULT 0,
+    CONSTRAINT `fk_leave_types_deducts_from` FOREIGN KEY (`deducts_from_type_id`)
+        REFERENCES `leave_types`(`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 INSERT INTO `leave_types`
@@ -141,6 +154,20 @@ INSERT INTO `leave_types`
 (3, 'Casual Leave',          'CSL',  5, 0, 1, 0.5,  3.0, 1, 1, 0.0, 1),
 (4, 'Maternity / Paternity', 'MAT', 90, 1, 1, 1.0, NULL, 0, 0, 0.0, 1),
 (5, 'Unpaid Leave',          'UNP', 30, 0, 0, 1.0, NULL, 0, 14, 0.0, 1)
+ON DUPLICATE KEY UPDATE `code`=`code`;
+
+-- Emergency Leave is seeded on its own because it is the one category that
+-- spends another's balance. Its allowance is zero and no entitlement rows are
+-- created for it: the days come off Annual Leave (id 1 above), so there is no
+-- separate balance to allocate, watch or reconcile. No notice is required and
+-- there is no cap on a single request, which is what makes it usable in an
+-- emergency, and it may take the annual balance negative.
+INSERT INTO `leave_types`
+    (`id`, `name`, `code`, `max_days_per_year`, `requires_attachment`, `is_paid`,
+     `min_days_per_request`, `max_days_per_request`, `allow_half_day`,
+     `min_notice_days`, `attachment_threshold_days`, `is_active`,
+     `deducts_from_type_id`, `allow_negative_balance`, `notify_as_urgent`) VALUES
+(6, 'Emergency Leave',       'EMG',  0, 0, 1, 0.5, NULL, 1,  0, 0.0, 1, 1, 1, 1)
 ON DUPLICATE KEY UPDATE `code`=`code`;
 
 -- 5. Leave Entitlements Table (Year 2026 allocations)
