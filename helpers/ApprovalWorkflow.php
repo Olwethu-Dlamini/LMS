@@ -1,11 +1,13 @@
 <?php
 require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../config/constants.php';
+require_once __DIR__ . '/LeaveCalculator.php';
 require_once __DIR__ . '/Notifier.php';
 
 class ApprovalWorkflow {
     private PDO $db;
     private Notifier $notifier;
+    private LeaveCalculator $calculator;
 
     public function __construct(?PDO $db = null) {
         $this->db = $db ?? getDBConnection();
@@ -13,6 +15,11 @@ class ApprovalWorkflow {
         // routing must not depend on them, and nobody should be told about an
         // approval that was rolled back.
         $this->notifier = new Notifier($this->db);
+        // Consulted for one question only: which category's entitlement a
+        // request actually spends. Emergency leave comes off annual leave, and
+        // every reservation, deduction and release below has to follow that
+        // pointer or the days would be taken from a balance nobody holds.
+        $this->calculator = new LeaveCalculator($this->db);
     }
 
     /**
@@ -175,6 +182,9 @@ class ApprovalWorkflow {
 
             $appNo = 'LV-' . date('Y') . '-' . strtoupper(substr(uniqid(), -6));
             $year = (int)date('Y', strtotime($startDate));
+            // The application records the category that was asked for; the
+            // entitlement touched is whichever one holds the days.
+            $balanceTypeId = $this->calculator->balanceTypeIdFor($leaveTypeId);
 
             // Re-check the two rules that depend on rows other requests can move,
             // this time inside the transaction and holding the entitlement row.
@@ -191,7 +201,7 @@ class ApprovalWorkflow {
                 WHERE user_id = :user_id AND leave_type_id = :type_id AND year = :year
                 FOR UPDATE
             ");
-            $stmtBalance->execute(['user_id' => $userId, 'type_id' => $leaveTypeId, 'year' => $year]);
+            $stmtBalance->execute(['user_id' => $userId, 'type_id' => $balanceTypeId, 'year' => $year]);
             $entitlement = $stmtBalance->fetch();
 
             if (!$entitlement) {
@@ -258,7 +268,7 @@ class ApprovalWorkflow {
             $stmtReserve->execute([
                 'days' => $totalDays,
                 'user_id' => $userId,
-                'type_id' => $leaveTypeId,
+                'type_id' => $balanceTypeId,
                 'year' => $year
             ]);
 
@@ -300,6 +310,7 @@ class ApprovalWorkflow {
             $totalDays = (float)$app['total_days'];
             $userId = (int)$app['user_id'];
             $leaveTypeId = (int)$app['leave_type_id'];
+            $balanceTypeId = $this->calculator->balanceTypeIdFor($leaveTypeId);
             $year = (int)date('Y', strtotime($app['start_date']));
 
             // Self-approval restriction
@@ -349,7 +360,7 @@ class ApprovalWorkflow {
                 $stmtRelease->execute([
                     'days' => $totalDays,
                     'user_id' => $userId,
-                    'type_id' => $leaveTypeId,
+                    'type_id' => $balanceTypeId,
                     'year' => $year
                 ]);
             } else {
@@ -370,7 +381,7 @@ class ApprovalWorkflow {
                         'days' => $totalDays,
                         'used_days' => $totalDays,
                         'user_id' => $userId,
-                        'type_id' => $leaveTypeId,
+                        'type_id' => $balanceTypeId,
                         'year' => $year
                     ]);
                 }
@@ -438,6 +449,7 @@ class ApprovalWorkflow {
             $totalDays = (float)$app['total_days'];
             $appUserId = (int)$app['user_id'];
             $leaveTypeId = (int)$app['leave_type_id'];
+            $balanceTypeId = $this->calculator->balanceTypeIdFor($leaveTypeId);
             $year = (int)date('Y', strtotime($app['start_date']));
 
             if (in_array($currentStatus, [STATUS_PENDING_MANAGER, STATUS_PENDING_HR, STATUS_PENDING_EXECUTIVE])) {
@@ -450,7 +462,7 @@ class ApprovalWorkflow {
                 $stmtRelease->execute([
                     'days' => $totalDays,
                     'user_id' => $appUserId,
-                    'type_id' => $leaveTypeId,
+                    'type_id' => $balanceTypeId,
                     'year' => $year
                 ]);
             } elseif ($currentStatus === STATUS_APPROVED) {
@@ -463,7 +475,7 @@ class ApprovalWorkflow {
                 $stmtRestore->execute([
                     'days' => $totalDays,
                     'user_id' => $appUserId,
-                    'type_id' => $leaveTypeId,
+                    'type_id' => $balanceTypeId,
                     'year' => $year
                 ]);
             }

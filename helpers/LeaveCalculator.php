@@ -3,9 +3,33 @@ require_once __DIR__ . '/../config/database.php';
 
 class LeaveCalculator {
     private PDO $db;
+    /** Cached answer to "has migration 008 run?", per request. */
+    private ?bool $hasSourcingColumn = null;
 
     public function __construct(?PDO $db = null) {
         $this->db = $db ?? getDBConnection();
+    }
+
+    /**
+     * Whether leave_types.deducts_from_type_id exists.
+     *
+     * The apply form and the three places that seed entitlements ask this
+     * before naming the column, so an installation that has pulled this code
+     * without running migration 008 keeps working: every category holds its own
+     * balance, nothing spends another's, and no screen fatals on a column that
+     * is not there yet. Same guard, and same reason, as the capacity limit in
+     * LeaveCapacity.
+     */
+    public function sourcingAvailable(): bool {
+        if ($this->hasSourcingColumn === null) {
+            try {
+                $stmt = $this->db->query("SHOW COLUMNS FROM leave_types LIKE 'deducts_from_type_id'");
+                $this->hasSourcingColumn = $stmt !== false && $stmt->fetch() !== false;
+            } catch (Throwable $e) {
+                $this->hasSourcingColumn = false;
+            }
+        }
+        return $this->hasSourcingColumn;
     }
 
     /**
@@ -93,7 +117,56 @@ class LeaveCalculator {
             'min_notice_days'           => 0,
             'attachment_threshold_days' => 0,
             'is_active'                 => 1,
+            // Added by migration 008. Absent on an installation that has not
+            // run it, where every category simply holds its own balance and
+            // nothing may overdraw - which is exactly the old behaviour.
+            'deducts_from_type_id'      => null,
+            'allow_negative_balance'    => 0,
+            'notify_as_urgent'          => 0,
         ];
+    }
+
+    /**
+     * The leave type whose entitlement a request against this one actually
+     * spends.
+     *
+     * Emergency leave has no allowance of its own: the days come off annual
+     * leave. Rather than give everybody a second balance to allocate, watch and
+     * reconcile, the category points at the one that holds the days and every
+     * reservation, deduction and release follows the pointer.
+     *
+     * One hop, deliberately. A category that pointed at a category that pointed
+     * somewhere else would be a chain nobody can read off the admin screen, and
+     * a cycle would hang. Anything that does not resolve in one step - a
+     * missing row, or a category pointing at itself - falls back to the
+     * category's own balance, which is the safe direction to be wrong in: the
+     * days come off something that exists.
+     *
+     * @param array $leaveType a row from getLeaveType()
+     * @return array the row whose leave_entitlements balance is spent
+     */
+    public function balanceTypeFor(array $leaveType): array {
+        $sourceId = ($leaveType['deducts_from_type_id'] ?? null) !== null
+            ? (int)$leaveType['deducts_from_type_id']
+            : 0;
+
+        if ($sourceId <= 0 || $sourceId === (int)($leaveType['id'] ?? 0)) {
+            return $leaveType;
+        }
+
+        return $this->getLeaveType($sourceId) ?? $leaveType;
+    }
+
+    /**
+     * The same answer for a caller that has only an id, which is what the
+     * workflow holds when it reserves, deducts or releases days.
+     */
+    public function balanceTypeIdFor(int $leaveTypeId): int {
+        $leaveType = $this->getLeaveType($leaveTypeId);
+        if ($leaveType === null) {
+            return $leaveTypeId;
+        }
+        return (int)($this->balanceTypeFor($leaveType)['id'] ?? $leaveTypeId);
     }
 
     /**
@@ -186,24 +259,34 @@ class LeaveCalculator {
             }
         }
 
-        // 3. Balance verification
-        $year = (int)date('Y', strtotime($startDate));
+        // 3. Balance verification, against whichever category actually holds the
+        //    days. An emergency request spends annual leave, so annual leave is
+        //    the row to read and the balance to report back to the form.
+        $year          = (int)date('Y', strtotime($startDate));
+        $balanceType   = $this->balanceTypeFor($leaveType);
+        $balanceTypeId = (int)($balanceType['id'] ?? $leaveTypeId);
+        $spendsAnother = $balanceTypeId !== (int)($leaveType['id'] ?? $leaveTypeId);
+
         $stmt = $this->db->prepare("
             SELECT total_days, used_days, pending_days 
             FROM leave_entitlements 
             WHERE user_id = :user_id AND leave_type_id = :type_id AND year = :year
         ");
-        $stmt->execute(['user_id' => $userId, 'type_id' => $leaveTypeId, 'year' => $year]);
+        $stmt->execute(['user_id' => $userId, 'type_id' => $balanceTypeId, 'year' => $year]);
         $entitlement = $stmt->fetch();
 
         if (!$entitlement) {
-            $errors[] = "No leave balance allocation found for the year {$year}.";
+            $errors[] = $spendsAnother
+                ? "{$leaveType['name']} is deducted from {$balanceType['name']}, and no "
+                  . "{$balanceType['name']} allocation was found for the year {$year}."
+                : "No leave balance allocation found for the year {$year}.";
             return ['valid' => false, 'days' => $workingDays, 'errors' => $errors];
         }
 
         $available = (float)$entitlement['total_days'] - (float)$entitlement['used_days'] - (float)$entitlement['pending_days'];
         if ($workingDays > $available) {
-            $errors[] = "Insufficient balance. Requested: {$workingDays} days, Available: {$available} days.";
+            $shortfall = $spendsAnother ? $balanceType['name'] . ' ' : '';
+            $errors[] = "Insufficient {$shortfall}balance. Requested: {$workingDays} days, Available: {$available} days.";
         }
 
         // 4. Overlap check
@@ -240,6 +323,10 @@ class LeaveCalculator {
             'valid' => empty($errors),
             'days' => $workingDays,
             'available_balance' => $available ?? 0,
+            // Named only when the days come from somewhere other than the
+            // category asked for, so the form can say whose balance it is
+            // showing rather than appearing to invent a figure.
+            'balance_from' => $spendsAnother ? (string)$balanceType['name'] : null,
             'errors' => $errors
         ];
     }

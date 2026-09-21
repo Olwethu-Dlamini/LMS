@@ -70,6 +70,10 @@ try {
         'working_days'      => $validation['days'],
         'valid'             => $validation['valid'],
         'available_balance' => $validation['available_balance'] ?? 0,
+        // Named when the days come off a different category, so the preview
+        // says whose balance the figure belongs to rather than appearing to
+        // invent one for a category with no allowance of its own.
+        'balance_from'      => $validation['balance_from'] ?? null,
         'holidays_in_range' => count($holidays),
         'errors'            => $validation['errors'],
         'coverage'          => [

@@ -19,8 +19,21 @@ $workflow = new ApprovalWorkflow($db);
 
 // Retired types stay in the database for historical reporting but must not be
 // offered on the form.
-$stmtTypes = $db->query("SELECT * FROM leave_types WHERE is_active = 1 ORDER BY name ASC");
-$leaveTypes = $stmtTypes->fetchAll();
+//
+// The join names the category a request is deducted from, for the ones that
+// spend another's balance. Skipped entirely until migration 008 has run, so a
+// checkout that is ahead of its database still renders the form.
+if ($calculator->sourcingAvailable()) {
+    $leaveTypes = $db->query("
+        SELECT t.*, s.name AS spends_from_name
+        FROM leave_types t
+        LEFT JOIN leave_types s ON s.id = t.deducts_from_type_id
+        WHERE t.is_active = 1
+        ORDER BY t.name ASC
+    ")->fetchAll();
+} else {
+    $leaveTypes = $db->query("SELECT * FROM leave_types WHERE is_active = 1 ORDER BY name ASC")->fetchAll();
+}
 
 $error = '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -110,8 +123,18 @@ ob_start();
                                         data-notice="<?php echo (int)$type['min_notice_days']; ?>"
                                         data-min="<?php echo (float)$type['min_days_per_request']; ?>"
                                         data-max="<?php echo $type['max_days_per_request'] !== null ? (float)$type['max_days_per_request'] : ''; ?>"
+                                        data-spends-from="<?php echo htmlspecialchars((string)($type['spends_from_name'] ?? '')); ?>"
                                         <?php echo (isset($_POST['leave_type_id']) && $_POST['leave_type_id'] == $type['id']) ? 'selected' : ''; ?>>
-                                    <?php echo htmlspecialchars($type['name']); ?> (Max: <?php echo $type['max_days_per_year']; ?> Days/Year)
+                                    <?php echo htmlspecialchars($type['name']); ?>
+                                    <?php
+                                    // A category with no allowance of its own would
+                                    // otherwise advertise "Max: 0 Days/Year", which
+                                    // reads as nothing available rather than as days
+                                    // coming from somewhere else.
+                                    echo !empty($type['spends_from_name'])
+                                        ? '(from ' . htmlspecialchars($type['spends_from_name']) . ')'
+                                        : '(Max: ' . htmlspecialchars((string)$type['max_days_per_year']) . ' Days/Year)';
+                                    ?>
                                 </option>
                             <?php endforeach; ?>
                         </select>
@@ -221,7 +244,9 @@ document.addEventListener("DOMContentLoaded", function () {
                     if (data.success) {
                         daysBadge.textContent = data.working_days;
                         let infoMsg = `Calculated Net Working Days: <strong>${data.working_days}</strong>. `;
-                        infoMsg += `Available Balance: <strong>${data.available_balance}</strong> Days. `;
+                        infoMsg += data.balance_from
+                            ? `Deducted from ${data.balance_from}, leaving <strong>${data.available_balance}</strong> Days. `
+                            : `Available Balance: <strong>${data.available_balance}</strong> Days. `;
                         if (data.holidays_in_range > 0) {
                             infoMsg += `<span class='text-success'>(Excludes ${data.holidays_in_range} Public Holiday(s))</span>`;
                         }
@@ -341,8 +366,10 @@ document.addEventListener("DOMContentLoaded", function () {
         const half = opt.dataset.half === "1";
         const needsAtt = opt.dataset.attachment === "1";
         const over = parseFloat(opt.dataset.attachmentOver || "0");
+        const spendsFrom = opt.dataset.spendsFrom || "";
 
         const bits = [];
+        if (spendsFrom) bits.push("deducted from your " + spendsFrom + " balance");
         if (notice > 0) bits.push(notice + " day(s) advance notice");
         if (min > 0) bits.push("min " + min + " day(s) per request");
         if (max) bits.push("max " + max + " day(s) per request");
