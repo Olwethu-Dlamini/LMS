@@ -311,37 +311,37 @@ function display_flash(): string {
 }
 
 /**
- * Human-readable name of the stage an application is waiting on.
+ * Who an application is waiting on, in words.
+ *
+ * Reads as the object of a sentence ("it is now with your line manager"),
+ * because that is what somebody wants to know after submitting one. The stage
+ * numbers have gone: there is one approver and no stage after them.
  */
 function pending_stage_label(string $status): string {
     switch ($status) {
         case STATUS_PENDING_MANAGER:
-            return 'Stage 1 (Line Manager)';
+            return 'your line manager';
         case STATUS_PENDING_HR:
-            return 'Stage 2 (HR Review)';
+            return 'HR';
         case STATUS_PENDING_EXECUTIVE:
-            return 'Stage 3 (Executive Sign-Off)';
+            return 'the executive';
         default:
-            return 'review';
+            return 'an approver';
     }
 }
 
 /**
- * Message describing where an approval left the application. Driven by the
- * status the workflow actually returned, because the stage after HR depends on
- * the applicant's role - HR sign-off is final on an executive's own leave.
+ * Message describing what an approval did.
+ *
+ * One approval decides a request, so the only outcome left is the final one and
+ * the two "transferred to Stage N" messages went with the chain. The status the
+ * workflow returned is still read rather than assumed, so an unexpected one
+ * reports honestly instead of announcing an approval that did not happen.
  */
 function stage_transition_message(string $newStatus): string {
-    switch ($newStatus) {
-        case STATUS_PENDING_HR:
-            return 'Approved. Transferred to Stage 2 (HR Review).';
-        case STATUS_PENDING_EXECUTIVE:
-            return 'Approved. Transferred to Stage 3 (Executive Sign-Off).';
-        case STATUS_APPROVED:
-            return 'Fully approved. The leave balance has been deducted.';
-        default:
-            return 'Application updated.';
-    }
+    return $newStatus === STATUS_APPROVED
+        ? 'Approved. The leave is booked and the days have been deducted.'
+        : 'Application updated.';
 }
 
 /**
@@ -352,7 +352,7 @@ function get_status_badge(string $status): string {
         case STATUS_PENDING_MANAGER:
             return '<span class="badge badge-warning text-dark"><i class="ti-time"></i> Pending Line Manager</span>';
         case STATUS_PENDING_HR:
-            return '<span class="badge badge-info"><i class="ti-time"></i> Pending HR Review</span>';
+            return '<span class="badge badge-info"><i class="ti-time"></i> Pending HR Approval</span>';
         case STATUS_PENDING_EXECUTIVE:
             return '<span class="badge badge-primary"><i class="ti-time"></i> Pending Executive Approval</span>';
         case STATUS_APPROVED:

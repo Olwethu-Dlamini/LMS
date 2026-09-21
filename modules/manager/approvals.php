@@ -36,7 +36,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-// Fetch Stage 1 Pending Applications (Scoped to manager's team for non-admins)
+// Leave waiting on this manager, scoped to their own people for non-admins.
 $whereClause = "WHERE a.status = 'pending_manager'";
 $params = [];
 if ($approverRole !== ROLE_ADMIN) {
@@ -75,7 +75,7 @@ ob_start();
 <?php if (is_admin()): ?>
     <div class="alert alert-warning mb-4">
         <strong><i class="ti-alert"></i> Administrator override.</strong>
-        You are acting outside the normal approval chain. Use this only when the
+        You are acting outside the normal approval route. Use this only when the
         designated approver is unavailable. Every action is recorded in the
         audit log against your account.
     </div>
@@ -84,7 +84,7 @@ ob_start();
 
 <div class="card">
     <div class="card-header bg-white">
-        <span class="font-weight-bold text-dark"><i class="ti-time text-warning"></i> Pending Stage 1 Approval Queue (<?php echo count($pendingApps); ?>)</span>
+        <span class="font-weight-bold text-dark"><i class="ti-time text-warning"></i> Waiting on you (<?php echo count($pendingApps); ?>)</span>
     </div>
     <div class="card-body p-0">
         <div class="table-responsive">
@@ -103,7 +103,7 @@ ob_start();
                 </thead>
                 <tbody>
                     <?php if (empty($pendingApps)): ?>
-                        <tr><td colspan="8" class="text-center py-4 text-muted">No pending Stage 1 leave applications. Queue is clear!</td></tr>
+                        <tr><td colspan="8" class="text-center py-4 text-muted">Nothing is waiting on you. Queue is clear!</td></tr>
                     <?php else: ?>
                         <?php foreach ($pendingApps as $app): ?>
                         <tr>
@@ -151,7 +151,7 @@ ob_start();
                                                 <input type="hidden" name="application_id" value="<?php echo $app['id']; ?>">
                                                 
                                                 <div class="modal-header bg-primary text-white">
-                                                    <h5 class="modal-title font-weight-bold">Stage 1 Review: <?php echo htmlspecialchars($app['application_no']); ?></h5>
+                                                    <h5 class="modal-title font-weight-bold">Review: <?php echo htmlspecialchars($app['application_no']); ?></h5>
                                                     <button type="button" class="close text-white" data-dismiss="modal">&times;</button>
                                                 </div>
                                                 <div class="modal-body">
@@ -172,6 +172,13 @@ ob_start();
                                                         </p>
                                                     <?php endif; ?>
 
+                                                    <div class="alert alert-info py-2 mb-3 small">
+                                                        <i class="ti-info-alt"></i>
+                                                        <strong>Your decision is final.</strong>
+                                                        Approving books the leave and deducts the days;
+                                                        nobody reviews it after you.
+                                                    </div>
+
                                                     <div class="form-group mb-3">
                                                         <label class="font-weight-bold text-dark">Manager Remarks / Comments</label>
                                                         <textarea name="comments" class="form-control" rows="3" placeholder="Add approval or rejection remarks..."></textarea>
@@ -182,7 +189,7 @@ ob_start();
                                                         <i class="ti-close"></i> Reject Request
                                                     </button>
                                                     <button type="submit" name="action" value="approve" class="btn btn-success font-weight-bold">
-                                                        <i class="ti-check"></i> Approve Stage 1
+                                                        <i class="ti-check"></i> Approve &amp; Book Leave
                                                     </button>
                                                 </div>
                                             </form>
@@ -201,9 +208,9 @@ ob_start();
 
 <?php
 $pageContent = ob_get_clean();
-$pageTitle = 'Stage 1 Approvals | ' . APP_NAME;
-$pageHeading = 'Stage 1: Line Manager Approvals';
-$pageSubtitle = 'Review pending leave applications from team members before escalating to HR.';
+$pageTitle = 'Team Leave Approvals | ' . APP_NAME;
+$pageHeading = 'Team Leave Approvals';
+$pageSubtitle = 'Leave requested by the people you are accountable for. Your decision is final: approving books the leave.';
 $pageIcon = 'ti-check-box';
 require_once __DIR__ . '/../../includes/layout.php';
 ?>

@@ -10,10 +10,10 @@ $userId = $_SESSION['user_id'];
 $userRole = $_SESSION['user_role'];
 $db = getDBConnection();
 
-// Senior roles do not queue behind themselves, so show up front which stages
-// this applicant's request will skip and who decides it.
-$skippedStages = ApprovalWorkflow::skippedStagesFor($userRole);
-[$firstStage] = ApprovalWorkflow::initialStageFor($userRole);
+// One approval decides a request, so the form says up front who that approver
+// is. Senior roles do not queue behind themselves: a manager's own leave is
+// decided by HR, and HR's by the executive.
+$decidedBy = ApprovalWorkflow::deciderLabelFor($userRole);
 $calculator = new LeaveCalculator($db);
 $workflow = new ApprovalWorkflow($db);
 
@@ -61,7 +61,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $res = $workflow->submitApplication($userId, $leaveTypeId, $startDate, $endDate, $validation['days'], $reason, $attachmentPath);
                 if ($res['success']) {
                     set_flash('success', "Leave Application {$res['application_no']} submitted successfully! "
-                        . "It is now pending " . pending_stage_label($res['status']) . " approval.");
+                        . "It is now with " . pending_stage_label($res['status'])
+                        . " for approval, and that decision is final.");
                     header('Location: ' . APP_URL . '/modules/leave/my_history.php');
                     exit;
                 } else {
@@ -87,16 +88,12 @@ ob_start();
                     <div class="alert alert-danger mb-4"><?php echo $error; ?></div>
                 <?php endif; ?>
 
-                <?php if (!empty($skippedStages)): ?>
-                    <div class="alert alert-info mb-4">
-                        <strong><i class="ti-info-alt"></i> Shortened approval route.</strong>
-                        Because of your role this request skips
-                        <strong><?php echo htmlspecialchars(implode(' and ', $skippedStages)); ?></strong>.
-                        It goes straight to <strong><?php echo htmlspecialchars(pending_stage_label($firstStage)); ?></strong><?php
-                            echo $firstStage === STATUS_PENDING_HR && $userRole === ROLE_EXECUTIVE
-                                ? ', whose decision is final.' : '.'; ?>
-                    </div>
-                <?php endif; ?>
+                <div class="alert alert-info mb-4">
+                    <strong><i class="ti-info-alt"></i> One approval decides this.</strong>
+                    <?php echo htmlspecialchars(ucfirst($decidedBy)); ?> decides this request, and that
+                    decision is final - there is no stage behind it. Approving books the leave and
+                    deducts the days.
+                </div>
 
                 <form method="POST" action="" enctype="multipart/form-data" id="leaveForm">
                     <input type="hidden" name="csrf_token" value="<?php echo generate_csrf_token(); ?>">

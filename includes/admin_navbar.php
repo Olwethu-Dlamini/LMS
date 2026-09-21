@@ -5,10 +5,11 @@ require_once __DIR__ . '/functions.php';
  *  switch back to the staff portal, because an admin account holds no leave
  *  entitlement and cannot apply for leave.
  *
- *  Approvals and HR tooling appear under Leave Oversight. The three stage
+ *  Approvals and HR tooling appear under Leave Oversight. The three approval
  *  screens are the admin's break-glass override for applications stranded when
  *  the designated approver is unavailable; the pages themselves warn when an
- *  admin is the one acting. */
+ *  admin is the one acting. They are named by whose leave each one holds, not
+ *  by a stage, because one approval now decides a request. */
 
 if (!function_exists('ri_nav_on')) {
     function ri_nav_on(array $paths): bool {
@@ -37,9 +38,9 @@ $adminLinks = [
 // opens a new group, which keeps the headings beside the links they describe
 // instead of pinned to a positional index.
 $oversightLinks = [
-    ['/manager/approvals.php',   'ti-check-box',    'Stage 1 · Line Manager', 'Break-glass approval'],
-    ['/hr/approvals.php',        'ti-shield',       'Stage 2 · HR Review'],
-    ['/executive/approvals.php', 'ti-crown',        'Stage 3 · Executive'],
+    ['/manager/approvals.php',   'ti-check-box',    'Team leave',              'Break-glass approval'],
+    ['/hr/approvals.php',        'ti-shield',       'Manager & executive leave'],
+    ['/executive/approvals.php', 'ti-crown',        'HR leave'],
     ['/hr/allocations.php',      'ti-pie-chart',    'Leave Allocations',      'HR management'],
     ['/hr/reports.php',          'ti-files',        'Leave Reports'],
     ['/leave/team_calendar.php', 'ti-layout-grid3', 'Team Calendar',          'Coverage'],

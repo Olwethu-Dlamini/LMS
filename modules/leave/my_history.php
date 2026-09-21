@@ -204,38 +204,37 @@ ob_start();
             ?></div>
         </div>
 
-        <!-- 3-Stage Approval Progress Tracker -->
-        <h6 class="font-weight-bold text-dark mb-3"><i class="ti-bar-chart"></i> 3-Tier Approval Workflow Timeline</h6>
+        <!-- Submitted, then decided. One approval decides a request, so a
+             three-stage tracker would draw two steps that never happen. -->
+        <?php
+        $pendingStatuses = [STATUS_PENDING_MANAGER, STATUS_PENDING_HR, STATUS_PENDING_EXECUTIVE];
+        if (in_array($viewApp['status'], $pendingStatuses, true)) {
+            $decisionClass = 'bg-warning text-dark font-weight-bold';
+            $decisionLabel = 'With ' . pending_stage_label($viewApp['status']) . ', awaiting a decision';
+        } elseif ($viewApp['status'] === STATUS_APPROVED) {
+            $decisionClass = 'bg-success text-white font-weight-bold';
+            $decisionLabel = 'Approved - the days have been deducted';
+        } elseif ($viewApp['status'] === STATUS_REJECTED) {
+            $decisionClass = 'bg-danger text-white font-weight-bold';
+            $decisionLabel = 'Declined - the days were returned';
+        } elseif ($viewApp['status'] === STATUS_CANCELLED) {
+            $decisionClass = 'bg-secondary text-white font-weight-bold';
+            $decisionLabel = 'Cancelled - the days were returned';
+        } else {
+            $decisionClass = 'bg-light text-muted';
+            $decisionLabel = 'Awaiting a decision';
+        }
+        ?>
+        <h6 class="font-weight-bold text-dark mb-3"><i class="ti-bar-chart"></i> Progress</h6>
         <div class="row text-center mb-4">
-            <!-- Stage 1 -->
-            <div class="col-md-4 mb-2">
-                <div class="p-3 rounded border <?php 
-                    if ($viewApp['status'] === 'pending_manager') echo 'bg-warning text-dark font-weight-bold';
-                    elseif (in_array($viewApp['status'], ['pending_hr', 'pending_executive', 'approved'])) echo 'bg-success text-white font-weight-bold';
-                    elseif ($viewApp['status'] === 'rejected') echo 'bg-danger text-white font-weight-bold';
-                    else echo 'bg-light text-muted';
-                ?>">
-                    Stage 1: Line Manager
+            <div class="col-md-6 mb-2">
+                <div class="p-3 rounded border bg-success text-white font-weight-bold">
+                    Submitted <?php echo htmlspecialchars(date('j M Y', strtotime($viewApp['created_at']))); ?>
                 </div>
             </div>
-            <!-- Stage 2 -->
-            <div class="col-md-4 mb-2">
-                <div class="p-3 rounded border <?php 
-                    if ($viewApp['status'] === 'pending_hr') echo 'bg-info text-white font-weight-bold';
-                    elseif (in_array($viewApp['status'], ['pending_executive', 'approved'])) echo 'bg-success text-white font-weight-bold';
-                    else echo 'bg-light text-muted';
-                ?>">
-                    Stage 2: HR Manager
-                </div>
-            </div>
-            <!-- Stage 3 -->
-            <div class="col-md-4 mb-2">
-                <div class="p-3 rounded border <?php 
-                    if ($viewApp['status'] === 'pending_executive') echo 'bg-primary text-white font-weight-bold';
-                    elseif ($viewApp['status'] === 'approved') echo 'bg-success text-white font-weight-bold';
-                    else echo 'bg-light text-muted';
-                ?>">
-                    Stage 3: Executive Boss
+            <div class="col-md-6 mb-2">
+                <div class="p-3 rounded border <?php echo $decisionClass; ?>">
+                    <?php echo htmlspecialchars($decisionLabel); ?>
                 </div>
             </div>
         </div>

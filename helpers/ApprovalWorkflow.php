@@ -310,7 +310,7 @@ class ApprovalWorkflow {
             // Validate stage authorization
             if ($currentStatus === STATUS_PENDING_MANAGER) {
                 if (!in_array($approverRole, [ROLE_MANAGER, ROLE_ADMIN])) {
-                    throw new Exception("Unauthorized: Stage 1 approval requires Line Manager or Admin role.");
+                    throw new Exception("Unauthorized: this request is decided by a line manager or an administrator.");
                 }
                 if ($approverRole === ROLE_MANAGER) {
                     $stmtUser = $this->db->prepare("
@@ -329,10 +329,10 @@ class ApprovalWorkflow {
                 }
             }
             if ($currentStatus === STATUS_PENDING_HR && !in_array($approverRole, [ROLE_HR, ROLE_ADMIN])) {
-                throw new Exception("Unauthorized: Stage 2 approval requires HR Manager or Admin role.");
+                throw new Exception("Unauthorized: this request is decided by HR or an administrator.");
             }
             if ($currentStatus === STATUS_PENDING_EXECUTIVE && !in_array($approverRole, [ROLE_EXECUTIVE, ROLE_ADMIN])) {
-                throw new Exception("Unauthorized: Stage 3 approval requires Executive or Admin role.");
+                throw new Exception("Unauthorized: this request is decided by an executive or an administrator.");
             }
 
             if ($action === 'reject') {

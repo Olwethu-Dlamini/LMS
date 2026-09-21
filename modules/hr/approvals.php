@@ -36,7 +36,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-// Fetch Stage 2 Pending Applications
+// Leave requested by managers and executives, which is what HR decides.
 $stmt = $db->query("
     SELECT a.*, t.name as leave_name, u.first_name, u.last_name, u.emp_id, d.name as dept_name,
            r.name AS applicant_role
@@ -50,8 +50,8 @@ $stmt = $db->query("
 ");
 $pendingApps = $stmt->fetchAll();
 
-// Coverage impact per request, so Stage 2 sees the same staffing picture the
-// line manager saw at Stage 1.
+// Coverage impact per request, so HR weighs the same staffing picture a line
+// manager sees when deciding their own team's leave.
 $capacity = new LeaveCapacity($db);
 $coverage = [];
 foreach ($pendingApps as $app) {
@@ -68,7 +68,7 @@ ob_start();
 <?php if (is_admin()): ?>
     <div class="alert alert-warning mb-4">
         <strong><i class="ti-alert"></i> Administrator override.</strong>
-        You are acting outside the normal approval chain. Use this only when the
+        You are acting outside the normal approval route. Use this only when the
         designated approver is unavailable. Every action is recorded in the
         audit log against your account.
     </div>
@@ -77,7 +77,7 @@ ob_start();
 
 <div class="card">
     <div class="card-header bg-white">
-        <span class="font-weight-bold text-dark"><i class="ti-time text-info"></i> Pending Stage 2 HR Queue (<?php echo count($pendingApps); ?>)</span>
+        <span class="font-weight-bold text-dark"><i class="ti-time text-info"></i> Waiting on you (<?php echo count($pendingApps); ?>)</span>
     </div>
     <div class="card-body p-0">
         <div class="table-responsive">
@@ -96,21 +96,23 @@ ob_start();
                 </thead>
                 <tbody>
                     <?php if (empty($pendingApps)): ?>
-                        <tr><td colspan="8" class="text-center py-4 text-muted">No pending Stage 2 HR applications. All clear!</td></tr>
+                        <tr><td colspan="8" class="text-center py-4 text-muted">Nothing is waiting on you. All clear!</td></tr>
                     <?php else: ?>
                         <?php foreach ($pendingApps as $app):
-                            // HR is the last word on an executive's own leave; there is
-                            // no Stage 3 above them.
-                            $isFinal = strtolower($app['applicant_role']) === ROLE_EXECUTIVE;
+                            // This queue holds leave requested by line managers and by
+                            // executives - the people whose own requests cannot go to
+                            // themselves. HR decides both, and that decision is final,
+                            // so the useful distinction per row is whose leave it is.
+                            $applicantRoleLabel = strtolower($app['applicant_role']) === ROLE_EXECUTIVE
+                                ? 'Executive'
+                                : 'Line Manager';
                         ?>
                         <tr>
                             <td class="font-weight-bold text-primary"><?php echo htmlspecialchars($app['application_no']); ?></td>
                             <td>
                                 <strong><?php echo htmlspecialchars($app['first_name'] . ' ' . $app['last_name']); ?></strong>
                                 <small class="d-block text-muted"><?php echo htmlspecialchars($app['emp_id']); ?></small>
-                                <?php if ($isFinal): ?>
-                                    <span class="badge badge-primary">Executive &middot; your approval is final</span>
-                                <?php endif; ?>
+                                <span class="badge badge-primary"><?php echo htmlspecialchars($applicantRoleLabel); ?></span>
                             </td>
                             <td>
                                 <?php echo htmlspecialchars($app['dept_name'] ?? 'N/A'); ?>
@@ -151,7 +153,7 @@ ob_start();
                                                 <input type="hidden" name="application_id" value="<?php echo $app['id']; ?>">
                                                 
                                                 <div class="modal-header bg-info text-white">
-                                                    <h5 class="modal-title font-weight-bold">Stage 2 HR Review: <?php echo htmlspecialchars($app['application_no']); ?></h5>
+                                                    <h5 class="modal-title font-weight-bold">HR Review: <?php echo htmlspecialchars($app['application_no']); ?></h5>
                                                     <button type="button" class="close text-white" data-dismiss="modal">&times;</button>
                                                 </div>
                                                 <div class="modal-body">
@@ -172,6 +174,13 @@ ob_start();
                                                         </p>
                                                     <?php endif; ?>
 
+                                                    <div class="alert alert-info py-2 mb-3 small">
+                                                        <i class="ti-info-alt"></i>
+                                                        <strong>Your decision is final.</strong>
+                                                        Approving books the leave and deducts the days;
+                                                        nobody reviews it after you.
+                                                    </div>
+
                                                     <div class="form-group mb-3">
                                                         <label class="font-weight-bold text-dark">HR Policy Remarks</label>
                                                         <textarea name="comments" class="form-control" rows="3" placeholder="Add HR compliance notes or remarks..."></textarea>
@@ -182,7 +191,7 @@ ob_start();
                                                         <i class="ti-close"></i> Reject Request
                                                     </button>
                                                     <button type="submit" name="action" value="approve" class="btn btn-info font-weight-bold">
-                                                        <i class="ti-check"></i> <?php echo $isFinal ? 'Approve (Final)' : 'Approve Stage 2'; ?>
+                                                        <i class="ti-check"></i> Approve &amp; Book Leave
                                                     </button>
                                                 </div>
                                             </form>
@@ -201,9 +210,9 @@ ob_start();
 
 <?php
 $pageContent = ob_get_clean();
-$pageTitle = 'Stage 2 HR Approvals | ' . APP_NAME;
-$pageHeading = 'Stage 2: HR Manager Approvals';
-$pageSubtitle = 'Review requests that have passed Stage 1 Line Manager sign-off.';
+$pageTitle = 'HR Approvals | ' . APP_NAME;
+$pageHeading = 'HR Approvals';
+$pageSubtitle = 'Leave requested by line managers and executives, who cannot approve their own. Your decision is final.';
 $pageIcon = 'ti-shield';
 require_once __DIR__ . '/../../includes/layout.php';
 ?>

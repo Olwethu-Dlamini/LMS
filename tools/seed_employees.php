@@ -16,7 +16,7 @@
  * Everyone is created as a plain 'employee' with no department and no reporting
  * manager, because the roster did not specify them. Assign roles, departments
  * and managers in Administration > User Management afterwards; until a manager
- * is set, only an admin can clear Stage 1 for that person.
+ * is set, only an admin can approve leave for that person.
  */
 
 require_once __DIR__ . '/../config/database.php';
@@ -292,4 +292,4 @@ if ($tbcList) {
 
 echo "\nEveryone was created as role 'employee' with no department and no reporting\n";
 echo "manager. Assign those in Administration > User Management; until a manager is\n";
-echo "set, only an admin can clear Stage 1 approval for that person.\n";
+echo "set, only an admin can approve leave for that person.\n";

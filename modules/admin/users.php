@@ -103,7 +103,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             try {
                 // manager_id is intentionally not updated here: the form no longer
                 // offers the field, so including it would blank any override on
-                // every unrelated save. Stage 1 falls back to the department head.
+                // every unrelated save. Approval falls back to the department head.
                 $stmtEdit = $db->prepare("
                     UPDATE users
                     SET first_name = :fn, last_name = :ln, email = :email, role_id = :role_id,
@@ -266,7 +266,7 @@ $depts = $db->query("SELECT * FROM departments ORDER BY name ASC")->fetchAll();
 // stale preview in an open tab cannot produce a duplicate.
 $nextEmpId = next_emp_id($db);
 
-// Stage 1 approval accepts either the applicant's own manager_id or the head of
+// Approval accepts either the applicant's own manager_id or the head of
 // their department (see ApprovalWorkflow::processAction), so a user in a
 // department that has a head needs no explicit line manager. Naming one anyway
 // duplicates the fact and goes stale when the department head changes, so the
@@ -401,15 +401,15 @@ ob_start();
                         <td><?php echo htmlspecialchars($u['dept_name'] ?? 'N/A'); ?></td>
                         <td>
                             <?php
-                            // Stage 1 accepts the explicit manager or the department
-                            // head; senior roles skip Stage 1 altogether.
+                            // Approval accepts the explicit manager or the department
+                            // head; senior roles are decided by HR or the executive.
                             $skipsStage1 = in_array($u['role_name'], [ROLE_MANAGER, ROLE_HR, ROLE_EXECUTIVE], true);
                             $approver = $u['manager_name'] ?: $u['dept_head_name'];
                             ?>
                             <?php if ($u['role_name'] === ROLE_ADMIN): ?>
                                 <span class="text-muted small">No leave entitlement</span>
                             <?php elseif ($skipsStage1): ?>
-                                <span class="text-muted small">Skips Stage 1 &middot; HR reviews</span>
+                                <span class="text-muted small">Decided by HR</span>
                             <?php elseif ($approver): ?>
                                 <?php echo htmlspecialchars($approver); ?>
                                 <?php if (!$u['manager_name']): ?>
@@ -647,8 +647,8 @@ ob_start();
 </div>
 
 <script>
-// Stage 1 approval already accepts the head of the applicant's department, so
-// the Line Manager field is an override for someone who reports outside it.
+// Approval already accepts the head of the applicant's department, so the
+// Line Manager field is an override for someone who reports outside it.
 // Showing who will approve keeps manager_id empty in the normal case, which
 // means the account follows the department if its head later changes.
 document.addEventListener("DOMContentLoaded", function () {
@@ -680,7 +680,7 @@ document.addEventListener("DOMContentLoaded", function () {
             approverText.querySelector("strong").textContent = head;
         } else {
             approverText.innerHTML = '<span class="text-danger">'
-                + 'This department has no head, so nobody can approve Stage 1. '
+                + 'This department has no head, so nobody can approve their leave. '
                 + 'Name a line manager below.</span>';
         }
         // With no department head there is no fallback, so the override is the

@@ -49,11 +49,14 @@ $stmt = $db->prepare("
 $stmt->execute($params);
 $entries = $stmt->fetchAll();
 
+// The stage column records the status an application was in when the action was
+// taken, which is now simply who decided it. Historical rows carry the same
+// values, so entries from the multi-stage era read correctly here too.
 $stageLabels = [
-    'pending_manager'   => 'Stage 1 · Line Manager',
-    'pending_hr'        => 'Stage 2 · HR',
-    'pending_executive' => 'Stage 3 · Executive',
-    'approved'          => 'Post-approval',
+    'pending_manager'   => 'Line manager',
+    'pending_hr'        => 'HR',
+    'pending_executive' => 'Executive',
+    'approved'          => 'After approval',
 ];
 
 ob_start();

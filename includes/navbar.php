@@ -18,11 +18,16 @@ function ri_item_active(string $path): string { return ri_nav_on([$path]) ? ' ac
 
 // Staff navigation only. Admins are redirected to the admin console by
 // require_staff() and never render this bar, so no admin override applies here.
-$canApproveStage1 = has_role(ROLE_MANAGER, false);
-$canApproveStage2 = has_role(ROLE_HR, false);
-$canApproveStage3 = has_role(ROLE_EXECUTIVE, false);
-$showApprovals    = $canApproveStage1 || $canApproveStage2 || $canApproveStage3;
-$showHr           = has_role(ROLE_HR, false);
+//
+// The three queues are no longer three stages of one request. Each holds a
+// different kind of applicant - a line manager decides their own team's leave,
+// HR decides managers' and executives', the executive decides HR's - so they
+// are named by whose leave is waiting rather than by a stage number.
+$canDecideTeam      = has_role(ROLE_MANAGER, false);
+$canDecideSeniors   = has_role(ROLE_HR, false);
+$canDecideHrLeave   = has_role(ROLE_EXECUTIVE, false);
+$showApprovals      = $canDecideTeam || $canDecideSeniors || $canDecideHrLeave;
+$showHr             = has_role(ROLE_HR, false);
 ?>
 <div class="ri-nav">
     <div class="container">
@@ -69,20 +74,20 @@ $showHr           = has_role(ROLE_HR, false);
                             <i class="ti-check-box"></i>Approvals
                         </a>
                         <div class="dropdown-menu" aria-labelledby="riNavApprovals">
-                            <h6 class="dropdown-header">Approval Pipeline</h6>
-                            <?php if ($canApproveStage1): ?>
+                            <h6 class="dropdown-header">Waiting on you</h6>
+                            <?php if ($canDecideTeam): ?>
                                 <a class="dropdown-item<?php echo ri_item_active('/manager/approvals.php'); ?>" href="<?php echo APP_URL; ?>/modules/manager/approvals.php">
-                                    <i class="ti-check-box"></i>Stage 1 &middot; Line Manager
+                                    <i class="ti-check-box"></i>My team's leave
                                 </a>
                             <?php endif; ?>
-                            <?php if ($canApproveStage2): ?>
+                            <?php if ($canDecideSeniors): ?>
                                 <a class="dropdown-item<?php echo ri_item_active('/hr/approvals.php'); ?>" href="<?php echo APP_URL; ?>/modules/hr/approvals.php">
-                                    <i class="ti-shield"></i>Stage 2 &middot; HR Review
+                                    <i class="ti-shield"></i>Manager &amp; executive leave
                                 </a>
                             <?php endif; ?>
-                            <?php if ($canApproveStage3): ?>
+                            <?php if ($canDecideHrLeave): ?>
                                 <a class="dropdown-item<?php echo ri_item_active('/executive/approvals.php'); ?>" href="<?php echo APP_URL; ?>/modules/executive/approvals.php">
-                                    <i class="ti-crown"></i>Stage 3 &middot; Executive Sign-Off
+                                    <i class="ti-crown"></i>HR leave
                                 </a>
                             <?php endif; ?>
                         </div>

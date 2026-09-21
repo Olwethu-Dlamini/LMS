@@ -47,7 +47,7 @@ class EmailTemplate {
      * Subject line for a notification.
      *
      * The notification title is already a complete sentence written for a person
-     * ("Leave request awaiting your Stage 1 approval"), so it is used as-is
+     * ("Leave request awaiting your approval"), so it is used as-is
      * rather than reworded. It is prefixed with the application short name,
      * because a subject arriving in a full inbox has to say which system it came
      * from before it says anything else.

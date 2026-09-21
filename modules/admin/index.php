@@ -17,9 +17,10 @@ $archivedUsers = $one("SELECT COUNT(*) FROM users WHERE status = 'inactive'");
 $pendingFirst  = $one("SELECT COUNT(*) FROM users WHERE must_change_password = 1");
 $noDept        = $one("SELECT COUNT(*) FROM users WHERE department_id IS NULL AND status = 'active'");
 
-// An approval chain only works if somebody actually holds each role. With no
-// active HR account every application stalls at Stage 2; with no executive,
-// at Stage 3. Both are invisible until leave starts piling up, so surface them.
+// Each role decides somebody's leave, so an empty one strands every request
+// routed to it: with no active HR account, managers' and executives' leave
+// stalls; with no executive, HR's own does. Both are invisible until leave
+// starts piling up, so surface them.
 $roleHolders = function (string $role) use ($one): int {
     return $one("SELECT COUNT(*) FROM users u JOIN roles r ON r.id = u.role_id
                  WHERE r.name = :role AND u.status = 'active'", ['role' => $role]);
@@ -29,7 +30,7 @@ $execCount = $roleHolders('executive');
 $mgrCount  = $roleHolders('manager');
 
 // Employees with neither a personal line manager nor a department head have
-// nobody to clear Stage 1 for them.
+// nobody to decide their leave.
 $noApprover = $one("SELECT COUNT(*) FROM users u
                     JOIN roles r ON r.id = u.role_id
                     LEFT JOIN departments d ON d.id = u.department_id

@@ -25,8 +25,9 @@ require_once __DIR__ . '/ApprovalWorkflow.php';
  *   nuisance; a lost approval is a payroll problem.
  *
  *   Recipients are derived from the workflow, not stored alongside it. Who
- *   approves Stage 1 can change when an administrator reassigns a department, and
- *   a notification aimed at whoever held the role last week would be wrong.
+ *   decides an employee's leave changes when an administrator reassigns a
+ *   department, and a notification aimed at whoever held the role last week
+ *   would be wrong.
  *
  * Every notification is also queued as an email, in push() - the one place all
  * of them pass through, so the two can never drift apart and start telling
@@ -377,11 +378,11 @@ class Notifier {
     /**
      * Who has to act on an application sitting at a given status.
      *
-     * Stage 1 goes to the applicant's own line manager and to whoever heads
-     * their department - the same pair the Stage 1 queue is scoped to, so
-     * everybody who can see the request is told about it. Later stages go to
-     * every active holder of the responsible role, because either of them may
-     * pick the request up.
+     * An employee's request goes to their own line manager and to whoever heads
+     * their department - the same pair that queue is scoped to, so everybody who
+     * can see the request is told about it. A manager's, an executive's or HR's
+     * own request goes to every active holder of the role that decides it,
+     * because any of them may pick it up.
      *
      * The applicant is never notified that they are waiting on themselves.
      *

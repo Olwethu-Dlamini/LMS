@@ -25,7 +25,10 @@ $pendingStage2Count = 0;
 $pendingStage3Count = 0;
 
 // Admins never reach this page (require_staff sends them to the console), so
-// these queues are scoped to the staff roles that actually own each stage.
+// these queues are scoped to the staff roles that own each of them. They are
+// three separate queues holding three kinds of applicant, not three stages of
+// one request: a manager decides their team's leave, HR decides managers' and
+// executives', the executive decides HR's, and each decision is final.
 if (has_role(ROLE_MANAGER, false)) {
     $stmtCount = $db->prepare("
         SELECT COUNT(*)
@@ -121,7 +124,7 @@ ob_start();
             <div class="card-body">
                 <div class="d-flex justify-content-between align-items-center">
                     <div>
-                        <span class="text-uppercase small font-weight-bold text-muted">Stage 1: Line Manager Queue</span>
+                        <span class="text-uppercase small font-weight-bold text-muted">My team's leave</span>
                         <h2 class="font-weight-bold text-warning mb-0"><?php echo $pendingStage1Count; ?></h2>
                     </div>
                     <div>
@@ -141,7 +144,7 @@ ob_start();
             <div class="card-body">
                 <div class="d-flex justify-content-between align-items-center">
                     <div>
-                        <span class="text-uppercase small font-weight-bold text-muted">Stage 2: HR Manager Queue</span>
+                        <span class="text-uppercase small font-weight-bold text-muted">Manager &amp; executive leave</span>
                         <h2 class="font-weight-bold text-info mb-0"><?php echo $pendingStage2Count; ?></h2>
                     </div>
                     <div>
@@ -161,7 +164,7 @@ ob_start();
             <div class="card-body">
                 <div class="d-flex justify-content-between align-items-center">
                     <div>
-                        <span class="text-uppercase small font-weight-bold text-muted">Stage 3: Executive Boss Queue</span>
+                        <span class="text-uppercase small font-weight-bold text-muted">HR leave</span>
                         <h2 class="font-weight-bold text-primary mb-0"><?php echo $pendingStage3Count; ?></h2>
                     </div>
                     <div>

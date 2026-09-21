@@ -36,7 +36,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-// Fetch Stage 3 Pending Applications
+// Leave requested by HR, which is what the executive decides.
 $stmt = $db->query("
     SELECT a.*, t.name as leave_name, u.first_name, u.last_name, u.emp_id, d.name as dept_name
     FROM leave_applications a
@@ -48,8 +48,8 @@ $stmt = $db->query("
 ");
 $pendingApps = $stmt->fetchAll();
 
-// Coverage impact per request, so final sign-off carries the same staffing
-// picture the earlier stages saw.
+// Coverage impact per request, so this decision carries the same staffing
+// picture every other approver is shown.
 $capacity = new LeaveCapacity($db);
 $coverage = [];
 foreach ($pendingApps as $app) {
@@ -66,7 +66,7 @@ ob_start();
 <?php if (is_admin()): ?>
     <div class="alert alert-warning mb-4">
         <strong><i class="ti-alert"></i> Administrator override.</strong>
-        You are acting outside the normal approval chain. Use this only when the
+        You are acting outside the normal approval route. Use this only when the
         designated approver is unavailable. Every action is recorded in the
         audit log against your account.
     </div>
@@ -75,7 +75,7 @@ ob_start();
 
 <div class="card border-primary">
     <div class="card-header bg-primary text-white">
-        <span class="font-weight-bold"><i class="ti-time"></i> Pending Executive Sign-Off Queue (<?php echo count($pendingApps); ?>)</span>
+        <span class="font-weight-bold"><i class="ti-time"></i> Waiting on you (<?php echo count($pendingApps); ?>)</span>
     </div>
     <div class="card-body p-0">
         <div class="table-responsive">
@@ -142,7 +142,7 @@ ob_start();
                                                 <input type="hidden" name="application_id" value="<?php echo $app['id']; ?>">
                                                 
                                                 <div class="modal-header bg-primary text-white">
-                                                    <h5 class="modal-title font-weight-bold">Stage 3 Executive Review: <?php echo htmlspecialchars($app['application_no']); ?></h5>
+                                                    <h5 class="modal-title font-weight-bold">Executive Review: <?php echo htmlspecialchars($app['application_no']); ?></h5>
                                                     <button type="button" class="close text-white" data-dismiss="modal">&times;</button>
                                                 </div>
                                                 <div class="modal-body">
@@ -163,6 +163,13 @@ ob_start();
                                                         </p>
                                                     <?php endif; ?>
 
+                                                    <div class="alert alert-info py-2 mb-3 small">
+                                                        <i class="ti-info-alt"></i>
+                                                        <strong>Your decision is final.</strong>
+                                                        Approving books the leave and deducts the days;
+                                                        nobody reviews it after you.
+                                                    </div>
+
                                                     <div class="form-group mb-3">
                                                         <label class="font-weight-bold text-dark">Executive Remarks</label>
                                                         <textarea name="comments" class="form-control" rows="3" placeholder="Add executive approval remarks..."></textarea>
@@ -173,7 +180,7 @@ ob_start();
                                                         <i class="ti-close"></i> Reject Request
                                                     </button>
                                                     <button type="submit" name="action" value="approve" class="btn btn-success font-weight-bold">
-                                                        <i class="ti-check"></i> Grant Final Approval
+                                                        <i class="ti-check"></i> Approve &amp; Book Leave
                                                     </button>
                                                 </div>
                                             </form>
@@ -192,9 +199,9 @@ ob_start();
 
 <?php
 $pageContent = ob_get_clean();
-$pageTitle = 'Stage 3 Executive Approvals | ' . APP_NAME;
-$pageHeading = 'Stage 3: Executive Sign-Off';
-$pageSubtitle = 'Final authority for leave requests cleared by Line Manager and HR.';
+$pageTitle = 'Executive Approvals | ' . APP_NAME;
+$pageHeading = 'Executive Approvals';
+$pageSubtitle = 'Leave requested by HR, who cannot approve their own. Your decision is final.';
 $pageIcon = 'ti-crown';
 require_once __DIR__ . '/../../includes/layout.php';
 ?>
