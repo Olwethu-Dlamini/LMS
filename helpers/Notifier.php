@@ -2,6 +2,12 @@
 require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../config/constants.php';
 require_once __DIR__ . '/EmailQueue.php';
+// Circular by design, and safe: ApprovalWorkflow requires this file in turn,
+// and PHP treats the second require_once as a no-op because the first is still
+// in progress. Neither class touches the other while its own body is being
+// defined - the only call is at runtime, for the routing wording below - so
+// whichever file a caller loads first, both are defined before anything runs.
+require_once __DIR__ . '/ApprovalWorkflow.php';
 
 /**
  * In-app notifications.
@@ -32,10 +38,29 @@ require_once __DIR__ . '/EmailQueue.php';
 class Notifier {
     const TYPE_SUBMITTED  = 'leave_submitted';
     const TYPE_AWAITING   = 'leave_awaiting_you';
+    /**
+     * Raised by the old multi-stage chain, when an approval moved a request on
+     * to the next approver instead of deciding it.
+     *
+     * Nothing produces it any more. It is kept because the notifications table
+     * and email_outbox on a live installation already hold rows under it, and
+     * they should keep rendering with their own icon and accent rather than
+     * falling through to a generic "Updated".
+     */
     const TYPE_ADVANCED   = 'leave_advanced';
     const TYPE_APPROVED   = 'leave_approved';
     const TYPE_REJECTED   = 'leave_rejected';
     const TYPE_CANCELLED  = 'leave_cancelled';
+
+    /**
+     * Said to an approver, because it is the thing that changed for them.
+     *
+     * They used to be one signature of three, with HR and an executive behind
+     * them to catch a mistake. Their approval is now the whole decision and it
+     * books the leave, so the notice says so rather than leaving them to find
+     * out from the absence of a second stage.
+     */
+    const DECISION_IS_FINAL = 'Your decision is final: approving books the leave and deducts the days.';
 
     private PDO $db;
     private EmailQueue $emails;
@@ -60,11 +85,11 @@ class Notifier {
     public static function awaitingTitle(string $status): string {
         switch ($status) {
             case STATUS_PENDING_MANAGER:
-                return 'Leave request awaiting your Stage 1 approval';
+                return 'Leave request awaiting your approval';
             case STATUS_PENDING_HR:
-                return 'Leave request awaiting your Stage 2 HR review';
+                return 'Leave request awaiting your HR approval';
             case STATUS_PENDING_EXECUTIVE:
-                return 'Leave request awaiting your Stage 3 sign-off';
+                return 'Leave request awaiting your sign-off';
             default:
                 return 'Leave request awaiting your review';
         }
@@ -73,10 +98,14 @@ class Notifier {
     /**
      * What the applicant should be told an approval or rejection means.
      *
-     * The outcome is read from the status the workflow actually produced, so
-     * "fully approved" is never claimed for a request that still has a stage to
-     * clear - and HR sign-off on an executive's own leave is correctly reported
-     * as final.
+     * The outcome is still read from the status the workflow actually produced
+     * rather than assumed from the action, but with one approval deciding a
+     * request there is only one approval outcome left. The two "cleared Stage 1
+     * and is with HR" style titles have gone with the chain: no approval
+     * produces a pending status any more, so nothing could reach them.
+     *
+     * "Approved" rather than "fully approved", which only meant anything while
+     * there was a partial kind.
      *
      * @return array{0:string,1:string} [type, title]
      */
@@ -84,16 +113,10 @@ class Notifier {
         if ($action === 'reject') {
             return [self::TYPE_REJECTED, 'Your leave request was declined'];
         }
-        switch ($newStatus) {
-            case STATUS_APPROVED:
-                return [self::TYPE_APPROVED, 'Your leave request is fully approved'];
-            case STATUS_PENDING_HR:
-                return [self::TYPE_ADVANCED, 'Your leave request cleared Stage 1 and is with HR'];
-            case STATUS_PENDING_EXECUTIVE:
-                return [self::TYPE_ADVANCED, 'Your leave request cleared Stage 2 and awaits sign-off'];
-            default:
-                return [self::TYPE_ADVANCED, 'Your leave request has been updated'];
+        if ($newStatus === STATUS_APPROVED) {
+            return [self::TYPE_APPROVED, 'Your leave request is approved'];
         }
+        return [self::TYPE_ADVANCED, 'Your leave request has been updated'];
     }
 
     /**
@@ -124,9 +147,13 @@ class Notifier {
      *
      * Insertion order is display order.
      *
+     * @param string|null $requestedBy     the applicant's name, for an approver's
+     *                                     copy; omitted from the applicant's own
+     * @param bool        $decisionIsFinal adds the row that tells an approver
+     *                                     nobody reviews this after them
      * @return array<string,string> label => value
      */
-    public static function detailsFor(array $app, ?string $requestedBy = null): array {
+    public static function detailsFor(array $app, ?string $requestedBy = null, bool $decisionIsFinal = false): array {
         $details = [];
 
         if ($requestedBy !== null && $requestedBy !== '') {
@@ -146,6 +173,14 @@ class Notifier {
 
         $days = rtrim(rtrim(number_format((float)$app['total_days'], 1), '0'), '.');
         $details['Working days'] = $days . ($days === '1' ? ' day' : ' days');
+
+        if ($decisionIsFinal) {
+            // Last row rather than first: the facts of the request are what an
+            // approver is deciding on, and this is the consequence of deciding.
+            // It earns a labelled row because the email's prose body is not
+            // rendered at all once there is a detail table to show instead.
+            $details['Decision'] = 'Yours, and final - it books the leave';
+        }
 
         return $details;
     }
@@ -325,10 +360,12 @@ class Notifier {
                    a.total_days, a.status,
                    t.name AS leave_name,
                    u.first_name, u.last_name, u.manager_id, u.department_id,
+                   r.name AS applicant_role,
                    d.line_manager_id
             FROM leave_applications a
             JOIN leave_types t ON t.id = a.leave_type_id
             JOIN users u ON u.id = a.user_id
+            JOIN roles r ON r.id = u.role_id
             LEFT JOIN departments d ON d.id = u.department_id
             WHERE a.id = :id
         ");
@@ -411,11 +448,18 @@ class Notifier {
             $summary = self::describe($app);
             $who     = $app['first_name'] . ' ' . $app['last_name'];
 
+            // Who to expect a decision from, named by role. Falls back to the
+            // employee route on an installation whose applicationContext()
+            // predates the applicant_role column being selected.
+            $decider = ApprovalWorkflow::deciderLabelFor(
+                strtolower((string)($app['applicant_role'] ?? ROLE_EMPLOYEE))
+            );
+
             $this->push(
                 (int)$app['user_id'],
                 self::TYPE_SUBMITTED,
                 'Leave request submitted for approval',
-                $summary . '. You will be notified as it moves through the approval chain.',
+                $summary . '. ' . ucfirst($decider) . ' decides it, and that decision is final.',
                 self::historyLink(),
                 $applicationId,
                 ['details' => self::detailsFor($app)]
@@ -425,10 +469,10 @@ class Notifier {
                 $this->approversFor($app),
                 self::TYPE_AWAITING,
                 self::awaitingTitle($app['status']),
-                $who . ' - ' . $summary,
+                $who . ' - ' . $summary . '. ' . self::DECISION_IS_FINAL,
                 self::queueLink($app['status']),
                 $applicationId,
-                ['details' => self::detailsFor($app, $who)]
+                ['details' => self::detailsFor($app, $who, true)]
             );
         } catch (Throwable $e) {
             error_log('Notifier: submission notice failed - ' . $e->getMessage());
@@ -436,8 +480,12 @@ class Notifier {
     }
 
     /**
-     * An approval or rejection: tell the applicant what happened, and if the
-     * request moved on, tell the next stage it has arrived.
+     * An approval or rejection: tell the applicant what happened.
+     *
+     * Nobody downstream is told, because there is no downstream. This method
+     * used to notify the stage a request had just reached; one approval decides
+     * a request now, so an approval is the end of it and the only person with
+     * anything left to learn is the applicant.
      */
     public function decisionRecorded(int $applicationId, string $action, string $newStatus, ?string $comments = null): void {
         try {
@@ -449,6 +497,11 @@ class Notifier {
             [$type, $title] = self::outcomeFor($action, $newStatus);
 
             $body = $summary;
+            if ($newStatus === STATUS_APPROVED) {
+                // Worth saying outright now that it happens on the first
+                // approval: the balance has already moved.
+                $body .= '. The days have been deducted from your balance.';
+            }
             if (!empty($comments)) {
                 $body .= '. Remarks: ' . $comments;
             }
@@ -465,21 +518,6 @@ class Notifier {
                 // wants to read, and in the email it gets its own quoted block.
                 ['details' => self::detailsFor($app), 'remarks' => $comments]
             );
-
-            if (in_array($newStatus, [STATUS_PENDING_HR, STATUS_PENDING_EXECUTIVE], true)) {
-                // applicationContext() read the row after the status was written,
-                // so approversFor() resolves the stage it has just reached.
-                $who = $app['first_name'] . ' ' . $app['last_name'];
-                $this->pushMany(
-                    $this->approversFor($app),
-                    self::TYPE_AWAITING,
-                    self::awaitingTitle($newStatus),
-                    $who . ' - ' . $summary,
-                    self::queueLink($newStatus),
-                    $applicationId,
-                    ['details' => self::detailsFor($app, $who), 'remarks' => $comments]
-                );
-            }
         } catch (Throwable $e) {
             error_log('Notifier: decision notice failed - ' . $e->getMessage());
         }
