@@ -35,6 +35,46 @@ if ($calculator->sourcingAvailable()) {
     $leaveTypes = $db->query("SELECT * FROM leave_types WHERE is_active = 1 ORDER BY name ASC")->fetchAll();
 }
 
+// What this person has left in each category for the leave year shown on the
+// form. The dropdown used to print the policy ceiling (max_days_per_year),
+// which is the same 21 for everybody and not what HR allocated any one of them.
+// Same arithmetic as the dashboard and LeaveCalculator: total - used - pending.
+$stmtBalances = $db->prepare("
+    SELECT leave_type_id, total_days, used_days, pending_days
+    FROM leave_entitlements
+    WHERE user_id = :user_id AND year = :year
+");
+$stmtBalances->execute(['user_id' => $userId, 'year' => (int)date('Y')]);
+$balances = [];
+foreach ($stmtBalances->fetchAll() as $row) {
+    $balances[(int)$row['leave_type_id']] = [
+        'total'     => (float)$row['total_days'],
+        'available' => (float)$row['total_days'] - (float)$row['used_days'] - (float)$row['pending_days'],
+    ];
+}
+
+/**
+ * "(16 days available)", or "(no allowance)" when nothing was allocated.
+ * A category that spends another's balance names it and shows that balance,
+ * because that is the number the request comes off.
+ */
+function balance_label(array $type, array $balances): string {
+    $sourceId = (int)($type['deducts_from_type_id'] ?? 0);
+    $spendsFrom = $type['spends_from_name'] ?? '';
+    $balance = $balances[$sourceId > 0 && $spendsFrom !== '' ? $sourceId : (int)$type['id']] ?? null;
+
+    if ($balance === null || $balance['total'] <= 0) {
+        $amount = 'no allowance';
+    } else {
+        $days = rtrim(rtrim(number_format($balance['available'], 1, '.', ''), '0'), '.');
+        $amount = $days . ($days === '1' ? ' day' : ' days') . ' available';
+    }
+
+    return $spendsFrom !== ''
+        ? '(from ' . htmlspecialchars($spendsFrom) . ', ' . $amount . ')'
+        : '(' . $amount . ')';
+}
+
 $error = '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $csrfToken = $_POST['csrf_token'] ?? '';
@@ -126,15 +166,7 @@ ob_start();
                                         data-spends-from="<?php echo htmlspecialchars((string)($type['spends_from_name'] ?? '')); ?>"
                                         <?php echo (isset($_POST['leave_type_id']) && $_POST['leave_type_id'] == $type['id']) ? 'selected' : ''; ?>>
                                     <?php echo htmlspecialchars($type['name']); ?>
-                                    <?php
-                                    // A category with no allowance of its own would
-                                    // otherwise advertise "Max: 0 Days/Year", which
-                                    // reads as nothing available rather than as days
-                                    // coming from somewhere else.
-                                    echo !empty($type['spends_from_name'])
-                                        ? '(from ' . htmlspecialchars($type['spends_from_name']) . ')'
-                                        : '(Max: ' . htmlspecialchars((string)$type['max_days_per_year']) . ' Days/Year)';
-                                    ?>
+                                    <?php echo balance_label($type, $balances); ?>
                                 </option>
                             <?php endforeach; ?>
                         </select>
