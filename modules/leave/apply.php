@@ -259,9 +259,9 @@ ob_start();
     </div>
 </div>
 
-<link rel="stylesheet" href="<?php echo APP_URL; ?>/assets/plugins/litepicker/litepicker.css">
-<script src="<?php echo APP_URL; ?>/assets/plugins/litepicker/litepicker.js"></script>
-<script src="<?php echo APP_URL; ?>/assets/js/leave-range-picker.js"></script>
+<link rel="stylesheet" href="<?php echo asset_url('assets/plugins/litepicker/litepicker.css'); ?>">
+<script src="<?php echo asset_url('assets/plugins/litepicker/litepicker.js'); ?>"></script>
+<script src="<?php echo asset_url('assets/js/leave-range-picker.js'); ?>"></script>
 <script>
 document.addEventListener("DOMContentLoaded", function () {
     const startDateInput = document.getElementById("start_date");

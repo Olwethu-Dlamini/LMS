@@ -49,6 +49,19 @@ function sanitize(string $data): string {
 }
 
 /**
+ * URL of a file under the app root, stamped with its modification time as ?v=.
+ *
+ * Stylesheets and scripts are linked without a version otherwise, so after a
+ * deploy a browser or Cloudflare can keep serving the old copy until its cache
+ * runs out. The stamp changes whenever git pull rewrites the file, and only then.
+ */
+function asset_url(string $path): string {
+    $path = ltrim($path, '/');
+    $file = __DIR__ . '/../' . $path;
+    return APP_URL . '/' . $path . (is_file($file) ? '?v=' . filemtime($file) : '');
+}
+
+/**
  * Escape a value for output inside HTML.
  *
  * Every screen already calls htmlspecialchars() directly; this exists for the

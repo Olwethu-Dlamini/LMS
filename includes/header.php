@@ -21,7 +21,7 @@ $userEmpId = $_SESSION['user_emp_id'] ?? '';
     <link rel="stylesheet" href="<?php echo APP_URL; ?>/assets/plugins/themify-icons/themify-icons.css">
 
     <!-- Real Image brand theme (replaces the bundled blog stylesheet) -->
-    <link rel="stylesheet" href="<?php echo APP_URL; ?>/assets/css/ri-theme.css">
+    <link rel="stylesheet" href="<?php echo asset_url('assets/css/ri-theme.css'); ?>">
 </head>
 <body>
 <div class="ri-shell">
