@@ -57,7 +57,7 @@ here because nothing populates it.
 browser  ->  Cloudflare  ->  Caddy tunnel  ->  PHP-FPM 8.4  ->  MySQL
 ```
 
-Four consequences follow from that chain, and three of them are not obvious.
+Five consequences follow from that chain, and four of them are not obvious.
 
 ### 3.1 TLS ends before PHP sees the request
 
@@ -157,6 +157,88 @@ URL, so browsers and Cloudflare fetch it fresh and no purge is needed. That cove
 `assets/css/ri-theme.css` on every page and the date picker files on Apply for
 Leave. Anything else under `assets/` is still linked bare; purge for those, or link
 them through `asset_url()` too.
+
+### 3.5 Only the application is served
+
+The checkout is the web root: `/var/www/lms.22112002.xyz` holds the application
+and everything else the repository carries - `.git`, `docs/`, `migrations/`,
+`tests/`, `tools/`, `config/`, `helpers/`, `includes/`, `lib/`, `uploads/`,
+`schema.sql`, the Markdown and shell files. Left to its defaults, Caddy's
+`file_server` hands out any of those, and `php_fastcgi` **executes** any `.php`
+file asked for by URL, including scripts written to be run from a shell.
+
+Two things that look like protection are not:
+
+- **`.htaccess` is Apache's.** Caddy never reads it, so
+  `uploads/attachments/.htaccess` does nothing on this host.
+- **`robots.txt` is a request to search engines, not access control.** It stops
+  nothing, and listing private paths in it advertises them.
+
+The application needs exactly five things reachable: `/` (it redirects to the
+sign-in page), `/index.php`, `/modules/`, `/api/` and `/assets/`. No page links to
+anything else; attachments are served through `modules/leave/attachment.php`,
+which checks the session. So the rule is an allowlist: serve those, answer 404 for
+everything else. An allowlist rather than a blocklist means a file added to the
+repository later is private until somebody decides otherwise.
+
+**The rule**, inside the `lms.22112002.xyz` site block of `/etc/caddy/Caddyfile`,
+above `php_fastcgi` and `file_server`:
+
+```caddy
+# Only the application is public. Everything else in the checkout (.git, docs,
+# migrations, tests, tools, config, helpers, includes, lib, uploads, *.sql, *.md)
+# is answered 404 before PHP or the file server sees the request.
+@private {
+    not path / /index.php /modules/* /api/* /assets/*
+}
+respond @private 404
+```
+
+`respond` sits ahead of `php_fastcgi` and `file_server` in Caddy's directive
+order, so a script under `tests/` or `tools/` is refused rather than run.
+
+**Applying it:**
+
+```bash
+sudo cp /etc/caddy/Caddyfile /etc/caddy/Caddyfile.bak-$(date +%F)
+sudo nano /etc/caddy/Caddyfile                 # add the block inside the LMS site
+sudo caddy validate --config /etc/caddy/Caddyfile
+sudo systemctl reload caddy
+```
+
+`validate` must say `Valid configuration` before the reload. A reload that fails
+keeps the previous configuration running, but do not rely on it.
+
+**Checking it, with non-PHP paths only.** A request for a `.php` file runs it, so
+a check made with one executes the very script it is testing. A `HEAD` request
+runs it too. Test with files PHP never touches; the rule is per path, so if these
+are refused, the scripts beside them are refused as well:
+
+```bash
+for u in .git/config docs/10_PRODUCTION_DEPLOYMENT.md schema.sql README.md \
+         modules/auth/login.php assets/css/ri-theme.css; do
+  curl -s -o /dev/null -w "%{http_code} $u\n" "https://lms.22112002.xyz/$u"
+done
+```
+
+Expect `404` for the first four and `200` for the sign-in page and the stylesheet.
+Then sign in, open Apply for Leave, a request's attachment and the team calendar,
+to confirm nothing the pages use was caught.
+
+**Rolling it back:**
+
+```bash
+sudo cp /etc/caddy/Caddyfile.bak-<date> /etc/caddy/Caddyfile
+sudo systemctl reload caddy
+```
+
+Cloudflare does not cache these file types (`cf-cache-status: DYNAMIC`), so the
+404 applies from the first request after the reload; there is nothing to purge.
+
+**Afterwards.** Anything that was reachable before the rule should be treated as
+already copied. A file in the checkout that holds personal data or credential
+hashes does not become safe by being hidden: remove it from the repository and its
+history, and change any password whose hash it carried.
 
 ---
 
