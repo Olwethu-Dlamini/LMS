@@ -245,8 +245,10 @@ ob_start();
                         <small class="form-text text-muted">Documents are private: only you and the approvers on your request can open them. Maximum <?php echo AttachmentStore::maxSizeLabel(); ?>.</small>
                     </div>
 
-                    <div class="d-flex justify-content-between align-items-center pt-3 border-top">
-                        <a href="<?php echo APP_URL; ?>/modules/dashboard/index.php" class="btn btn-outline-secondary font-weight-bold px-4">Cancel</a>
+                    <!-- Stacked on a phone, Submit first: side by side the wide Submit
+                         button ran past the right edge of anything under 414px. -->
+                    <div class="d-flex flex-column-reverse flex-sm-row justify-content-between align-items-stretch align-items-sm-center pt-3 border-top">
+                        <a href="<?php echo APP_URL; ?>/modules/dashboard/index.php" class="btn btn-outline-secondary font-weight-bold px-4 mt-2 mt-sm-0">Cancel</a>
                         <button type="submit" id="btnSubmit" class="btn btn-primary font-weight-bold px-5 py-2">
                             <i class="ti-check"></i> Submit Application
                         </button>
