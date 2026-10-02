@@ -22,6 +22,7 @@
  */
 require_once __DIR__ . '/../../includes/functions.php';
 require_once __DIR__ . '/../../helpers/LeaveCapacity.php';
+require_once __DIR__ . '/../../helpers/LeaveCalculator.php';
 check_auth();
 
 $db       = getDBConnection();
@@ -91,16 +92,9 @@ $monthApproved = count($peopleApproved);
 $monthPending  = count($peoplePending);
 
 // Public holidays are labelled in their cell so an empty day reads as a closure
-// rather than as available cover.
-$stmtHol = $db->prepare("
-    SELECT holiday_date, title FROM holidays
-    WHERE holiday_date BETWEEN :start AND :end
-");
-$stmtHol->execute(['start' => $monthStart, 'end' => $monthEnd]);
-$holidays = [];
-foreach ($stmtHol->fetchAll() as $row) {
-    $holidays[$row['holiday_date']] = $row['title'];
-}
+// rather than as available cover. Read through the calculator so a recurring
+// holiday shows in every year it closes, as it does in the day counts.
+$holidays = (new LeaveCalculator($db))->getHolidays($monthStart, $monthEnd);
 
 // The grid runs Monday to Sunday and is padded out to whole weeks.
 $gridStart = (clone $cursor);

@@ -33,15 +33,59 @@ class LeaveCalculator {
     }
 
     /**
+     * Public holidays between two dates, as date => title, in date order.
+     *
+     * A holiday marked recurring falls on the same day and month every year
+     * from the one it was entered for, so "Christmas Day, 2026-12-25,
+     * recurring" also closes 2027-12-25 without a second row. The flag used to
+     * be stored and never read, so a recurring holiday only counted in the year
+     * typed into it. Moving feasts like Good Friday are entered per year and
+     * left unticked. A 29 February holiday is skipped in years that lack one.
+     *
+     * @return array<string, string>
+     */
+    public function getHolidays(string $startDate, string $endDate): array {
+        $stmt = $this->db->prepare("
+            SELECT holiday_date, title, is_recurring FROM holidays
+            WHERE holiday_date BETWEEN :start AND :end
+               OR (is_recurring = 1 AND holiday_date <= :recurring_end)
+        ");
+        $stmt->execute(['start' => $startDate, 'end' => $endDate, 'recurring_end' => $endDate]);
+
+        $startYear = (int)substr($startDate, 0, 4);
+        $endYear   = (int)substr($endDate, 0, 4);
+        $holidays  = [];
+
+        foreach ($stmt->fetchAll() as $row) {
+            $date = substr((string)$row['holiday_date'], 0, 10);
+            if ($date >= $startDate && $date <= $endDate) {
+                $holidays[$date] = $row['title'];
+            }
+            if ((int)($row['is_recurring'] ?? 0) !== 1) {
+                continue;
+            }
+
+            [, $month, $day] = explode('-', $date);
+            for ($year = max((int)substr($date, 0, 4) + 1, $startYear); $year <= $endYear; $year++) {
+                if (!checkdate((int)$month, (int)$day, $year)) {
+                    continue;
+                }
+                $repeat = sprintf('%04d-%s-%s', $year, $month, $day);
+                if ($repeat >= $startDate && $repeat <= $endDate) {
+                    $holidays[$repeat] ??= $row['title'];
+                }
+            }
+        }
+
+        ksort($holidays);
+        return $holidays;
+    }
+
+    /**
      * Fetch list of public holiday dates between two dates
      */
     public function getHolidaysArray(string $startDate, string $endDate): array {
-        $stmt = $this->db->prepare("
-            SELECT holiday_date FROM holidays 
-            WHERE holiday_date BETWEEN :start AND :end
-        ");
-        $stmt->execute(['start' => $startDate, 'end' => $endDate]);
-        return $stmt->fetchAll(PDO::FETCH_COLUMN);
+        return array_keys($this->getHolidays($startDate, $endDate));
     }
 
     /**

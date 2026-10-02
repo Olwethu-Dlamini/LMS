@@ -196,12 +196,16 @@ class ArrayMockPDO extends PDO {
                     return $ids;
                 }
                 if (stripos($this->query, 'FROM holidays') !== false) {
+                    // A fixture is a title, or [title, recurring] for a holiday
+                    // that repeats every year. Same filter as the real query:
+                    // in range, or recurring and entered on or before the end.
                     $start = $this->lastParams['start'] ?? '';
                     $end = $this->lastParams['end'] ?? '';
                     $res = [];
-                    foreach ($this->pdo->holidays as $date => $title) {
-                        if ($date >= $start && $date <= $end) {
-                            $res[] = $date;
+                    foreach ($this->pdo->holidays as $date => $fixture) {
+                        [$title, $recurring] = is_array($fixture) ? $fixture : [$fixture, false];
+                        if (($date >= $start && $date <= $end) || ($recurring && $date <= $end)) {
+                            $res[] = ['holiday_date' => $date, 'title' => $title, 'is_recurring' => $recurring ? 1 : 0];
                         }
                     }
                     return $res;
@@ -389,8 +393,40 @@ $tester->assert($days2 === 2.0, "Weekend Exclusion (Fri-Mon = 2 days)", "Got {$d
 $days3 = $calc->calculateWorkingDays("2026-04-30", "2026-05-01");
 $tester->assert($days3 === 1.0, "Public Holiday Exclusion (Thu-Fri with Fri holiday = 1 day)", "Got {$days3}");
 
+// Recurring holidays repeat on the same day and month in later years; one-off
+// holidays do not. 2027-04-30 is a Friday, 2027-05-03 a Monday.
+$savedHolidays = $mockDb->holidays;
+$mockDb->holidays = [
+    '2026-05-01' => ['Workers Day', true],
+    '2026-04-03' => 'Good Friday',
+    '2024-02-29' => ['Leap Day Test', true],
+];
+$tester->assert(
+    $calc->getHolidaysArray('2027-04-01', '2027-05-31') === ['2027-05-01'],
+    "A recurring holiday repeats in a later year, a one-off holiday does not",
+    json_encode($calc->getHolidaysArray('2027-04-01', '2027-05-31'))
+);
+$tester->assert(
+    $calc->getHolidaysArray('2025-01-01', '2025-12-31') === [],
+    "A recurring holiday does not reach back before the year it was entered for, and 29 Feb is skipped in a non-leap year",
+    json_encode($calc->getHolidaysArray('2025-01-01', '2025-12-31'))
+);
+$tester->assert(
+    $calc->getHolidaysArray('2028-02-01', '2028-02-29') === ['2028-02-29'],
+    "A recurring 29 February holiday returns in the next leap year"
+);
+$tester->assert(
+    $calc->getHolidays('2026-12-01', '2027-06-01') === ['2027-05-01' => 'Workers Day'],
+    "getHolidays() names each holiday, which the team calendar shows in its cell"
+);
+// 2028-05-01 is a Monday, so the recurring Workers Day takes a working day.
+$mockDb->holidays = ['2028-05-03' => 'One-off Closure', '2026-05-01' => ['Workers Day', true]];
+$days2028 = $calc->calculateWorkingDays('2028-05-01', '2028-05-05');
+$tester->assert($days2028 === 3.0, "Working days skip a recurring holiday and a one-off holiday in the same week", "Got {$days2028}");
+$mockDb->holidays = $savedHolidays;
+
 // Half-day option
-$daysHalf = $calc->calculateWorkingDays("2026-05-04", "2026-05-04", "half_morning");
+$daysHalf =$calc->calculateWorkingDays("2026-05-04", "2026-05-04", "half_morning");
 $tester->assert($daysHalf === 0.5, "Half Day Duration Calculation", "Got {$daysHalf}");
 
 // A half day belongs to one day. Across a range it used to quietly subtract
