@@ -362,8 +362,8 @@ footer.end{
       <h3>Applying for leave</h3>
       <ol class="steps">
         <li>Select <strong>Apply</strong> in the top bar, or <strong>My Leave → Apply for Leave</strong>.</li>
-        <li>Choose a <strong>leave category</strong>. A line of grey text appears underneath listing that category's rules: notice required, minimum and maximum length, and whether half-days are allowed.</li>
-        <li>Pick your <strong>start</strong> and <strong>end</strong> dates. If the category demands notice, the date picker will not let you choose anything sooner. Categories that need no notice, such as sick leave, have no such floor, so you can enter dates that have already passed and record the leave after the fact.</li>
+        <li>Choose a <strong>leave category</strong>. Each one shows what <strong>you</strong> have left in it, for example <em>Annual Leave (16 days available)</em>, or <em>(no allowance)</em> if HR has not allocated you any. Emergency Leave shows the Annual Leave balance it is taken from. A line of grey text appears underneath listing that category's rules: notice required, minimum and maximum length, and whether half-days are allowed.</li>
+        <li>Pick your dates on the <strong>calendar</strong>. Select <strong>Start Date</strong> to open it, click your first day, then your last day; the days between are shaded. While you choose, a small label shows how many <strong>working days</strong> the range will cost, for example <em>8 working days · 11 days</em>. On a laptop you see two months at a time, on a phone one; use the arrows to move between months. Saturdays, Sundays and public holidays cannot be your first or last day, because the working week is Monday to Friday, but your leave can run across them. Holidays are marked with a dot; hover over one to see its name. If the category demands notice, the calendar will not let you choose anything sooner. Categories that need no notice, such as sick leave, have no such floor, so you can pick dates that have already passed and record the leave after the fact.</li>
         <li>Choose a <strong>duration type</strong>: full days, or a half day (morning or afternoon). Half-day options are greyed out for categories that must be taken as whole days. A half day applies to <strong>one</strong> day: if you want half a day off, set the start and end date to the same date.</li>
         <li>Watch the <strong>live summary</strong>. It counts the working days, tells you your remaining balance, and warns you about anything that would block the request, before you submit.</li>
         <li>Check the <strong>cover panel</strong> underneath it. If anyone else in your department is already off on those dates it names them and says how many days each is out. Where your department has a cover limit set, it also tells you whether your request would take the team past it.</li>
@@ -373,7 +373,7 @@ footer.end{
 
       <div class="note">
         <span class="tag">How days are counted</span>
-        <p>Only working days count. Saturdays, Sundays and every public holiday in the calendar are skipped automatically, so a Monday-to-Friday request over a week containing a holiday costs you four days, not five. A half day costs 0.5.</p>
+        <p>Only working days count. Saturdays, Sundays and every public holiday in the calendar are skipped automatically, so a Monday-to-Friday request over a week containing a holiday costs you four days, not five. A half day costs 0.5. The calendar's working-day label and the live summary use the same rules, so they always agree.</p>
       </div>
 
       <h3>Who else is away</h3>
@@ -637,6 +637,7 @@ footer.end{
 
       <h3>Departments and holidays</h3>
       <p>A department cannot be deleted while people still belong to it. Move them first. Holidays can be added, edited and removed freely, but a change only affects <strong>future</strong> calculations; leave that has already been submitted keeps the day count it was approved with.</p>
+      <p>Tick <strong>Recurring</strong> for a holiday that falls on the same date every year, such as Christmas Day. One row then covers that year and every year after it, in the day counts, the team calendar and the Apply calendar alike. Leave it unticked for a holiday that moves, such as Good Friday, and enter that one for each year.</p>
 
       <div class="note">
         <span class="tag">Administrators can approve on any queue</span>
@@ -703,9 +704,11 @@ footer.end{
         </table>
       </div>
 
+      <p>Holidays marked <strong>Yes</strong> carry forward automatically: 1 January 2027 is a public holiday without anyone adding it. They appear on the Apply calendar and the team calendar in every year.</p>
+
       <div class="note warn">
         <span class="tag">Check this every year</span>
-        <p>Easter moves, and a holiday landing on a weekend costs nobody a day. If the list for a new year is empty, every weekday counts as a working day and leave will be over-charged. Administrators are warned about this on the Admin Console overview.</p>
+        <p>Easter moves, so Good Friday and Easter Monday must be added for each new year, and a holiday landing on a weekend costs nobody a day. Any holiday missing from the list is counted as a working day and leave will be over-charged. The Admin Console overview warns administrators when no holidays have been entered for the current year.</p>
       </div>
     </section>
 

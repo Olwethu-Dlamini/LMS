@@ -197,13 +197,23 @@ HR, executives and administrators can select any department.
 ### Applying for leave
 
 1. Select **Apply** in the top bar, or **My Leave → Apply for Leave**.
-2. Choose a **leave category**. A line of grey text appears underneath listing
-   that category's rules: notice required, minimum and maximum length, and
-   whether half-days are allowed.
-3. Pick your **start** and **end** dates. If the category demands notice, the
-   date picker will not let you choose anything sooner. Categories that need no
-   notice, such as sick leave, have no such floor, so you can enter dates that have
-   already passed and record the leave after the fact.
+2. Choose a **leave category**. Each one shows what **you** have left in it, for
+   example *Annual Leave (16 days available)*, or *(no allowance)* if HR has not
+   allocated you any. Emergency Leave shows the Annual Leave balance it is taken
+   from. A line of grey text appears underneath listing that category's rules:
+   notice required, minimum and maximum length, and whether half-days are allowed.
+3. Pick your dates on the **calendar**. Select **Start Date** to open it, click
+   your first day, then your last day; the days between are shaded. While you
+   choose, a small label shows how many **working days** the range will cost,
+   for example *8 working days · 11 days*. On a laptop you see two months at a
+   time, on a phone one; use the arrows to move between months.
+   - Saturdays, Sundays and public holidays cannot be your first or last day,
+     because the working week is Monday to Friday, but your leave can run across
+     them. Holidays are marked with a dot; hover over one to see its name.
+   - If the category demands notice, the calendar will not let you choose
+     anything sooner. Categories that need no notice, such as sick leave, have no
+     such floor, so you can pick dates that have already passed and record the
+     leave after the fact.
 4. Choose a **duration type**: full days, or a half day (morning or afternoon).
    Half-day options are greyed out for categories that must be taken as whole days.
    A half day applies to **one** day: if you want half a day off, set the start
@@ -224,7 +234,8 @@ the form `LV-2026-XXXXXX`. Quote it if you need to ask about the request.
 > **How days are counted.** Only working days count. Saturdays, Sundays and every
 > public holiday in the calendar are skipped automatically, so a Monday-to-Friday
 > request over a week containing a holiday costs you four days, not five. A half
-> day costs 0.5.
+> day costs 0.5. The calendar's working-day label and the live summary use the
+> same rules, so they always agree.
 
 #### Who else is away
 
@@ -561,6 +572,11 @@ Holidays can be added, edited and removed freely, but a change only affects
 **future** calculations; leave that has already been submitted keeps the day count
 it was approved with.
 
+Tick **Recurring** for a holiday that falls on the same date every year, such as
+Christmas Day. One row then covers that year and every year after it, in the day
+counts, the team calendar and the Apply calendar alike. Leave it unticked for a
+holiday that moves, such as Good Friday, and enter that one for each year.
+
 **Maximum Away At Once** sets how many of a department's members may be on leave on
 the same working day. It drives the shading on the team calendar and the coverage
 notice approvers see before they sign off.
@@ -640,10 +656,15 @@ public holiday.
 
 *Administrators maintain this list under Admin Console → Holidays.*
 
-> **Check this every year.** Easter moves, and a holiday landing on a weekend
-> costs nobody a day. If the list for a new year is empty, every weekday counts as
-> a working day and leave will be over-charged. Administrators are warned about
-> this on the Admin Console overview.
+Holidays marked **Yes** carry forward automatically: 1 January 2027 is a public
+holiday without anyone adding it. They appear on the Apply calendar and the team
+calendar in every year.
+
+> **Check this every year.** Easter moves, so Good Friday and Easter Monday must
+> be added for each new year, and a holiday landing on a weekend costs nobody a
+> day. Any holiday missing from the list is counted as a working day and leave
+> will be over-charged. The Admin Console overview warns administrators when no
+> holidays have been entered for the current year.
 
 ---
 

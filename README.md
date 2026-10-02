@@ -165,7 +165,9 @@ aggregation in each are pure functions, covered by the test suite.
 
 - **Core**: PHP 8.0+ (PDO, Native Sessions, Clean Modular Component Architecture)
 - **Database**: MySQL 8.0 / MariaDB
-- **Frontend / Styling**: HTML5, Vanilla CSS, Bootstrap 5, FontAwesome, DataTables
+- **Frontend / Styling**: HTML5, Bootstrap 4.4.1 and jQuery (vendored in `assets/plugins/`), themify-icons, the RI theme in `assets/css/ri-theme.css`, Montserrat from Google Fonts
+- **Date range picker**: Litepicker 2.0.12 (MIT, vendored in `assets/plugins/litepicker/`), on Apply for Leave only. Upstream is archived, so it receives no fixes; see its README there
+- **Asset versioning**: `asset_url()` stamps the theme and picker links with the file's modification time, so a `git pull` reaches browsers and Cloudflare without a purge
 - **Architecture**: Front Controller Routing with Component-based Layout
 
 ---
@@ -617,7 +619,7 @@ their own leave. Every `/modules/admin/*` route is gated by
 | **Users** | Create, edit, reset password, archive/restore, delete. |
 | **Departments** | Create, rename, reassign head, delete (blocked while members remain). |
 | **Leave Types** | Full rule configuration. See below. |
-| **Holidays** | Add, edit, delete. Changes affect future calculations only. |
+| **Holidays** | Add, edit, delete. Changes affect future calculations only. A holiday ticked **Recurring** closes the same day and month every year from the one it was entered for, so Christmas needs one row, not one a year. Moving feasts such as Good Friday are entered per year and left unticked. |
 | **Audit Log** | Every approval and rejection, filterable by action, role and date. |
 
 ### Deleting is deliberately guarded
@@ -642,11 +644,11 @@ Each leave type carries its own policy, enforced server-side in
 
 | Setting | Meaning |
 |---|---|
-| `max_days_per_year` | Annual allocation used when seeding entitlements |
+| `max_days_per_year` | Annual allocation used when seeding entitlements. It is the policy default, not anybody's balance: the apply form shows each person their own `total - used - pending` |
 | `min_days_per_request` | Smallest bookable request |
 | `max_days_per_request` | Largest single request; blank means no cap. A request is one contiguous range, so this also caps consecutive days within it |
 | `allow_half_day` | Whether half-day options are offered at all. A half day applies to a single day: choosing one across a longer range is refused, not quietly counted as the range minus half a day |
-| `min_notice_days` | Days of advance notice required. **0 also permits backdating**, which is what lets sick leave be recorded after the fact. The apply form's date picker takes its earliest date from this rule, so a zero-notice category has no floor at all |
+| `min_notice_days` | Days of advance notice required. **0 also permits backdating**, which is what lets sick leave be recorded after the fact. The apply form's range calendar locks every date before the earliest this rule allows, so a zero-notice category has no floor at all |
 | `requires_attachment` + `attachment_threshold_days` | Demand a document only once a request exceeds N working days. This replaces what was a hardcoded "sick leave over 2 days" rule |
 | `is_paid` | Paid or unpaid |
 | `is_active` | Retired types vanish from the apply form but stay in reports |

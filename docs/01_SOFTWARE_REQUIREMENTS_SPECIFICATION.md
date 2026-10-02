@@ -42,12 +42,13 @@ The system defines 5 primary user roles:
 - **FR-AUTH-03**: Secure logout and session destruction with CSRF protection on form submissions.
 
 ### 3.2 Leave Application & Calculation Engine
-- **FR-LEAVE-01**: Employees can apply for leaves by selecting leave type, start date, end date, and reason.
-- **FR-LEAVE-02**: System must calculate **net working days** excluding Saturdays, Sundays, and official public holidays.
+- **FR-LEAVE-01**: Employees can apply for leaves by selecting leave type, start date, end date, and reason. The dates are chosen on one range calendar that marks the start, the end and the days between, and counts the working days while the range is being chosen.
+- **FR-LEAVE-02**: System must calculate **net working days** excluding Saturdays, Sundays, and official public holidays. The working week is Monday to Friday, so a weekend or public holiday cannot be the first or last day of a request, though a request may run across them. A holiday marked recurring is excluded on the same day and month in every later year.
 - **FR-LEAVE-03**: System must validate requested days against the employee's available leave entitlement.
 - **FR-LEAVE-04**: System must prevent submission if dates overlap with existing pending or approved requests.
 - **FR-LEAVE-05**: System must require file attachment (medical certificate) if a leave category exceeds its configured attachment threshold (e.g. Sick Leave over 2 days).
 - **FR-LEAVE-06**: A leave category may spend another category's entitlement rather than holding one of its own (Emergency Leave is deducted from Annual Leave), and may be configured to pass a balance it exceeds so an absence that has already happened can still be recorded.
+- **FR-LEAVE-07**: The leave category list on the application form must show the applicant's own remaining balance for each category (total allocated, minus used, minus pending), or say that nothing is allocated. It must never show the policy maximum as if it were the applicant's balance.
 
 ### 3.3 Multi-Level Approval Workflow Engine
 - **FR-WF-01**: Single-approval routing, decided by the applicant's role:

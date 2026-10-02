@@ -20,6 +20,10 @@ When a user selects a `start_date` and `end_date`, the system must:
 
 $$\text{Net Working Days} = \sum_{d = \text{start\_date}}^{\text{end\_date}} \left[ \text{is\_weekday}(d) \land \neg \text{is\_public\_holiday}(d) \right]$$
 
+- **Rule BR-HOL-01**: A date is a public holiday if a `holidays` row has that exact `holiday_date`, **or** a row marked `is_recurring` has the same month and day and a `holiday_date` in an earlier year. A recurring holiday never reaches back before the year it was entered for, and a 29 February holiday is skipped in years without one. `LeaveCalculator::getHolidays()` does the expansion; the working-day count, the live preview, department cover and the team calendar all read through it.
+- **Rule BR-HOL-02**: The working week is Monday to Friday. On the application form a weekend or public holiday cannot be chosen as the first or last day of a request; a range may still cross them, and they cost nothing. The server applies the same count whatever the form sent, and refuses a range that contains no working day at all.
+- **Rule BR-HOL-03**: The range calendar's tooltip ("N working days") is computed in the browser from the same holiday list and is a preview. The figure that is stored, reserved and checked against the balance is always the server's.
+
 ### 2.2 Balance Calculation Rule
 Each user has a leave entitlement record per leave type per year:
 
@@ -30,6 +34,7 @@ $$\text{Available Balance} = \text{total\_days} - \text{used\_days} - \text{pend
 - **Rule BR-BAL-03**: The entitlement row read, reserved, deducted, released and restored is the one named by `deducts_from_type_id` when the category has it, resolved in a single hop. Emergency Leave therefore spends Annual Leave, while the application still records Emergency Leave as the category requested. A category pointing at itself, or at a row that no longer exists, falls back to its own balance.
 - **Rule BR-BAL-04**: `allow_negative_balance` exempts a category from BR-BAL-01 only. A **missing** entitlement row is still refused, because there is no row to reserve against and nowhere to record the days. The refusal names the category the days would have come from.
 - **Rule BR-BAL-05**: The balance is re-checked inside the submitting transaction with the entitlement row held `FOR UPDATE`, whether or not the category may overdraw, so two requests submitted at once cannot both reserve against the same snapshot.
+- **Rule BR-BAL-06**: The application form labels every category with the applicant's own Available Balance for the leave year shown, from this same formula, or "no allowance" when `total_days` is 0 or no row exists. A category under BR-BAL-03 shows the balance it spends and names it. `leave_types.max_days_per_year` is never shown as a balance.
 
 ### 2.3 Date Overlap Rule
 A leave request is invalid if the requested date range overlaps with any existing request for the same user with status `pending_manager`, `pending_hr`, `pending_executive`, or `approved`:

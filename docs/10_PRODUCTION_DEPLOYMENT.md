@@ -148,8 +148,15 @@ socket and `127.0.0.1` as TCP, and that one word is load-bearing here.
 
 Responses carry `cf-cache-status` and `server: cloudflare`. Application pages set
 `Cache-Control: no-store`, so nothing personal is cached, but a change to a file
-under `assets/` may be served stale until Cloudflare's copy expires. Purge there
-before concluding a stylesheet change did not deploy.
+under `assets/` may be served stale until Cloudflare's copy expires.
+
+Since 2026-10-02 the files that change with releases are linked through
+`asset_url()` (`includes/functions.php`), which appends the file's modification
+time: `ri-theme.css?v=1790935041`. A `git pull` that rewrites the file changes the
+URL, so browsers and Cloudflare fetch it fresh and no purge is needed. That covers
+`assets/css/ri-theme.css` on every page and the date picker files on Apply for
+Leave. Anything else under `assets/` is still linked bare; purge for those, or link
+them through `asset_url()` too.
 
 ---
 
@@ -203,8 +210,16 @@ It prints the address links will be built from and says so in capitals when
 
 ```bash
 cd /var/www/lms.22112002.xyz
-git pull
+git status --short           # must print nothing; config/local.php is ignored
+git rev-parse --short HEAD   # write it down: this is the rollback point
+git pull --ff-only           # refuses rather than merges if the checkout has diverged
 ```
+
+`--ff-only` turns the cases in section 6 into a refusal with nothing changed,
+instead of a merge commit on the live host. If the release misbehaves,
+`git reset --hard <the hash you wrote down>` puts the code back; it does not touch
+`config/local.php` or `uploads/`, and it cannot undo a migration, which is why a
+release that ships one says so in `CHANGELOG.md` and starts with a dump.
 
 Then the two things a pull cannot do for you, in order.
 

@@ -148,7 +148,7 @@ Available categories of leave.
 | `id` | INT | PK, AUTO_INCREMENT | Unique Leave Type ID |
 | `name` | VARCHAR(50) | NOT NULL | Leave name (Annual, Sick, Casual, etc.) |
 | `code` | VARCHAR(10) | UNIQUE, NOT NULL | Short code (ANN, SCK, CSL, MAT) |
-| `max_days_per_year` | INT | NOT NULL, DEFAULT 0 | Default annual day allocation. 0 for a category that spends another's balance |
+| `max_days_per_year` | INT | NOT NULL, DEFAULT 0 | Default annual day allocation, copied into `leave_entitlements.total_days` when allocations are seeded. 0 for a category that spends another's balance. Not a person's balance: the apply form shows `total_days - used_days - pending_days` from `leave_entitlements` |
 | `requires_attachment` | TINYINT(1) | NOT NULL, DEFAULT 0 | 1 if medical certificate needed |
 | `is_paid` | TINYINT(1) | NOT NULL, DEFAULT 1 | 1 if paid leave, 0 if unpaid |
 | `min_days_per_request` | DECIMAL(4,1) | NOT NULL, DEFAULT 0.5 | Smallest bookable request |
@@ -180,7 +180,7 @@ Official company and public holidays to exclude during days calculation.
 | `id` | INT | PK, AUTO_INCREMENT | Unique Holiday ID |
 | `title` | VARCHAR(100) | NOT NULL | Name of public holiday |
 | `holiday_date` | DATE | NOT NULL, UNIQUE | Date of holiday |
-| `is_recurring` | TINYINT(1) | DEFAULT 0 | 1 if annual recurring holiday |
+| `is_recurring` | TINYINT(1) | DEFAULT 0 | 1 if the holiday closes the same day and month every year from `holiday_date`'s year onwards. Expanded at read time by `LeaveCalculator::getHolidays()`; no extra rows are written. 29 February is skipped outside leap years. Leave at 0 for moving feasts (Good Friday, Easter Monday), entered per year |
 
 ### 2.7 Table: `leave_applications`
 Leave request records.

@@ -92,8 +92,8 @@ The system uses a **Modular Component Architecture** in native PHP 8+. It follow
 │   └── functions.php            # Global helper functions (Auth, Sanitization, CSRF)
 │
 ├── helpers/                     # Business Logic Engine & Service Classes
-│   ├── LeaveCalculator.php      # Working days calculation & balance validation
-│   ├── ApprovalWorkflow.php     # 3-tier approval state machine & logger
+│   ├── LeaveCalculator.php      # Working days, holidays (incl. recurring) & balance validation
+│   ├── ApprovalWorkflow.php     # Single-approval state machine, routed by role, & logger
 │   ├── Notifier.php             # Who is told what, and in what words
 │   ├── EmailQueue.php           # The email_outbox: queue, claim, retry, log
 │   ├── EmailTemplate.php        # A notification rendered as HTML and plain text
@@ -125,9 +125,15 @@ The system uses a **Modular Component Architecture** in native PHP 8+. It follow
 │   └── attachments/
 │
 ├── assets/                      # Theme Assets
-│   ├── css/                     # Custom & Theme CSS
-│   ├── js/                      # Bootstrap JS & Application Scripts
-│   └── vendor/                  # Bootstrap 5, FontAwesome, DataTables
+│   ├── css/ri-theme.css         # The RI brand theme, including the date picker skin
+│   ├── js/                      # Application scripts
+│   │   ├── leave-range-picker.js  # Range calendar on Apply for Leave
+│   │   └── password-reveal.js     # Show/hide on password fields
+│   └── plugins/                 # Vendored front-end libraries, no build step
+│       ├── bootstrap/           # Bootstrap 4.4.1
+│       ├── jQuery/
+│       ├── themify-icons/
+│       └── litepicker/          # Litepicker 2.0.12 (MIT), archived upstream; see its README
 │
 └── index.php                    # Application Front Controller & Routing Gateway
 ```
@@ -140,7 +146,8 @@ The user interface uses a modular template layout. Each component handles a dist
 
 ### 3.1 `includes/header.php`
 - Sets document charset, meta tags, and title.
-- Loads Bootstrap 5 CSS, Google Fonts, and vendor stylesheets.
+- Loads Bootstrap 4.4.1, themify-icons, Montserrat from Google Fonts, and `assets/css/ri-theme.css`.
+- Links the theme through `asset_url()`, which appends the file's modification time as `?v=`, so a deploy is fetched fresh rather than served from a browser or Cloudflare cache.
 - Injects theme custom CSS variables for dark/light mode and branding colors.
 
 ### 3.2 `includes/navbar.php`
@@ -308,3 +315,61 @@ edit on a server and no possibility of a pull reverting a production setting.
 `APP_URL` is the setting to get right. It is the base of every link in every
 notification, and those are rendered by a cron worker with no HTTP request to
 infer a hostname from.
+
+---
+
+## 6. Leave Dates, Working Days and Holidays
+
+### 6.1 One source for closures
+
+`LeaveCalculator::getHolidays($start, $end)` is the only reader of the
+`holidays` table that decides what a day costs. It returns `date => title` for
+the range and expands a row marked `is_recurring` onto the same day and month in
+every later year (skipping 29 February outside leap years). Everything that
+counts or shows closures goes through it:
+
+| Consumer | Uses it for |
+|---|---|
+| `LeaveCalculator::calculateWorkingDays()` | The day count stored on a request and checked against the balance |
+| `api/calculate_days.php` | The live "Real-Time Request Summary" on the apply form |
+| `LeaveCapacity` | Which days count towards department cover |
+| `modules/leave/team_calendar.php` | Holiday labels in the month grid |
+| `modules/leave/apply.php` | The holiday list handed to the range calendar |
+
+Because the calendar's tooltip, the live summary and the saved request all read
+the same expansion, they cannot disagree about whether a day is a holiday.
+
+### 6.2 The range calendar
+
+```
+apply.php ──(holidays JSON, notice rule per category)──▶ leave-range-picker.js
+                                                             │ wraps Litepicker
+   display inputs (read-only, "21 Dec 2026")  ◀──────────────┤
+   hidden start_date / end_date (YYYY-MM-DD)  ◀──────────────┘
+          │ change event
+          ▼
+   api/calculate_days.php ──▶ summary card + coverage card
+          │ submit
+          ▼
+   LeaveCalculator::validateEligibility()  (authoritative)
+```
+
+- Two months side by side from 768px, one month below.
+- The working week is Monday to Friday: weekends and holidays are locked as a
+  first or last day, but a range may cross them. Holidays carry their name.
+- The earliest selectable date comes from the chosen category's
+  `min_notice_days`, computed in local time; a zero-notice category has no floor.
+- The hover tooltip counts working days with the same rules as
+  `calculateWorkingDays()`. It is a preview only: the server recounts, and
+  re-checks notice, balance, overlap and attachments, whatever the browser sent.
+- The browser's `required` check skips read-only inputs, so the script itself
+  refuses a submit without both dates and opens the calendar.
+
+### 6.3 Balances on the form
+
+The category list shows the applicant's own `total_days - used_days -
+pending_days` for the leave year on the form, the same arithmetic as the
+dashboard and `validateEligibility()`. A category that spends another's balance
+(Emergency Leave) shows that balance and names it. `leave_types.max_days_per_year`
+is the policy default used when allocations are seeded, and is not displayed as
+anybody's balance.
