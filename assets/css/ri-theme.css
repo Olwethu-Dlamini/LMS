@@ -787,6 +787,11 @@ hr { border-top: 1px solid var(--ri-grey-line); }
   .ri-cal td.ri-cal-cell { height: 92px; }
   .ri-cal-toolbar { justify-content: flex-start; }
   .ri-cal-legend { width: 100%; }
+  /* Arrows, month and "This month" were one 386px row, wider than a phone.
+     The label gives up its fixed width and the link drops to its own line. */
+  .ri-cal-monthnav { flex-wrap: wrap; }
+  .ri-cal-monthlabel { min-width: 0; flex: 1 1 auto; }
+  .ri-cal-deptpick, .ri-cal-deptpick select { min-width: 0; max-width: 100%; }
 }
 
 /* ---------------------------------------------------------------------------
