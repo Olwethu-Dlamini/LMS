@@ -35,6 +35,10 @@ if ($calculator->sourcingAvailable()) {
     $leaveTypes = $db->query("SELECT * FROM leave_types WHERE is_active = 1 ORDER BY name ASC")->fetchAll();
 }
 
+// Closures the date picker marks and skips, read through the calculator so a
+// recurring holiday appears in every year it applies to.
+$pickerHolidays = $calculator->getHolidays((date('Y') - 1) . '-01-01', (date('Y') + 2) . '-12-31');
+
 // What this person has left in each category for the leave year shown on the
 // form. The dropdown used to print the policy ceiling (max_days_per_year),
 // which is the same 21 for everybody and not what HR allocated any one of them.
@@ -175,16 +179,21 @@ ob_start();
 
                     <div class="row">
                         <div class="col-md-4 form-group mb-4">
-                            <label class="font-weight-bold text-dark">Start Date <span class="text-danger">*</span></label>
-                            <!-- No min here: how far back a date may go is a property of the
-                                 leave type, applied by describeType() below. A category with no
-                                 notice period may be backdated, which is what lets sick leave be
+                            <label class="font-weight-bold text-dark" for="start_display">Start Date <span class="text-danger">*</span></label>
+                            <!-- One range calendar drives both fields (assets/js/leave-range-picker.js).
+                                 The visible inputs are display only; the hidden ones carry YYYY-MM-DD
+                                 to the server. No min here: how far back a date may go is a property
+                                 of the leave type, applied by describeType() below. A category with
+                                 no notice period may be backdated, which is what lets sick leave be
                                  recorded after the fact. -->
-                            <input type="date" name="start_date" id="start_date" class="form-control form-control-lg" required value="<?php echo htmlspecialchars($_POST['start_date'] ?? ''); ?>">
+                            <input type="text" id="start_display" class="form-control form-control-lg date-range-input" placeholder="Choose dates" readonly autocomplete="off">
+                            <input type="hidden" name="start_date" id="start_date" value="<?php echo htmlspecialchars($_POST['start_date'] ?? ''); ?>">
+                            <div class="invalid-feedback">Pick the first and last day of your leave.</div>
                         </div>
                         <div class="col-md-4 form-group mb-4">
-                            <label class="font-weight-bold text-dark">End Date <span class="text-danger">*</span></label>
-                            <input type="date" name="end_date" id="end_date" class="form-control form-control-lg" required value="<?php echo htmlspecialchars($_POST['end_date'] ?? ''); ?>">
+                            <label class="font-weight-bold text-dark" for="end_display">End Date <span class="text-danger">*</span></label>
+                            <input type="text" id="end_display" class="form-control form-control-lg date-range-input" placeholder="Choose dates" readonly autocomplete="off">
+                            <input type="hidden" name="end_date" id="end_date" value="<?php echo htmlspecialchars($_POST['end_date'] ?? ''); ?>">
                         </div>
                         <div class="col-md-4 form-group mb-4">
                             <label class="font-weight-bold text-dark">Duration Type <span class="text-danger">*</span></label>
@@ -248,10 +257,25 @@ ob_start();
     </div>
 </div>
 
+<link rel="stylesheet" href="<?php echo APP_URL; ?>/assets/plugins/litepicker/litepicker.css">
+<script src="<?php echo APP_URL; ?>/assets/plugins/litepicker/litepicker.js"></script>
+<script src="<?php echo APP_URL; ?>/assets/js/leave-range-picker.js"></script>
 <script>
 document.addEventListener("DOMContentLoaded", function () {
     const startDateInput = document.getElementById("start_date");
     const endDateInput = document.getElementById("end_date");
+
+    // Holidays from last year to the year after next, through the same
+    // LeaveCalculator::getHolidays() the server counts with, so the calendar
+    // and the final day count can never disagree.
+    const rangePicker = window.initLeaveRangePicker({
+        startDisplay: document.getElementById("start_display"),
+        endDisplay: document.getElementById("end_display"),
+        startInput: startDateInput,
+        endInput: endDateInput,
+        form: document.getElementById("leaveForm"),
+        holidays: <?php echo json_encode($pickerHolidays, JSON_HEX_TAG | JSON_HEX_AMP | JSON_FORCE_OBJECT); ?>
+    });
     const dayTypeSelect = document.getElementById("day_type");
     const leaveTypeSelect = document.getElementById("leave_type_id");
     const previewCard = document.getElementById("calcPreviewCard");
@@ -431,14 +455,12 @@ document.addEventListener("DOMContentLoaded", function () {
         if (notice > 0) {
             const d = new Date();
             d.setDate(d.getDate() + notice);
-            const earliest = d.toISOString().slice(0, 10);
-            startDateInput.min = earliest;
-            endDateInput.min = earliest;
-            if (startDateInput.value && startDateInput.value < earliest) startDateInput.value = "";
-            if (endDateInput.value && endDateInput.value < earliest) endDateInput.value = "";
+            // Local date, not toISOString(): that is UTC, a day behind until 02:00 here.
+            const earliest = d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0")
+                + "-" + String(d.getDate()).padStart(2, "0");
+            rangePicker.setEarliest(earliest);
         } else {
-            startDateInput.removeAttribute("min");
-            endDateInput.removeAttribute("min");
+            rangePicker.setEarliest(null);
             bits.push("may be backdated");
         }
 
