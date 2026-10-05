@@ -6,6 +6,79 @@ after the pull - because `git pull` moves files and never schema.
 
 ---
 
+## 2026-10-05 - Managers' leave goes to the executive
+
+5 commits, `251f854..3fa60ec`, plus this changelog. Rollback point: `afa880a`.
+
+**Migrations required: `009-managers-to-executive`.** Run it straight after the
+pull:
+
+```bash
+sudo mysql lms_db < migrations/009-managers-to-executive.sql
+```
+
+It prints the requests it is about to move, moves them, then prints a check that
+must come back empty. Safe to re-run.
+
+### What changed
+
+A line manager's own leave is now decided by the executive (Natasha) instead of
+HR. Routing is by role, so it follows whoever holds the executive role.
+
+| Applicant | Decided by, before | Decided by, now |
+|---|---|---|
+| Employee | their line manager | their line manager |
+| Line manager | HR | **the executive** |
+| HR | the executive | the executive |
+| Executive | HR | HR |
+
+- HR is refused if it tries to approve a manager's request, and nothing is
+  deducted.
+- The executive's queue is renamed **Manager & HR leave** and badges each row
+  *Line Manager* or *HR*. HR's queue is renamed **Executive leave**. The
+  navigation, dashboard cards, page subtitles and the admin oversight menu all
+  follow.
+- The apply form and the submission notice tell a manager the Executive decides.
+- The admin user list says "Decided by the Executive" or "Decided by HR" per
+  person. It used to say "Decided by HR" for every senior role, which was
+  already wrong for HR's own leave.
+- Migration 009 moves managers' requests already waiting at HR to the
+  executive. Balances do not move: the days stay reserved until she decides.
+
+### Worth knowing
+
+- **Natasha gets no email per waiting request.** The existing rule is that HR
+  and the executive see waiting work in their queue, the bell and the dashboard
+  count, not their inbox. Only a category marked urgent (Emergency Leave) is
+  emailed. That now covers managers' requests too.
+- Requests moved by 009 raise no bell entry. They appear in her queue and in
+  the count on her dashboard.
+- If the executive account is archived, managers' leave has nobody to decide it
+  apart from an administrator. The admin console already warns when no
+  executive is active.
+
+### Proof
+
+Test suite 234 passed, 0 failed; email outbox 33 passed, 0 failed. Six of the
+updated routing tests fail against `afa880a`.
+
+On the development stack, in headless Chromium, with a manager, an HR account
+and an executive:
+
+1. The manager's apply form read *"The Executive decides this request"*.
+   Submitting said *"It is now with the executive for approval"*.
+2. HR's queue (*Executive leave*) did not contain it.
+3. The executive's dashboard card read *Manager & HR leave: 2*, and her queue
+   listed the new request and one moved by 009, both badged *Line Manager*.
+4. She approved it: status *approved*, 3 days moved from pending to used, and the
+   audit log row records approver role *executive*.
+
+Migration 009 was run twice against a manager's and an executive's request both
+waiting at HR. The manager's moved, the executive's stayed, no balance changed,
+and the second run moved nothing.
+
+---
+
 ## 2026-10-05 - Sign-in rate limiting removed
 
 4 commits, `fee2591..c77ce5f`, plus this changelog. Rollback point: `cd6d9fc`.
