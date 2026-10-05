@@ -6,6 +6,73 @@ after the pull - because `git pull` moves files and never schema.
 
 ---
 
+## 2026-10-05 - Sign-in rate limiting removed
+
+4 commits, `fee2591..c77ce5f`, plus this changelog. Rollback point: `cd6d9fc`.
+
+**Migrations required: none.** **Nothing to edit on the server.** `git pull
+--ff-only` is the whole deployment.
+
+### Why
+
+HR mistyped their password several times on the live server and was told *Too
+many sign-in attempts. Please wait 15 minutes and try again.* Typing the right
+password did not help: the limiter refused every attempt for that address until
+fifteen minutes after the last failure.
+
+The repository already had `LOGIN_THROTTLE_ENABLED` defaulting to `false`, so the
+live server was switching it on through its own untracked `config/local.php`
+(or its environment), which no pull touches. Flipping the default again would
+not have reached it.
+
+### What changed
+
+- `modules/auth/login.php` checks the password it was given and nothing else. No
+  failure is counted, nobody is told to wait, and a correct password always
+  signs in.
+- `helpers/LoginThrottle.php` is deleted, and `LOGIN_THROTTLE_ENABLED` is gone
+  from `config/constants.php` and `config/local.php.example`. A live
+  `config/local.php` that still defines the constant, as `true` or `false`, is
+  harmless: nothing reads it.
+- `login_attempts` and migration 004 stay. Nothing reads or writes the table.
+- Two tests replace the seven that covered the limiter. They fail if
+  `helpers/LoginThrottle.php` comes back, or if the sign-in form mentions a
+  throttle, `login_attempts` or "Too many sign-in attempts". Both were checked to
+  fail against `cd6d9fc`. Suite: 231 passed, 0 failed; email outbox: 33 passed.
+
+### Proof
+
+Run on the development stack with `config/local.php` forcing
+`LOGIN_THROTTLE_ENABLED` to `true`, as the live server evidently had it, driving
+the real sign-in form both over HTTP and in headless Chromium:
+
+| | `cd6d9fc` (before) | `c77ce5f` (after) |
+|---|---|---|
+| Wrong passwords 1-5 | Invalid email address or password | Invalid email address or password |
+| Wrong password 6 and on | **Too many sign-in attempts. Please wait 15 minutes** | Invalid email address or password |
+| Correct password next | **Refused, same message** | Signed in, dashboard |
+| Rows written to `login_attempts` | 5 | 0 |
+
+After the change, 30 wrong passwords in a row followed by the right one also
+signs in.
+
+### What it costs
+
+The form accepts password guesses as fast as they can be sent, against
+addresses that follow a predictable pattern, and nothing records the attempts.
+That was already the position on any server with the switch off; it is now the
+position on every server.
+
+### Found along the way
+
+The limiter never fired on the Docker development stack: PHP runs on
+`Africa/Johannesburg` and MySQL `NOW()` is UTC, so every recorded failure looked
+two hours old. That is why it was never seen locally. It is moot now the
+limiter is gone, but any future code comparing a MySQL timestamp with PHP's
+clock has the same trap.
+
+---
+
 ## 2026-10-02 - Range calendar, real balances, recurring holidays
 
 8 commits, `52fc037..93557c1`, plus this documentation commit. Applied to the
