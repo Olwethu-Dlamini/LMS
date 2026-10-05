@@ -211,7 +211,7 @@ ob_start();
 $pageContent = ob_get_clean();
 $pageTitle = 'Executive Approvals | ' . APP_NAME;
 $pageHeading = 'Executive Approvals';
-$pageSubtitle = 'Leave requested by HR, who cannot approve their own. Your decision is final.';
+$pageSubtitle = 'Leave requested by line managers and by HR. Your decision is final.';
 $pageIcon = 'ti-crown';
 require_once __DIR__ . '/../../includes/layout.php';
 ?>

@@ -212,7 +212,7 @@ ob_start();
 $pageContent = ob_get_clean();
 $pageTitle = 'HR Approvals | ' . APP_NAME;
 $pageHeading = 'HR Approvals';
-$pageSubtitle = 'Leave requested by line managers and executives, who cannot approve their own. Your decision is final.';
+$pageSubtitle = 'Leave requested by the executive, who cannot approve their own. Your decision is final.';
 $pageIcon = 'ti-shield';
 require_once __DIR__ . '/../../includes/layout.php';
 ?>
