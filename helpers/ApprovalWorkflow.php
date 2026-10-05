@@ -30,14 +30,15 @@ class ApprovalWorkflow {
      * what books the leave and deducts the days.
      *
      *   employee  -> their line manager, or the head of their department
-     *   manager   -> HR
+     *   manager   -> the executive
      *   executive -> HR
      *   hr        -> the executive
      *
      * Nobody is asked to sign off on themselves, which is what the senior
-     * routing is for: HR owns the queue a manager's leave would otherwise sit
-     * in, and the executive owns HR's. Admin is a system role with no leave
-     * entitlement and cannot apply.
+     * routing is for: the executive decides a manager's leave and HR's, and HR
+     * decides the executive's. Managers went to HR until 2026-10-05, when the
+     * organisation asked for the executive to approve them instead. Admin is a
+     * system role with no leave entitlement and cannot apply.
      *
      * The three queues therefore all remain in use, each holding a different
      * kind of applicant rather than a different stage of the same request.
@@ -48,9 +49,9 @@ class ApprovalWorkflow {
         switch ($applicantRole) {
             case ROLE_EMPLOYEE:
                 return [STATUS_PENDING_MANAGER, ROLE_MANAGER];
-            case ROLE_MANAGER:
             case ROLE_EXECUTIVE:
                 return [STATUS_PENDING_HR, ROLE_HR];
+            case ROLE_MANAGER:
             case ROLE_HR:
                 return [STATUS_PENDING_EXECUTIVE, ROLE_EXECUTIVE];
             case ROLE_ADMIN:
@@ -96,9 +97,9 @@ class ApprovalWorkflow {
      */
     public static function deciderLabelFor(string $applicantRole): string {
         switch ($applicantRole) {
-            case ROLE_MANAGER:
             case ROLE_EXECUTIVE:
                 return 'HR';
+            case ROLE_MANAGER:
             case ROLE_HR:
                 return 'the Executive';
             default:

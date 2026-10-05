@@ -578,8 +578,8 @@ $tester->assert(
     "Employee enters at Stage 1 (Line Manager)"
 );
 $tester->assert(
-    ApprovalWorkflow::initialStageFor(ROLE_MANAGER) === [STATUS_PENDING_HR, ROLE_HR],
-    "Manager skips Stage 1 and enters at HR"
+    ApprovalWorkflow::initialStageFor(ROLE_MANAGER) === [STATUS_PENDING_EXECUTIVE, ROLE_EXECUTIVE],
+    "A manager's own leave goes to the executive, not HR"
 );
 $tester->assert(
     ApprovalWorkflow::initialStageFor(ROLE_HR) === [STATUS_PENDING_EXECUTIVE, ROLE_EXECUTIVE],
@@ -623,15 +623,28 @@ $mockDb->entitlements[$mgrKey] = ['total_days' => 20.0, 'used_days' => 0.0, 'pen
 $mgrSub = $workflow->submitApplication(4, 1, $mgrStart, $mgrEnd, 3.0, "Manager leave", null);
 $mgrAppId = (int)$mgrSub['id'];
 $tester->assert(
-    $mgrSub['success'] === true && $mgrSub['status'] === STATUS_PENDING_HR,
-    "Manager's application never lands in the Stage 1 queue it owns",
+    $mgrSub['success'] === true && $mgrSub['status'] === STATUS_PENDING_EXECUTIVE,
+    "Manager's application waits for the executive, never in the line-manager queue it owns",
     "Got " . ($mgrSub['status'] ?? 'n/a')
 );
 
-$mgrDecision = $workflow->processAction($mgrAppId, 3, 'hr', 'approve', 'HR ok');
+$mgrByHr = $workflow->processAction($mgrAppId, 3, 'hr', 'approve', 'HR ok');
+$tester->assert(
+    $mgrByHr['success'] === false && strpos($mgrByHr['error'], 'executive') !== false,
+    "Manager leave: HR can no longer approve it",
+    $mgrByHr['error'] ?? 'succeeded'
+);
+$tester->assert(
+    (float)$mockDb->entitlements[$mgrKey]['used_days'] === 0.0
+    && (float)$mockDb->entitlements[$mgrKey]['pending_days'] === 3.0,
+    "Manager leave: HR's refused attempt deducts nothing",
+    "Used: {$mockDb->entitlements[$mgrKey]['used_days']}, Pending: {$mockDb->entitlements[$mgrKey]['pending_days']}"
+);
+
+$mgrDecision = $workflow->processAction($mgrAppId, 2, 'executive', 'approve', 'Executive ok');
 $tester->assert(
     $mgrDecision['success'] === true && $mgrDecision['new_status'] === STATUS_APPROVED,
-    "Manager leave: HR's approval decides it, with no executive stage behind it",
+    "Manager leave: the executive's approval decides it",
     "Got " . ($mgrDecision['new_status'] ?? $mgrDecision['error'])
 );
 $tester->assert(
@@ -675,9 +688,14 @@ $tester->assert(
     ApprovalWorkflow::deciderLabelFor(ROLE_EMPLOYEE)
 );
 $tester->assert(
-    ApprovalWorkflow::deciderLabelFor(ROLE_MANAGER) === 'HR'
-    && ApprovalWorkflow::deciderLabelFor(ROLE_EXECUTIVE) === 'HR',
-    "A manager's and an executive's own leave is decided by HR"
+    ApprovalWorkflow::deciderLabelFor(ROLE_MANAGER) === 'the Executive',
+    "A manager is told the executive decides their leave",
+    ApprovalWorkflow::deciderLabelFor(ROLE_MANAGER)
+);
+$tester->assert(
+    ApprovalWorkflow::deciderLabelFor(ROLE_EXECUTIVE) === 'HR',
+    "An executive's own leave is still decided by HR",
+    ApprovalWorkflow::deciderLabelFor(ROLE_EXECUTIVE)
 );
 $tester->assert(
     ApprovalWorkflow::deciderLabelFor(ROLE_HR) === 'the Executive',
