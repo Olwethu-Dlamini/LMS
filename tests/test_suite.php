@@ -12,7 +12,6 @@ require_once __DIR__ . '/../helpers/LeaveCapacity.php';
 require_once __DIR__ . '/../helpers/Notifier.php';
 require_once __DIR__ . '/../helpers/DashboardInsights.php';
 require_once __DIR__ . '/../helpers/AttachmentStore.php';
-require_once __DIR__ . '/../helpers/LoginThrottle.php';
 require_once __DIR__ . '/../helpers/Mailer.php';
 require_once __DIR__ . '/../helpers/EmailTemplate.php';
 require_once __DIR__ . '/../helpers/EmailQueue.php';
@@ -322,46 +321,21 @@ $tester->assert(
     sanitize("bad\x00value\x07")
 );
 
-// Sign-in rate limiting. The window runs from the most recent failure, so
-// somebody still guessing keeps the door shut and somebody who walked away
-// finds it open again.
+// Sign-in is not rate limited. HR was locked out of the live server for
+// fifteen minutes, correct password included, after mistyping it a few times,
+// and the limiter was removed rather than switched off so that no per-server
+// setting can bring it back. These fail if it is ever wired in again.
+$loginSource = (string)file_get_contents(__DIR__ . '/../modules/auth/login.php');
 $tester->assert(
-    LoginThrottle::secondsToWait(4, '2026-09-09 10:00:00', '2026-09-09 10:00:30') === 0,
-    "Failures under the limit do not hold anybody up"
+    !file_exists(__DIR__ . '/../helpers/LoginThrottle.php'),
+    "There is no sign-in rate limiter left to switch on"
 );
 $tester->assert(
-    LoginThrottle::secondsToWait(5, '2026-09-09 10:00:00', '2026-09-09 10:00:30') === 870,
-    "The limit closes the door for the rest of the window",
-    (string)LoginThrottle::secondsToWait(5, '2026-09-09 10:00:00', '2026-09-09 10:00:30')
+    stripos($loginSource, 'Throttle') === false
+    && stripos($loginSource, 'login_attempts') === false
+    && stripos($loginSource, 'Too many sign-in attempts') === false,
+    "The sign-in form neither counts failures nor refuses a caller for them"
 );
-$tester->assert(
-    LoginThrottle::secondsToWait(9, '2026-09-09 10:00:00', '2026-09-09 10:20:00') === 0,
-    "Once the window has passed the door opens again"
-);
-$tester->assert(
-    LoginThrottle::secondsToWait(9, null, '2026-09-09 10:00:00') === 0,
-    "No recorded failure means nothing to wait for"
-);
-$tester->assert(
-    LoginThrottle::waitLabel(30) === 'a minute' && LoginThrottle::waitLabel(870) === '15 minutes',
-    "The wait is worded in whole minutes"
-);
-$tester->assert(
-    LoginThrottle::callerAddress(['REMOTE_ADDR' => '10.0.0.4']) === '10.0.0.4'
-    && LoginThrottle::callerAddress(['HTTP_X_FORWARDED_FOR' => '1.2.3.4']) === 'unknown',
-    "A forwarded-for header is never trusted as the caller's address"
-);
-// The switch, and the fact that the rules survive being switched off: the
-// arithmetic above still answers, it is simply never consulted.
-$tester->assert(
-    LoginThrottle::enabled() === LOGIN_THROTTLE_ENABLED,
-    "Rate limiting follows the LOGIN_THROTTLE_ENABLED switch"
-);
-// No assertion on the switch's value. It used to require false, which is the
-// development default, and that made the suite fail on any server configured
-// the way the go-live checklist says to configure one - reporting a correctly
-// hardened host as a broken build. The assertion above, that enabled() follows
-// the constant, is the part that is actually about this code.
 
 echo "\n--- 2. Testing LeaveCalculator Engine ---\n";
 $calc = new LeaveCalculator($mockDb);
