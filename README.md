@@ -224,7 +224,7 @@ Each is safe to re-run and ends with a check query you can read to confirm it to
 | `001-role-aware-routing` | Moves in-flight applications onto role-aware routing. No schema change. |
 | `002-calendar-and-notifications` | Adds `departments.max_concurrent_absences` and the `notifications` table. |
 | `003-decode-double-escaped-text` | Repairs text stored HTML-escaped, so `Sales &amp; Marketing` reads as `Sales & Marketing` again. |
-| `004-login-attempts` | Adds the `login_attempts` table behind the sign-in rate limit. |
+| `004-login-attempts` | Adds the `login_attempts` table. The sign-in rate limit it fed was removed on 2026-10-05; nothing reads or writes it now, and it is harmless to apply or to leave in place. |
 | `005-email-outbox` | Adds the `email_outbox` table that outgoing notification email is queued in. |
 | `006-zero-sick-and-unpaid-leave` | Withdraws the sick and unpaid leave allowance from everybody, and from the policy. A decision, not a repair - see below. |
 | `007-single-stage-approval` | Settles applications left in an HR or executive queue by the move to one approval. No schema change; see below. |
@@ -232,7 +232,7 @@ Each is safe to re-run and ends with a check query you can read to confirm it to
 
 The portal keeps working ahead of each of these rather than failing. Until `002`
 the notification bell stays hidden and the calendar shows no coverage limits;
-until `004` sign-in simply is not rate limited; until `005` notifications appear
+until `005` notifications appear
 in the bell and no email is queued; until `008` there is no emergency leave
 category and every category holds a balance of its own. An installation is never
 locked out of itself because a migration has not run yet.
@@ -322,7 +322,6 @@ A minimal live `config/local.php`:
 <?php
 define('APP_URL', 'https://leave.example.co.sz');
 define('MAIL_ENABLED', true);
-define('LOGIN_THROTTLE_ENABLED', false);   // off by decision; see below
 ```
 
 ---
@@ -589,15 +588,13 @@ a manager, only an admin can clear Stage 1 for them.
   cannot reach the rest of the app until they set their own password.
 - An admin password reset (**User Management → Password**) is always treated as
   temporary and re-raises that flag.
-- Sign-in rate limiting is **switched off, by decision** (2026-09-21), on
-  development and on the live server alike: `LOGIN_THROTTLE_ENABLED` is `false`.
-  Switched on, five failures for the same address and email inside fifteen
-  minutes would stop answering until the window passed, with a successful
-  sign-in clearing the count. Off, the form accepts guesses as fast as they can
-  be sent against addresses that follow a predictable pattern, and nothing
-  records the attempts. `helpers/LoginThrottle.php` and the `login_attempts`
-  table are both still in place, so setting the constant to `true` in
-  `config/local.php` is the only change needed to have it back.
+- Sign-in is **not rate limited**. The limiter was removed on 2026-10-05 after
+  it locked HR out of the live server, correct password included, for fifteen
+  minutes after a few mistyped attempts. `helpers/LoginThrottle.php` and the
+  `LOGIN_THROTTLE_ENABLED` setting are gone, so no server configuration can turn
+  it back on; a `config/local.php` that still defines the constant is ignored.
+  The cost: the form accepts guesses as fast as they can be sent, against
+  addresses that follow a predictable pattern, and nothing records the attempts.
 - Password fields carry a show/hide eye, so a temporary password full of
   punctuation can be checked before it is submitted rather than after being
   locked out by it.
@@ -759,9 +756,8 @@ without the certificate it depends on.
 - [ ] Block `/uploads/` at the web server if you serve with nginx (Apache is
       covered by the `.htaccess` already in the directory).
 - [x] ~~Set `LOGIN_THROTTLE_ENABLED` to `true` in `config/local.php`.~~
-      Decided against on 2026-09-21: it stays `false`. The rules and the table
-      remain, so it is one line to reverse. See Password rules above for what
-      that costs.
+      Sign-in rate limiting was removed on 2026-10-05 and the setting no longer
+      exists. See Password rules above for what that costs.
 - [ ] Prove email from the production host with `php tools/test_email.php`, send
       one real message with `--to`, then set `MAIL_ENABLED=true`.
 - [ ] Add the `tools/send_queued_email.php` cron entry. Without it nothing is

@@ -259,10 +259,9 @@ CREATE TABLE IF NOT EXISTS `notifications` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- 10. Failed Sign-In Attempts
--- Feeds the rate limit on the login form: too many failures for one email from
--- one address inside the window and the door closes for a while. Successful
--- sign-ins delete that caller's rows, and every write sweeps away expired ones,
--- so this table stays small and is never a record of who signed in.
+-- Unused since 2026-10-05. It fed the sign-in rate limit, which was removed;
+-- nothing reads or writes it now. Kept so existing databases and fresh ones
+-- have the same tables.
 CREATE TABLE IF NOT EXISTS `login_attempts` (
     `id` INT AUTO_INCREMENT PRIMARY KEY,
     `email` VARCHAR(150) NOT NULL,

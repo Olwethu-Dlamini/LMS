@@ -79,30 +79,15 @@ only ever spoken to in clear text.
 
 ### 3.2 REMOTE_ADDR is the proxy, not the visitor
 
-`LoginThrottle::callerAddress()` reads `$_SERVER['REMOTE_ADDR']` and nothing
-else. That is a deliberate decision, and the right default: `X-Forwarded-For` is
-a request header, so anyone can write whatever they like into it, and a rate
-limiter that trusts it is a rate limiter an attacker steps around by changing a
-string on every attempt. `tests/test_suite.php` asserts the header is ignored.
+Behind this proxy chain `REMOTE_ADDR` is Caddy's address for every visitor
+alike. Nothing in the application reads it any more: its one consumer was the
+sign-in rate limiter, which counted failures per `(email, ip_address)` and was
+removed on 2026-10-05 after it locked HR out (see section 4).
 
-Behind this proxy chain, though, `REMOTE_ADDR` is Caddy's address for every
-visitor alike. Failures are counted per `(email, ip_address)`, so in practice the
-key collapses to the email alone.
-
-What that costs, precisely:
-
-- **Guessing at one account is still stopped.** Five failures against one address
-  in fifteen minutes closes the door, which is the protection the table was added
-  for.
-- **Spraying across many accounts is not slowed at all.** One password tried
-  against thirty staff addresses is one failure each, and nothing counts the
-  source they share.
-- **Nothing locks out innocent users**, because the email is still part of the
-  key. A shared address does not mean a shared lockout.
-
-Fixing it properly means trusting `CF-Connecting-IP` only when `REMOTE_ADDR` is
-one of Cloudflare's own published ranges, and treating it as absent otherwise.
-That is a real change to security code and is deliberately not made here.
+Anything that needs the visitor's real address in future must not take it from
+`X-Forwarded-For`, which any caller can write. Trust `CF-Connecting-IP` only when
+`REMOTE_ADDR` is one of Cloudflare's own published ranges, and treat it as absent
+otherwise.
 
 ### 3.3 PHP-FPM hands PHP an empty environment
 
@@ -253,16 +238,14 @@ At minimum, on this server:
 ```php
 <?php
 define('APP_URL', 'https://lms.22112002.xyz');
-define('LOGIN_THROTTLE_ENABLED', false);
 define('MAIL_ENABLED', false);
 define('MAIL_REDIRECT_TO', 'somebody@example.com');
 ```
 
-`LOGIN_THROTTLE_ENABLED` is `false` here by a decision taken on 2026-09-21,
-having been `true` since launch. Section 3.2 explains what it was buying behind
-this proxy chain and what it was not; off, it buys neither, and the sign-in form
-answers guesses as fast as they arrive with nothing recording them. The code and
-the table stay, so it is one line to put back.
+Sign-in rate limiting no longer exists, so there is no setting for it. A
+`define('LOGIN_THROTTLE_ENABLED', ...)` line left in this file from before
+2026-10-05 is harmless, whatever its value: nothing reads the constant. The
+sign-in form answers guesses as fast as they arrive with nothing recording them.
 
 Because it holds the database password, it must not be world-readable, and it
 must still be readable by the PHP-FPM user. Owner `srv1`, group the pool's user:
@@ -322,12 +305,10 @@ unsure about is cheaper than reasoning about it. The full list is in the README
 under "Upgrading an existing database".
 
 The application is written to run ahead of its migrations rather than fail: until
-`004` sign-in is simply not rate limited, until `005` notifications appear in the
-bell and no email is queued. That is deliberate, and it has a cost worth knowing.
-A missing migration does not announce itself. `LoginThrottle` checks whether
-`login_attempts` exists and allows every sign-in if it does not, so
-`LOGIN_THROTTLE_ENABLED = true` with the migration unapplied is a switch that is
-on and doing nothing.
+`005` notifications appear in the bell and no email is queued. That is
+deliberate, and it has a cost worth knowing: a missing migration does not
+announce itself. (`004` creates `login_attempts`, which nothing has used since
+the sign-in rate limit was removed on 2026-10-05.)
 
 ### 5.2 Verify the address, not the page
 
