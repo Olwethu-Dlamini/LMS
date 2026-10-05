@@ -237,9 +237,9 @@ That one place is also where they are allowed to differ, by a single rule:
 > **Email is for news about you. The bell and the screens are for work waiting
 > on you.**
 
-`Notifier::shouldEmail()` is that rule, pure and asserted in the test suite. HR
-decides every line manager's and every executive's leave, and the executive
-decides HR's, so a message per waiting request would fill the mailboxes of the
+`Notifier::shouldEmail()` is that rule, pure and asserted in the test suite. The
+executive decides every line manager's leave and HR's, and HR decides the
+executive's, so a message per waiting request would fill the mailboxes of the
 two roles least able to start ignoring their mail - to say what their queue and
 the company-wide overview on their dashboard already show. Those two roles get
 no `leave_awaiting_you` email. Everything about their own leave still reaches

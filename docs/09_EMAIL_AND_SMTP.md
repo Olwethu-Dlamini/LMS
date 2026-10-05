@@ -405,8 +405,8 @@ One rule, in `Notifier::shouldEmail()`:
 | HR | **no email** | **email** | email | yes |
 | Executive | **no email** | **email** | email | yes |
 
-HR decides every line manager's and every executive's leave, and the executive
-decides HR's. A message per waiting request would fill the mailboxes of the two
+The executive decides every line manager's leave and HR's, and HR decides the
+executive's. A message per waiting request would fill the mailboxes of the two
 roles who can least afford to start ignoring their mail, and it would say
 nothing their own queue and the company-wide *Away This Week* overview on their
 dashboard do not already show. Their own leave is different: that is news they

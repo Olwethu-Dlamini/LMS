@@ -292,9 +292,9 @@ Who gives it depends on your own role, because nobody approves their own leave:
 
 ```
   You are an employee      ──►  your line manager decides
-  You are a line manager   ──►  HR decides
-  You are an executive     ──►  HR decides
+  You are a line manager   ──►  the executive decides
   You are in HR            ──►  the executive decides
+  You are the executive    ──►  HR decides
 
         approved  ──►  the leave is booked and the days are deducted
         declined  ──►  the request ends and the held days come back
@@ -411,20 +411,19 @@ well: you still apply for your own leave through the same form.
 
 ## 6. HR Manager
 
-You decide leave for the people who cannot have it decided by a line manager -
-line managers and executives - and you own what everyone is entitled to and all
-company-wide reporting.
+You decide the executive's leave, since nobody approves their own, and you own
+what everyone is entitled to and all company-wide reporting.
 
 ### Your approvals
 
-**Approvals → Manager & executive leave** holds requests from line managers and
-executives. Each row says which of the two it is, because that is the useful
-distinction now: everything in this queue is yours to decide and nothing behind
-you reviews it. Review, add remarks, then **Approve & Book Leave** - which
-deducts the days there and then - or reject to end it and release them.
+**Approvals → Executive leave** holds the executive's own requests. Everything
+in this queue is yours to decide and nothing behind you reviews it. Review, add
+remarks, then **Approve & Book Leave** - which deducts the days there and then -
+or reject to end it and release them.
 
-Employees' leave does not appear here. Their own line manager decides it, and it
-is approved or declined without reaching you.
+Employees' and line managers' leave does not appear here. A line manager decides
+an employee's, the executive decides a line manager's, and both are approved or
+declined without reaching you.
 
 > **You are not emailed about this queue.** Every manager's and every
 > executive's request would otherwise be one message each, which buries the mail
@@ -463,12 +462,14 @@ you see is what you get. The file opens in Excel and is intended for payroll.
 
 ## 7. Executive
 
-You decide HR's leave, and you have the company-wide view of everyone else's.
+You decide line managers' and HR's leave, and you have the company-wide view of
+everyone else's.
 
 ### Your approvals
 
-**Approvals → HR leave** lists requests from HR managers, who cannot approve
-their own. Yours is the only decision on them.
+**Approvals → Manager & HR leave** lists requests from line managers and from HR
+managers, none of whom can approve their own. Each row says which of the two it
+is. Yours is the only decision on them.
 
 - **Approve & Book Leave.** The request becomes *Approved* and the days come out
   of that person's balance at that moment.

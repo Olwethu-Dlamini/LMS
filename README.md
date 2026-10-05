@@ -59,9 +59,9 @@ nobody approves their own leave:
 
 ```
 [ Employee applies ]      ──►  Line manager decides   ──►  APPROVED, days deducted
-[ Line manager applies ]  ──►  HR decides             ──►  APPROVED, days deducted
-[ Executive applies ]     ──►  HR decides             ──►  APPROVED, days deducted
+[ Line manager applies ]  ──►  Executive decides      ──►  APPROVED, days deducted
 [ HR applies ]            ──►  Executive decides      ──►  APPROVED, days deducted
+[ Executive applies ]     ──►  HR decides             ──►  APPROVED, days deducted
 
         any of them, rejected  ──►  REJECTED, reserved days released
 ```
@@ -74,8 +74,8 @@ them as a break-glass override, and the audit log records that it was them.
 |---|---|
 | **Employee** | Applies for leave, views personal entitlement balance, tracks live application progress. |
 | **Line Manager** | Decides their own team's leave - the whole decision, with nothing behind it - and sees the calendar for every department they approve for. |
-| **HR Manager** | Decides line managers' and executives' leave, manages allocations and the holiday calendar, and works from a company-wide overview rather than an inbox. |
-| **Executive / Boss** | Decides HR's leave, and has the same company-wide overview and reporting. |
+| **HR Manager** | Decides the executive's leave, manages allocations and the holiday calendar, and works from a company-wide overview rather than an inbox. |
+| **Executive / Boss** | Decides line managers' and HR's leave, and has the same company-wide overview and reporting. |
 | **System Admin** | Manages user accounts, departments, leave types, and audit logs. Break-glass approver on any queue. |
 
 ---
@@ -140,8 +140,8 @@ worker drains the queue on a cron. See [Outgoing email](#outgoing-email) for
 setting it up; it is off until configured.
 
 One rule splits the channels: **email is for news about you, the bell and the
-screens are for work waiting on you.** HR decides every manager's and every
-executive's leave and the executive decides HR's, so a message per waiting
+screens are for work waiting on you.** The executive decides every manager's
+and HR's leave and HR decides the executive's, so a message per waiting
 request would fill the mailboxes of the two roles who can least afford to start
 ignoring their mail - to say something their queue and their company overview
 already show. Those two roles get no "awaiting your approval" email; everything
@@ -229,6 +229,7 @@ Each is safe to re-run and ends with a check query you can read to confirm it to
 | `006-zero-sick-and-unpaid-leave` | Withdraws the sick and unpaid leave allowance from everybody, and from the policy. A decision, not a repair - see below. |
 | `007-single-stage-approval` | Settles applications left in an HR or executive queue by the move to one approval. No schema change; see below. |
 | `008-emergency-leave` | Adds the Emergency Leave category, and the three `leave_types` columns behind it: which category's balance it spends, whether it may overdraw, and whether approvers are told it is urgent. |
+| `009-managers-to-executive` | Moves line managers' requests still waiting in HR's queue to the executive's, who decides managers' leave from 2026-10-05. No schema change; balances do not move. |
 
 The portal keeps working ahead of each of these rather than failing. Until `002`
 the notification bell stays hidden and the calendar shows no coverage limits;
