@@ -1,6 +1,5 @@
 <?php
 require_once __DIR__ . '/../../includes/functions.php';
-require_once __DIR__ . '/../../helpers/LoginThrottle.php';
 
 if (isset($_SESSION['user_id'])) {
     header('Location: ' . landing_url());
@@ -13,19 +12,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $password = $_POST['password'] ?? '';
     $csrfToken = $_POST['csrf_token'] ?? '';
 
-    $db        = getDBConnection();
-    $throttle  = new LoginThrottle($db);
-    $caller    = LoginThrottle::callerAddress($_SERVER);
-    $mustWait  = $email === '' ? 0 : $throttle->secondsToWaitFor($email, $caller);
+    $db = getDBConnection();
 
     if (!verify_csrf_token($csrfToken)) {
         $error = 'Invalid security token. Please try again.';
     } elseif (empty($email) || empty($password)) {
         $error = 'Please enter both email and password.';
-    } elseif ($mustWait > 0) {
-        // Deliberately says nothing about whether the account exists.
-        $error = 'Too many sign-in attempts. Please wait '
-               . LoginThrottle::waitLabel($mustWait) . ' and try again.';
     } else {
         $stmt = $db->prepare("
             SELECT u.*, r.name AS role_name
@@ -37,7 +29,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $user = $stmt->fetch();
 
         if ($user && password_verify($password, $user['password_hash'])) {
-            $throttle->clear($email, $caller);
             session_regenerate_id(true);
 
             $_SESSION['user_id'] = $user['id'];
@@ -56,7 +47,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             header('Location: ' . landing_url());
             exit;
         } else {
-            $throttle->recordFailure($email, $caller);
             $error = 'Invalid email address or password.';
         }
     }
