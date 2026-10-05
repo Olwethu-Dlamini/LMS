@@ -66,18 +66,6 @@ config_default('ORG_EMAIL', 'info@realnet.co.sz');
 config_default('ORG_ADDRESS', 'Plot 168, Tsekwane Street, Mbabane');
 config_default('ORG_WEBSITE', 'https://realimageservices.com/');
 
-// Sign-in rate limiting.
-//
-// OFF by default. It counts failed sign-ins and stops answering after five in
-// fifteen minutes, which is protection against somebody working through a
-// password list against staff addresses that follow a predictable pattern.
-// During testing, where accounts are shared and passwords are guessed at on
-// purpose, it mostly locks out the person doing the testing.
-//
-// Turn it on for a live server in config/local.php. Nothing else needs changing,
-// the table and the logic stay in place either way.
-config_default('LOGIN_THROTTLE_ENABLED', false);
-
 // Outgoing email.
 //
 // OFF. Nothing is queued and nothing is sent while MAIL_ENABLED is false, which
