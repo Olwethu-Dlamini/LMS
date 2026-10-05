@@ -21,7 +21,7 @@ function ri_item_active(string $path): string { return ri_nav_on([$path]) ? ' ac
 //
 // The three queues are no longer three stages of one request. Each holds a
 // different kind of applicant - a line manager decides their own team's leave,
-// HR decides managers' and executives', the executive decides HR's - so they
+// the executive decides managers' and HR's, HR decides the executive's - so they
 // are named by whose leave is waiting rather than by a stage number.
 $canDecideTeam      = has_role(ROLE_MANAGER, false);
 $canDecideSeniors   = has_role(ROLE_HR, false);
@@ -82,12 +82,12 @@ $showHr             = has_role(ROLE_HR, false);
                             <?php endif; ?>
                             <?php if ($canDecideSeniors): ?>
                                 <a class="dropdown-item<?php echo ri_item_active('/hr/approvals.php'); ?>" href="<?php echo APP_URL; ?>/modules/hr/approvals.php">
-                                    <i class="ti-shield"></i>Manager &amp; executive leave
+                                    <i class="ti-shield"></i>Executive leave
                                 </a>
                             <?php endif; ?>
                             <?php if ($canDecideHrLeave): ?>
                                 <a class="dropdown-item<?php echo ri_item_active('/executive/approvals.php'); ?>" href="<?php echo APP_URL; ?>/modules/executive/approvals.php">
-                                    <i class="ti-crown"></i>HR leave
+                                    <i class="ti-crown"></i>Manager &amp; HR leave
                                 </a>
                             <?php endif; ?>
                         </div>

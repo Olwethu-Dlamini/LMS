@@ -39,8 +39,8 @@ $adminLinks = [
 // instead of pinned to a positional index.
 $oversightLinks = [
     ['/manager/approvals.php',   'ti-check-box',    'Team leave',              'Break-glass approval'],
-    ['/hr/approvals.php',        'ti-shield',       'Manager & executive leave'],
-    ['/executive/approvals.php', 'ti-crown',        'HR leave'],
+    ['/hr/approvals.php',        'ti-shield',       'Executive leave'],
+    ['/executive/approvals.php', 'ti-crown',        'Manager & HR leave'],
     ['/hr/allocations.php',      'ti-pie-chart',    'Leave Allocations',      'HR management'],
     ['/hr/reports.php',          'ti-files',        'Leave Reports'],
     ['/leave/team_calendar.php', 'ti-layout-grid3', 'Team Calendar',          'Coverage'],

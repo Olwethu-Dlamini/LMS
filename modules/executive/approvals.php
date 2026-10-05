@@ -36,12 +36,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-// Leave requested by HR, which is what the executive decides.
+// Leave requested by line managers and by HR, which is what the executive
+// decides.
 $stmt = $db->query("
-    SELECT a.*, t.name as leave_name, u.first_name, u.last_name, u.emp_id, d.name as dept_name
+    SELECT a.*, t.name as leave_name, u.first_name, u.last_name, u.emp_id, d.name as dept_name,
+           r.name AS applicant_role
     FROM leave_applications a
     JOIN leave_types t ON a.leave_type_id = t.id
     JOIN users u ON a.user_id = u.id
+    JOIN roles r ON r.id = u.role_id
     LEFT JOIN departments d ON u.department_id = d.id
     WHERE a.status = 'pending_executive'
     ORDER BY a.created_at ASC
@@ -96,12 +99,19 @@ ob_start();
                     <?php if (empty($pendingApps)): ?>
                         <tr><td colspan="8" class="text-center py-4 text-muted">No pending executive approvals. Queue is clear!</td></tr>
                     <?php else: ?>
-                        <?php foreach ($pendingApps as $app): ?>
+                        <?php foreach ($pendingApps as $app):
+                            // Two kinds of applicant share this queue, so say whose
+                            // leave each row is.
+                            $applicantRoleLabel = strtolower($app['applicant_role']) === ROLE_HR
+                                ? 'HR'
+                                : 'Line Manager';
+                        ?>
                         <tr>
                             <td class="font-weight-bold text-primary"><?php echo htmlspecialchars($app['application_no']); ?></td>
                             <td>
                                 <strong><?php echo htmlspecialchars($app['first_name'] . ' ' . $app['last_name']); ?></strong>
                                 <small class="d-block text-muted"><?php echo htmlspecialchars($app['emp_id']); ?></small>
+                                <span class="badge badge-primary"><?php echo htmlspecialchars($applicantRoleLabel); ?></span>
                             </td>
                             <td>
                                 <?php echo htmlspecialchars($app['dept_name'] ?? 'N/A'); ?>

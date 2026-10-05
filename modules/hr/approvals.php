@@ -36,7 +36,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-// Leave requested by managers and executives, which is what HR decides.
+// Leave requested by executives, which is what HR decides. Managers' leave
+// went to the executive from 2026-10-05; migration 009 moved what was waiting.
 $stmt = $db->query("
     SELECT a.*, t.name as leave_name, u.first_name, u.last_name, u.emp_id, d.name as dept_name,
            r.name AS applicant_role
@@ -99,10 +100,9 @@ ob_start();
                         <tr><td colspan="8" class="text-center py-4 text-muted">Nothing is waiting on you. All clear!</td></tr>
                     <?php else: ?>
                         <?php foreach ($pendingApps as $app):
-                            // This queue holds leave requested by line managers and by
-                            // executives - the people whose own requests cannot go to
-                            // themselves. HR decides both, and that decision is final,
-                            // so the useful distinction per row is whose leave it is.
+                            // This queue holds the executive's own leave. A line
+                            // manager's can only appear here if migration 009 has not
+                            // been run yet, so it is still labelled rather than assumed.
                             $applicantRoleLabel = strtolower($app['applicant_role']) === ROLE_EXECUTIVE
                                 ? 'Executive'
                                 : 'Line Manager';

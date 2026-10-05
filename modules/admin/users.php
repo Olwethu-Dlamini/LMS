@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__ . '/../../includes/functions.php';
 require_once __DIR__ . '/../../helpers/LeaveCalculator.php';
+require_once __DIR__ . '/../../helpers/ApprovalWorkflow.php';
 require_role(ROLE_ADMIN);
 
 $db = getDBConnection();
@@ -414,7 +415,7 @@ ob_start();
                             <?php if ($u['role_name'] === ROLE_ADMIN): ?>
                                 <span class="text-muted small">No leave entitlement</span>
                             <?php elseif ($skipsStage1): ?>
-                                <span class="text-muted small">Decided by HR</span>
+                                <span class="text-muted small">Decided by <?php echo htmlspecialchars(ApprovalWorkflow::deciderLabelFor($u['role_name'])); ?></span>
                             <?php elseif ($approver): ?>
                                 <?php echo htmlspecialchars($approver); ?>
                                 <?php if (!$u['manager_name']): ?>

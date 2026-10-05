@@ -42,8 +42,8 @@ require_once __DIR__ . '/ApprovalWorkflow.php';
  *   Email is for news about you. The bell and the screens are for work waiting
  *   on you.
  *
- * HR decides every manager's and every executive's leave, and the executive
- * decides HR's. A message per waiting request would fill the mailboxes of the
+ * The executive decides every manager's leave and HR's, and HR decides the
+ * executive's. A message per waiting request would fill the mailboxes of the
  * two roles who can least afford to start ignoring their mail, to tell them
  * something their own queue and the company overview on their dashboard already
  * show. So those two roles get no queue email. Everything about their own

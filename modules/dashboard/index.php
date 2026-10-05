@@ -27,8 +27,8 @@ $pendingStage3Count = 0;
 // Admins never reach this page (require_staff sends them to the console), so
 // these queues are scoped to the staff roles that own each of them. They are
 // three separate queues holding three kinds of applicant, not three stages of
-// one request: a manager decides their team's leave, HR decides managers' and
-// executives', the executive decides HR's, and each decision is final.
+// one request: a manager decides their team's leave, the executive decides
+// managers' and HR's, HR decides the executive's, and each decision is final.
 if (has_role(ROLE_MANAGER, false)) {
     $stmtCount = $db->prepare("
         SELECT COUNT(*)
@@ -169,7 +169,7 @@ ob_start();
             <div class="card-body">
                 <div class="d-flex justify-content-between align-items-center">
                     <div>
-                        <span class="text-uppercase small font-weight-bold text-muted">Manager &amp; executive leave</span>
+                        <span class="text-uppercase small font-weight-bold text-muted">Executive leave</span>
                         <h2 class="font-weight-bold text-info mb-0"><?php echo $pendingStage2Count; ?></h2>
                     </div>
                     <div>
@@ -189,7 +189,7 @@ ob_start();
             <div class="card-body">
                 <div class="d-flex justify-content-between align-items-center">
                     <div>
-                        <span class="text-uppercase small font-weight-bold text-muted">HR leave</span>
+                        <span class="text-uppercase small font-weight-bold text-muted">Manager &amp; HR leave</span>
                         <h2 class="font-weight-bold text-primary mb-0"><?php echo $pendingStage3Count; ?></h2>
                     </div>
                     <div>

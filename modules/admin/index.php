@@ -18,8 +18,8 @@ $pendingFirst  = $one("SELECT COUNT(*) FROM users WHERE must_change_password = 1
 $noDept        = $one("SELECT COUNT(*) FROM users WHERE department_id IS NULL AND status = 'active'");
 
 // Each role decides somebody's leave, so an empty one strands every request
-// routed to it: with no active HR account, managers' and executives' leave
-// stalls; with no executive, HR's own does. Both are invisible until leave
+// routed to it: with no active HR account, the executive's leave stalls; with
+// no executive, managers' and HR's does. Both are invisible until leave
 // starts piling up, so surface them.
 $roleHolders = function (string $role) use ($one): int {
     return $one("SELECT COUNT(*) FROM users u JOIN roles r ON r.id = u.role_id
